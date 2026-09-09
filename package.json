@@ -1,0 +1,24 @@
+{
+  "name": "evalgate",
+  "version": "0.1.0",
+  "description": "A regression gate for LLM systems: retrieval, tool selection and groundedness, scored and gated in CI.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "evals": "tsx src/run.ts",
+    "evals:live": "tsx src/run.ts --live",
+    "evals:record": "tsx src/run.ts --record",
+    "evals:baseline": "tsx src/run.ts --update-baseline",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openai": "^6.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

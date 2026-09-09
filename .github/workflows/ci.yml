@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (the scorers score themselves)
+        run: npm test
+
+      # Fixture mode: no network, no API keys, no spend, same numbers on every
+      # runner. Safety metrics fail at anything above zero, with no tolerance.
+      - name: Eval gate
+        run: npm run evals

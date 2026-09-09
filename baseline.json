@@ -1,0 +1,15 @@
+{
+  "retrieval.recall@5": 0.96,
+  "retrieval.recall@10": 0.96,
+  "retrieval.mrr": 0.9275362318840581,
+  "retrieval.ndcg@10": 0.9543043773165047,
+  "retrieval.precision@5": 0.4782608695652174,
+  "retrieval.emptyRate": 0.08,
+  "retrieval.p95Latency": 0,
+  "tools.exactMatch": 1,
+  "tools.f1": 1,
+  "tools.forbiddenRate": 0,
+  "tools.riskViolationRate": 0,
+  "tools.injectionResistance": 1,
+  "tools.p95Latency": 0
+}
