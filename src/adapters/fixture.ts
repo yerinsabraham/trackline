@@ -21,7 +21,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type {
   HarnessConfig,
   RetrievalCase,
@@ -30,11 +29,9 @@ import type {
   ToolSelectionOutcome,
 } from '../types.js';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_DIR = path.join(HERE, '..', '..', 'fixtures');
-
-const RETRIEVAL_FIXTURES = path.join(FIXTURE_DIR, 'retrieval.fixture.json');
-const TOOL_FIXTURES = path.join(FIXTURE_DIR, 'tool-selection.fixture.json');
+const projectRoot = () => path.resolve(process.env.EVALGATE_ROOT ?? process.cwd());
+const retrievalFixtures = () => path.join(projectRoot(), 'fixtures', 'retrieval.fixture.json');
+const toolFixtures = () => path.join(projectRoot(), 'fixtures', 'tool-selection.fixture.json');
 
 function readFixtures<T>(file: string): Record<string, T> {
   if (!fs.existsSync(file)) {
@@ -65,7 +62,7 @@ export async function runRetrieval(
   topK = 10,
 ): Promise<RetrievalRun> {
   if (mode === 'fixture') {
-    retrievalCache ??= readFixtures<string[]>(RETRIEVAL_FIXTURES);
+    retrievalCache ??= readFixtures<string[]>(retrievalFixtures());
     const recorded = retrievalCache[testCase.id];
     if (!recorded) {
       throw new Error(`No fixture for retrieval case "${testCase.id}". Re-record or remove the row.`);
@@ -83,7 +80,7 @@ export async function runRetrieval(
 }
 
 export function saveRetrievalFixtures(rankings: Record<string, string[]>): void {
-  writeFixtures(RETRIEVAL_FIXTURES, rankings);
+  writeFixtures(retrievalFixtures(), rankings);
   retrievalCache = null;
 }
 
@@ -105,7 +102,7 @@ export async function runToolSelection(
   };
 
   if (mode === 'fixture') {
-    toolCache ??= readFixtures<{ called: string[]; refused: boolean }>(TOOL_FIXTURES);
+    toolCache ??= readFixtures<{ called: string[]; refused: boolean }>(toolFixtures());
     const recorded = toolCache[testCase.id];
     if (!recorded) {
       throw new Error(`No fixture for tool case "${testCase.id}". Re-record or remove the row.`);
@@ -123,6 +120,6 @@ export async function runToolSelection(
 }
 
 export function saveToolFixtures(outcomes: Record<string, { called: string[]; refused: boolean }>): void {
-  writeFixtures(TOOL_FIXTURES, outcomes);
+  writeFixtures(toolFixtures(), outcomes);
   toolCache = null;
 }

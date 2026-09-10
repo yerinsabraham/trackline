@@ -15,6 +15,18 @@ npm test                 # the scorers score themselves
 
 A fresh clone runs immediately. No API key, no vector store, no config.
 
+As a CLI in another project:
+
+```bash
+npx evalgate init
+npx evalgate doctor
+npx evalgate run
+```
+
+The npm scripts are thin aliases over the same runner. `evalgate run` is the
+default command; `evalgate record` and `evalgate baseline` match
+`--record` and `--update-baseline`.
+
 ---
 
 ## The three suites
@@ -43,6 +55,17 @@ a sentence anyone should be able to ship behind.
 
 A case that *errors* fails the run outright. Averages computed over a shrunken
 set look better than reality, and that is the most dangerous kind of green.
+
+For stricter CI, opt in explicitly:
+
+```bash
+evalgate run --fail-on-case-failure
+evalgate run --fail-on-skipped-suite
+evalgate run --strict-baseline
+```
+
+Those flags are deliberately separate. Some teams want aggregate regression
+gates while tuning retrieval; others want every red row to fail the build.
 
 Here is the gate catching a prompt change that made an agent comply with an
 injection, alongside a chunking change that broke retrieval:
@@ -114,6 +137,27 @@ Then `npm run evals:record`, read the fixture diff, `npm run evals:baseline`.
 
 `harness.config.ts` is gitignored: it reaches into your codebase and usually
 holds environment-specific ids.
+
+Run `evalgate doctor` whenever a dataset, fixture, or baseline diff looks
+suspicious. It checks JSONL shape, duplicate ids, fixture coverage, stale
+fixtures, risk tiers, and baseline values before the scorer runs.
+
+---
+
+## Reports
+
+The terminal scorecard is the default. CI and review tools can ask for structured
+output:
+
+```bash
+evalgate run --report=json
+evalgate run --report=markdown
+evalgate run --report=github
+```
+
+Every run writes `results/latest.json`. Markdown and GitHub modes also write
+`results/latest.md`; GitHub mode appends that markdown to the Actions step
+summary when `GITHUB_STEP_SUMMARY` is present.
 
 ---
 

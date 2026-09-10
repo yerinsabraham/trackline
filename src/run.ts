@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Runner.
  *
@@ -36,24 +37,44 @@ import {
   saveRetrievalFixtures,
   saveToolFixtures,
 } from './adapters/fixture.js';
-import { findRegressions, renderGate, renderReport, toBaseline, type Baseline } from './report.js';
+import {
+  findRegressions,
+  renderGate,
+  renderMarkdownReport,
+  renderReport,
+  toBaseline,
+  type Baseline,
+} from './report.js';
+import { renderValidationIssues, validateProject } from './validate.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(HERE, '..');
+const PACKAGE_ROOT = path.join(HERE, '..');
+
+// ── CLI ───────────────────────────────────────────────────────────────────────
+
+const rawArgv = process.argv.slice(2);
+const commands = new Set(['run', 'record', 'baseline', 'doctor', 'validate', 'init']);
+const command = rawArgv[0] && commands.has(rawArgv[0]) ? rawArgv[0] : 'run';
+const argv = command === 'run' ? rawArgv : rawArgv.slice(1);
+const has = (flag: string) => argv.includes(flag);
+const val = (name: string) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
+
+const ROOT = path.resolve(val('root') ?? process.cwd());
 const BASELINE_PATH = path.join(ROOT, 'baseline.json');
 const RESULTS_DIR = path.join(ROOT, 'results');
 const DATASET_DIR = path.join(ROOT, 'datasets');
 
-// ── CLI ───────────────────────────────────────────────────────────────────────
-
-const argv = process.argv.slice(2);
-const has = (flag: string) => argv.includes(flag);
-const val = (name: string) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
-
-const record = has('--record');
+const record = command === 'record' || has('--record');
 const mode: RunMode = record || has('--live') ? 'live' : 'fixture';
 const only = val('suite');
-const updateBaseline = has('--update-baseline');
+const updateBaseline = command === 'baseline' || has('--update-baseline');
+const strictBaseline = has('--strict-baseline');
+const failOnCaseFailure = has('--fail-on-case-failure');
+const failOnSkippedSuite = has('--fail-on-skipped-suite');
+const reportFormat = val('report') ?? 'terminal';
+const reportFormats = new Set(['terminal', 'json', 'markdown', 'github']);
+
+process.env.EVALGATE_ROOT = ROOT;
 
 /**
  * Your plug-ins, from `harness.config.ts` if it exists.
@@ -93,7 +114,8 @@ const mean = (xs: number[]) => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b,
 function percentile(xs: number[], p: number): number {
   if (xs.length === 0) return 0;
   const sorted = [...xs].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, idx))];
 }
 
 const metric = (
@@ -171,7 +193,8 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
 
   if (record) saveRetrievalFixtures(rankings);
 
-  const positives = results.filter((r) => r.scores.ndcg10 !== 0 || r.scores.mrr !== 0);
+  const positiveIds = new Set(cases.filter((c) => c.relevant.length > 0).map((c) => c.id));
+  const positives = results.filter((r) => positiveIds.has(r.id));
   return {
     suite: 'retrieval',
     cases: results,
@@ -289,9 +312,74 @@ async function groundednessSuite(): Promise<SuiteResult> {
   };
 }
 
+// ── Doctor / init ─────────────────────────────────────────────────────────────
+
+function copyIfMissing(from: string, to: string): boolean {
+  if (fs.existsSync(to)) return false;
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
+  return true;
+}
+
+function initProject(): void {
+  const copied = [
+    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'retrieval.jsonl'), path.join(DATASET_DIR, 'retrieval.jsonl')),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'tool-selection.jsonl'), path.join(DATASET_DIR, 'tool-selection.jsonl')),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'groundedness.jsonl'), path.join(DATASET_DIR, 'groundedness.jsonl')),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'fixtures', 'retrieval.fixture.json'), path.join(ROOT, 'fixtures', 'retrieval.fixture.json')),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'fixtures', 'tool-selection.fixture.json'), path.join(ROOT, 'fixtures', 'tool-selection.fixture.json')),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'baseline.json'), BASELINE_PATH),
+    copyIfMissing(path.join(PACKAGE_ROOT, 'harness.config.example.ts'), path.join(ROOT, 'harness.config.example.ts')),
+  ].filter(Boolean).length;
+
+  console.log(copied === 0 ? 'EvalGate already initialized.' : `EvalGate initialized ${copied} file(s).`);
+}
+
+function runDoctor(opts: { quiet?: boolean } = {}): void {
+  const issues = validateProject(ROOT, { mode, strictBaseline });
+  const hasErrors = issues.some((i) => i.level === 'error');
+  if (!opts.quiet || hasErrors) console.log(renderValidationIssues(issues));
+  if (hasErrors) process.exit(1);
+}
+
+function writeReports(report: RunReport, baseline: Baseline, regressions: ReturnType<typeof findRegressions>): void {
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(RESULTS_DIR, 'latest.json'), `${JSON.stringify(report, null, 2)}\n`);
+
+  if (reportFormat === 'json') {
+    console.log(JSON.stringify({ report, regressions }, null, 2));
+    return;
+  }
+
+  if (reportFormat === 'markdown' || reportFormat === 'github') {
+    const markdown = renderMarkdownReport(report, baseline, regressions);
+    fs.writeFileSync(path.join(RESULTS_DIR, 'latest.md'), markdown);
+    if (reportFormat === 'markdown') console.log(markdown);
+    if (reportFormat === 'github' && process.env.GITHUB_STEP_SUMMARY) {
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+    }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!reportFormats.has(reportFormat)) {
+    console.error(`Unknown report format "${reportFormat}". Available: terminal, json, markdown, github.`);
+    process.exit(2);
+  }
+
+  if (command === 'init') {
+    initProject();
+    return;
+  }
+
+  if (command === 'doctor' || command === 'validate') {
+    runDoctor();
+    return;
+  }
+
+  runDoctor({ quiet: true });
   const config = await loadConfig();
 
   const all = [
@@ -320,12 +408,8 @@ async function main() {
     ? JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
     : {};
 
-  console.log(renderReport(report, baseline));
-
-  fs.mkdirSync(RESULTS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(RESULTS_DIR, 'latest.json'), `${JSON.stringify(report, null, 2)}\n`);
-
   if (updateBaseline) {
+    console.log(renderReport(report, baseline));
     fs.writeFileSync(BASELINE_PATH, `${JSON.stringify(toBaseline(report), null, 2)}\n`);
     console.log('\nBaseline updated. Read the diff before committing it.\n');
     return;
@@ -339,8 +423,30 @@ async function main() {
     process.exit(1);
   }
 
-  const regressions = findRegressions(report, baseline);
-  console.log(renderGate(regressions));
+  const regressions = findRegressions(report, baseline, { strictBaseline });
+  writeReports(report, baseline, regressions);
+
+  if (reportFormat === 'terminal' || reportFormat === 'github') {
+    console.log(renderReport(report, baseline));
+    console.log(renderGate(regressions));
+  }
+
+  if (failOnSkippedSuite) {
+    const skipped = suites.filter((s) => s.skipped);
+    if (skipped.length > 0) {
+      console.error(`\n✗ ${skipped.length} suite(s) skipped: ${skipped.map((s) => s.suite).join(', ')}.\n`);
+      process.exit(1);
+    }
+  }
+
+  if (failOnCaseFailure) {
+    const failed = suites.flatMap((s) => s.cases.filter((c) => !c.passed).map((c) => `${s.suite}.${c.id}`));
+    if (failed.length > 0) {
+      console.error(`\n✗ ${failed.length} case(s) failed: ${failed.slice(0, 10).join(', ')}${failed.length > 10 ? ', ...' : ''}.\n`);
+      process.exit(1);
+    }
+  }
+
   if (regressions.length > 0) process.exit(1);
 }
 

@@ -17,13 +17,19 @@ jobs:
 
       - run: npm ci
 
+      - name: Doctor
+        run: npm run doctor
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Unit tests (the scorers score themselves)
         run: npm test
 
+      - name: Build CLI
+        run: npm run build
+
       # Fixture mode: no network, no API keys, no spend, same numbers on every
       # runner. Safety metrics fail at anything above zero, with no tolerance.
       - name: Eval gate
-        run: npm run evals
+        run: npm run evals -- --report=github

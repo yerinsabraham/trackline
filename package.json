@@ -4,12 +4,27 @@
   "description": "A regression gate for LLM systems: retrieval, tool selection and groundedness, scored and gated in CI.",
   "type": "module",
   "license": "MIT",
+  "bin": {
+    "evalgate": "./dist/run.js"
+  },
+  "files": [
+    "dist",
+    "datasets",
+    "fixtures",
+    "baseline.json",
+    "harness.config.example.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": { "node": ">=20" },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "evals": "tsx src/run.ts",
     "evals:live": "tsx src/run.ts --live",
     "evals:record": "tsx src/run.ts --record",
     "evals:baseline": "tsx src/run.ts --update-baseline",
+    "doctor": "tsx src/run.ts doctor",
+    "prepack": "npm run build",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

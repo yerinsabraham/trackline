@@ -27,10 +27,10 @@ export type Baseline = Record<string, number>;
 
 export interface Regression {
   key: string;
-  baseline: number;
+  baseline: number | null;
   current: number;
   delta: number;
-  kind: 'tolerance' | 'floor';
+  kind: 'tolerance' | 'floor' | 'missing-baseline';
 }
 
 const metricKey = (suite: string, metric: Metric) => `${suite}.${metric.key}`;
@@ -43,7 +43,11 @@ export function toBaseline(report: RunReport): Baseline {
   return out;
 }
 
-export function findRegressions(report: RunReport, baseline: Baseline): Regression[] {
+export function findRegressions(
+  report: RunReport,
+  baseline: Baseline,
+  opts: { strictBaseline?: boolean } = {},
+): Regression[] {
   const regressions: Regression[] = [];
 
   for (const suite of report.suites) {
@@ -62,7 +66,12 @@ export function findRegressions(report: RunReport, baseline: Baseline): Regressi
       const before = baseline[key];
       // A metric with no baseline is new, not regressed. It gets recorded on the
       // next `--update-baseline` and gates from then on.
-      if (before === undefined) continue;
+      if (before === undefined) {
+        if (opts.strictBaseline) {
+          regressions.push({ key, baseline: null, current: metric.value, delta: 0, kind: 'missing-baseline' });
+        }
+        continue;
+      }
 
       const delta = metric.higherIsBetter ? before - metric.value : metric.value - before;
       if (delta > TOLERANCE) {
@@ -152,13 +161,80 @@ export function renderGate(regressions: Regression[]): string {
   const lines = [`\n${RED}${BOLD}✗ ${regressions.length} regression(s)${RESET}\n`];
   for (const r of regressions) {
     lines.push(
-      r.kind === 'floor'
+      r.kind === 'missing-baseline'
+        ? `  ${RED}${r.key}${RESET} has no committed baseline. Run --update-baseline after reviewing the current value.`
+        : r.kind === 'floor'
         ? `  ${RED}${r.key}${RESET} is ${r.current.toFixed(3)}, must be 0. Safety metrics have no tolerance.`
-        : `  ${RED}${r.key}${RESET} ${r.baseline.toFixed(3)} → ${r.current.toFixed(3)} (worse by ${r.delta.toFixed(3)}, tolerance ${TOLERANCE})`,
+        : `  ${RED}${r.key}${RESET} ${r.baseline?.toFixed(3)} → ${r.current.toFixed(3)} (worse by ${r.delta.toFixed(3)}, tolerance ${TOLERANCE})`,
     );
   }
   lines.push(
     `\n${DIM}If a change is intended and the new numbers are correct, re-run with --update-baseline and commit the diff.${RESET}\n`,
   );
   return lines.join('\n');
+}
+
+function plainFmt(metric: Metric): string {
+  if (metric.unit === 'ms') return `${Math.round(metric.value)}ms`;
+  if (metric.unit === 'usd') return `$${metric.value.toFixed(4)}`;
+  if (metric.unit === 'count') return String(metric.value);
+  return metric.value.toFixed(3);
+}
+
+export function renderMarkdownReport(report: RunReport, baseline: Baseline, regressions: Regression[] = []): string {
+  const lines = [
+    '# LLM Eval Scorecard',
+    '',
+    `mode=${report.mode}  sha=${report.gitSha ?? 'unknown'}  judge=${report.judgeModel ?? 'n/a'}`,
+    '',
+  ];
+
+  for (const suite of report.suites) {
+    if (suite.skipped) {
+      lines.push(`## ${suite.suite}`, '', `Skipped: ${suite.skipped}`, '');
+      continue;
+    }
+
+    const failed = suite.cases.filter((c) => !c.passed);
+    lines.push(`## ${suite.suite}`, '', `${suite.cases.length - failed.length}/${suite.cases.length} cases passed.`, '');
+    lines.push('| Metric | Current | Baseline | Delta | Gates |');
+    lines.push('|---|---:|---:|---:|---|');
+
+    for (const metric of suite.metrics) {
+      const key = metricKey(suite.suite, metric);
+      const before = baseline[key];
+      const raw = before === undefined ? null : metric.value - before;
+      const delta = raw === null || Math.abs(raw) < 0.001 ? '-' : `${raw > 0 ? '+' : ''}${raw.toFixed(3)}`;
+      lines.push(
+        `| ${metric.key} | ${plainFmt(metric)} | ${before === undefined ? '-' : before.toFixed(3)} | ${delta} | ${metric.primary ? 'yes' : 'tracked'} |`,
+      );
+    }
+
+    for (const err of suite.errors) {
+      lines.push(`- Error ${err.id}: ${err.message}`);
+    }
+
+    for (const c of failed.slice(0, 10)) {
+      lines.push(`- Failed ${c.id}${c.detail ? `: ${c.detail}` : ''}`);
+    }
+    if (failed.length > 10) lines.push(`- ${failed.length - 10} more failures in results/latest.json`);
+    lines.push('');
+  }
+
+  if (regressions.length === 0) {
+    lines.push('## Gate', '', `No regressions. Every primary metric is within ${TOLERANCE} of baseline and safety floors are clean.`);
+  } else {
+    lines.push('## Gate', '', `${regressions.length} regression(s):`);
+    for (const r of regressions) {
+      if (r.kind === 'missing-baseline') {
+        lines.push(`- ${r.key}: missing committed baseline.`);
+      } else if (r.kind === 'floor') {
+        lines.push(`- ${r.key}: ${r.current.toFixed(3)}, must be 0.`);
+      } else {
+        lines.push(`- ${r.key}: ${r.baseline?.toFixed(3)} -> ${r.current.toFixed(3)}.`);
+      }
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
 }
