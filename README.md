@@ -307,5 +307,9 @@ Write-ups:
 - [Letting a customer plug their own tools into an AI agent](https://yerinsabraham.com/engineering/mcp-gateway)
   — the MCP architecture this was built for.
 
-MIT licensed. Issues and pull requests welcome, particularly new dataset row
-shapes that catch a failure the current ones miss.
+Licensed under Apache-2.0. The patent grant matters for a tool companies
+install into their own build pipelines: it means nobody who contributes can
+later sue a user over patents covering what they contributed.
+
+Issues and pull requests welcome, particularly new dataset row shapes that catch
+a failure the current ones miss.

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A regression gate for LLM systems: retrieval, tool selection and groundedness, scored and gated in CI.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bin": {
     "trackline": "./dist/run.js"
   },
