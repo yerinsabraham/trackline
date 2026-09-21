@@ -1,7 +1,27 @@
 {
   "name": "trackline",
   "version": "0.1.0",
-  "description": "A regression gate for LLM systems: retrieval, tool selection and groundedness, scored and gated in CI.",
+  "description": "An alignment layer for AI agents: checks whether an agent's actions still match the task, rules and evidence it was given, across local coding agents and production AI systems.",
+  "author": "Yerins Abraham <https://yerinsabraham.com>",
+  "homepage": "https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yerinsabraham/trackline.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yerinsabraham/trackline/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-alignment",
+    "llm",
+    "evaluation",
+    "claude-code",
+    "guardrails",
+    "prompt-injection",
+    "rag",
+    "ci"
+  ],
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
@@ -14,9 +34,12 @@
     "baseline.json",
     "harness.config.example.ts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "evals": "tsx src/run.ts",

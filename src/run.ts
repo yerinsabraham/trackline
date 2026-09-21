@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * trackline
+ * Copyright 2026 Yerins Abraham. Licensed under the Apache License, Version 2.0.
+ * https://github.com/yerinsabraham/trackline
+ *
  * Runner.
  *
  *   npm run evals                    fixture mode, all suites, gate on baseline
