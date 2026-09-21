@@ -6,3 +6,6 @@ results/
 !.env.example
 harness.config.ts
 harness.config.js
+
+# Local working notes. Never pushed.
+documents/
