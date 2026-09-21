@@ -1,11 +1,53 @@
 # trackline
 
-**A regression gate for LLM systems.** Retrieval, tool selection and
-groundedness, scored and gated in CI.
+**An alignment layer for AI agents.**
 
-Your unit tests prove the code does what it was written to do. They say nothing
-about whether a prompt edit, a model swap, a chunk-size change or a retiered
-tool quietly broke the system. This is the thing that notices.
+Trackline watches whether an AI agent's actions still match the task, the rules
+and the evidence it was given. It works across two surfaces:
+
+- **Locally**, it runs beside coding agents like Claude Code, Codex and Cursor,
+  catching drift while the work is still happening.
+- **In production**, it ingests agent traces, scores alignment, and flags runs
+  where the agent appears to have gone off task.
+
+The same core engine powers both: **normalise what the agent did, compare it
+against intent, produce an evidence-backed verdict.**
+
+An agent that goes off task does not crash. It edits files nobody mentioned,
+ignores the rules file it read an hour ago, and the build stays green. Tests
+check that code does what it was written to do; they have no opinion on whether
+it is the code you asked for. Trackline is the layer that notices.
+
+---
+
+## Build status
+
+Trackline is being built in phases. This section is the only part of this README
+that changes as they land.
+
+| Component | Status |
+|---|---|
+| **Eval gate** (CI regression gate) | ✅ **Working.** Documented below. |
+| **Core alignment engine** | Foundation phase |
+| **Local surface** (coding agents) | Not started |
+| **Production surface** (trace ingest) | Not started |
+
+The eval gate is the first working component and will fold into the broader
+alignment engine as its CI-side entry point. It is real, tested and gating
+merges today; everything else is honest roadmap.
+
+Design notes and the reasoning behind the phases:
+[yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts](https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts).
+
+---
+
+## What works today: the eval gate
+
+A regression gate for LLM systems. Retrieval, tool selection and groundedness,
+scored and gated in CI.
+
+A prompt edit, a model swap, a chunk-size change or a retiered tool can quietly
+make a system worse without anything failing. This catches that at merge time.
 
 ```bash
 npm install
@@ -24,8 +66,8 @@ npx trackline run
 ```
 
 The npm scripts are thin aliases over the same runner. `trackline run` is the
-default command; `trackline record` and `trackline baseline` match
-`--record` and `--update-baseline`.
+default command; `trackline record` and `trackline baseline` match `--record`
+and `--update-baseline`.
 
 ---
 
@@ -226,29 +268,44 @@ correct.
 
 ---
 
-## What this does not cover
+## What the eval gate does not cover
 
-Named honestly, because a harness that looks complete stops getting extended.
+Named honestly, because a component that looks complete stops getting extended.
+Some of these are gaps the wider alignment engine is meant to close; they are
+marked as such, and marking them is not the same as shipping them.
 
 - **No multi-turn conversation evals.** Every suite tests one turn. Whether an
   agent correctly refuses on turn 4 what it accepted on turn 1 is untested, and
-  that is where a lot of real jailbreaks live.
+  that is where a lot of real jailbreaks live. *On the roadmap: the local
+  surface is inherently multi-turn.*
 - **No cost or token tracking.** `p95Latency` is recorded but is meaningless in
   fixture mode and noisy on a laptop.
 - **No production sampling.** The full pattern is offline dataset, then CI gate,
-  then online monitoring on sampled real traffic. The first two are here. The
-  third is not.
+  then online monitoring on sampled real traffic. The first two are here. *The
+  third is the production surface, and it is not built.*
+- **No live drift detection.** The gate runs at merge time. Catching an agent
+  going off task while it is still working is the local surface, and it is not
+  built.
 
 ---
 
 ## Background
 
-Extracted from the eval harness for [Lira Intelligence](https://liraintelligence.com),
-a production AI support agent with retrieval over customer knowledge bases and
-risk-tiered tool calling.
+The eval gate was extracted from the harness for
+[Lira Intelligence](https://liraintelligence.com), a production AI support agent
+with retrieval over customer knowledge bases and risk-tiered tool calling. The
+design principles it carries — everything scoreable by code is scored by code,
+safety metrics get no tolerance, a case that errors fails the run — carry
+forward into the alignment engine unchanged.
 
-There is a write-up of the tool-use and MCP architecture it was built for at
-[yerinsabraham.com/engineering/mcp-gateway](https://yerinsabraham.com/engineering/mcp-gateway).
+Write-ups:
+
+- [Nothing notices when an agent drifts](https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts)
+  — the problem, the research behind the approach, and what is being built.
+- [Safety metrics get no tolerance](https://yerinsabraham.com/engineering/safety-metrics-have-no-tolerance)
+  — why the gate has two rules rather than one.
+- [Letting a customer plug their own tools into an AI agent](https://yerinsabraham.com/engineering/mcp-gateway)
+  — the MCP architecture this was built for.
 
 MIT licensed. Issues and pull requests welcome, particularly new dataset row
 shapes that catch a failure the current ones miss.
