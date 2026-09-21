@@ -273,7 +273,7 @@ function validateBaseline(root: string, issues: ValidationIssue[], strict: boole
       issues,
       strict ? 'error' : 'warning',
       'missing_baseline_file',
-      'Missing baseline.json. Run evalgate baseline after reviewing current results.',
+      'Missing baseline.json. Run trackline baseline after reviewing current results.',
       'baseline.json',
     );
     return;
@@ -322,7 +322,7 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
 export function renderValidationIssues(issues: ValidationIssue[]): string {
   if (issues.length === 0) return '✓ doctor passed — datasets, fixtures, and baseline are consistent.';
 
-  const lines = ['EvalGate doctor found issues:'];
+  const lines = ['Trackline doctor found issues:'];
   for (const item of issues) {
     const where = [item.file, item.id].filter(Boolean).join(' ');
     lines.push(`  ${item.level === 'error' ? 'error' : 'warn '} ${item.code}${where ? ` ${where}` : ''}: ${item.message}`);

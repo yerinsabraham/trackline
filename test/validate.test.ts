@@ -7,7 +7,7 @@ import path from 'node:path';
 import { validateProject } from '../src/validate.js';
 
 function makeProject(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'evalgate-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'trackline-'));
   fs.mkdirSync(path.join(root, 'datasets'));
   fs.mkdirSync(path.join(root, 'fixtures'));
   fs.writeFileSync(

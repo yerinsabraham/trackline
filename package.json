@@ -1,11 +1,11 @@
 {
-  "name": "evalgate",
+  "name": "trackline",
   "version": "0.1.0",
   "description": "A regression gate for LLM systems: retrieval, tool selection and groundedness, scored and gated in CI.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "evalgate": "./dist/run.js"
+    "trackline": "./dist/run.js"
   },
   "files": [
     "dist",

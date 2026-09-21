@@ -74,7 +74,7 @@ const failOnSkippedSuite = has('--fail-on-skipped-suite');
 const reportFormat = val('report') ?? 'terminal';
 const reportFormats = new Set(['terminal', 'json', 'markdown', 'github']);
 
-process.env.EVALGATE_ROOT = ROOT;
+process.env.TRACKLINE_ROOT = ROOT;
 
 /**
  * Your plug-ins, from `harness.config.ts` if it exists.
@@ -332,7 +332,7 @@ function initProject(): void {
     copyIfMissing(path.join(PACKAGE_ROOT, 'harness.config.example.ts'), path.join(ROOT, 'harness.config.example.ts')),
   ].filter(Boolean).length;
 
-  console.log(copied === 0 ? 'EvalGate already initialized.' : `EvalGate initialized ${copied} file(s).`);
+  console.log(copied === 0 ? 'Trackline already initialized.' : `Trackline initialized ${copied} file(s).`);
 }
 
 function runDoctor(opts: { quiet?: boolean } = {}): void {

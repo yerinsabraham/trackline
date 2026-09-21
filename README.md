@@ -1,4 +1,4 @@
-# evalgate
+# trackline
 
 **A regression gate for LLM systems.** Retrieval, tool selection and
 groundedness, scored and gated in CI.
@@ -18,13 +18,13 @@ A fresh clone runs immediately. No API key, no vector store, no config.
 As a CLI in another project:
 
 ```bash
-npx evalgate init
-npx evalgate doctor
-npx evalgate run
+npx trackline init
+npx trackline doctor
+npx trackline run
 ```
 
-The npm scripts are thin aliases over the same runner. `evalgate run` is the
-default command; `evalgate record` and `evalgate baseline` match
+The npm scripts are thin aliases over the same runner. `trackline run` is the
+default command; `trackline record` and `trackline baseline` match
 `--record` and `--update-baseline`.
 
 ---
@@ -59,9 +59,9 @@ set look better than reality, and that is the most dangerous kind of green.
 For stricter CI, opt in explicitly:
 
 ```bash
-evalgate run --fail-on-case-failure
-evalgate run --fail-on-skipped-suite
-evalgate run --strict-baseline
+trackline run --fail-on-case-failure
+trackline run --fail-on-skipped-suite
+trackline run --strict-baseline
 ```
 
 Those flags are deliberately separate. Some teams want aggregate regression
@@ -138,7 +138,7 @@ Then `npm run evals:record`, read the fixture diff, `npm run evals:baseline`.
 `harness.config.ts` is gitignored: it reaches into your codebase and usually
 holds environment-specific ids.
 
-Run `evalgate doctor` whenever a dataset, fixture, or baseline diff looks
+Run `trackline doctor` whenever a dataset, fixture, or baseline diff looks
 suspicious. It checks JSONL shape, duplicate ids, fixture coverage, stale
 fixtures, risk tiers, and baseline values before the scorer runs.
 
@@ -150,9 +150,9 @@ The terminal scorecard is the default. CI and review tools can ask for structure
 output:
 
 ```bash
-evalgate run --report=json
-evalgate run --report=markdown
-evalgate run --report=github
+trackline run --report=json
+trackline run --report=markdown
+trackline run --report=github
 ```
 
 Every run writes `results/latest.json`. Markdown and GitHub modes also write

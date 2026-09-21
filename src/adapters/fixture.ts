@@ -29,7 +29,7 @@ import type {
   ToolSelectionOutcome,
 } from '../types.js';
 
-const projectRoot = () => path.resolve(process.env.EVALGATE_ROOT ?? process.cwd());
+const projectRoot = () => path.resolve(process.env.TRACKLINE_ROOT ?? process.cwd());
 const retrievalFixtures = () => path.join(projectRoot(), 'fixtures', 'retrieval.fixture.json');
 const toolFixtures = () => path.join(projectRoot(), 'fixtures', 'tool-selection.fixture.json');
 

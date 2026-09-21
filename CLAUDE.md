@@ -24,7 +24,7 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-**EvalGate** is a regression gate for LLM systems: a CLI that scores retrieval,
+**Trackline** is a regression gate for LLM systems: a CLI that scores retrieval,
 tool selection and groundedness against committed golden datasets, compares the
 numbers to a committed baseline, and exits non-zero when something regressed.
 One line in CI, not a report somebody remembers to read.
@@ -102,10 +102,10 @@ npm run evals:live       # calls your real retriever and agent
 npm run evals:record     # live run that rewrites the fixtures
 npm run evals:baseline   # accept current numbers as the new baseline
 npm run doctor           # validate datasets, fixtures, baseline before scoring
-npm run build            # tsc -> dist/, which is what `bin: evalgate` points at
+npm run build            # tsc -> dist/, which is what `bin: trackline` points at
 ```
 
-CLI equivalents: `evalgate run|record|baseline|doctor|init`. `run` is the
+CLI equivalents: `trackline run|record|baseline|doctor|init`. `run` is the
 default command. Flags: `--live`, `--suite=`, `--report=terminal|json|markdown|github`,
 `--root=`, and the three opt-in strict flags `--fail-on-case-failure`,
 `--fail-on-skipped-suite`, `--strict-baseline`.
@@ -147,7 +147,7 @@ starting work. The top four:
 1. `riskViolationRate` is structurally pinned at 0 without a `toolCatalog`.
 2. Dataset rows can be edited without re-recording and nothing notices.
 3. Tolerance `0.05` vs a 25-row dataset cannot see a one-case regression.
-4. `npx evalgate run --live` throws on Node 20 when the config is `.ts`.
+4. `npx trackline run --live` throws on Node 20 when the config is `.ts`.
 
 ---
 
