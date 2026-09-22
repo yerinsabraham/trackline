@@ -133,3 +133,47 @@ func TestShellWritesAreReportedAsUnmeasured(t *testing.T) {
 		t.Error("a shell write could hit a protected path and must not read as clean")
 	}
 }
+
+// Measured gap: an agent asked to add a library rewrote package.json whole, and
+// dependency-added could not tell an addition from a change because a
+// whole-file write carries no prior state. The hook runs before the tool, so
+// what is on disk is the prior state.
+func TestWholeFileWriteGetsPriorStateFromDisk(t *testing.T) {
+	root := t.TempDir()
+	manifest := filepath.Join(root, "package.json")
+	os.WriteFile(manifest, []byte(`{"dependencies":{"react":"^18.0.0"}}`), 0o600)
+
+	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
+		"tool_name":"Write","cwd":"` + root + `","tool_input":{"file_path":"package.json",
+		"content":"{\"dependencies\":{\"react\":\"^18.0.0\",\"lodash\":\"^4.17.21\"}}"}}`)
+
+	d, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, v := range d.Report.Findings() {
+		if strings.Contains(v.Summary, "lodash") {
+			found = true
+		}
+	}
+	if !found {
+		var outcomes []string
+		for _, r := range d.Report.Results {
+			outcomes = append(outcomes, r.Signal+"="+string(r.Outcome))
+		}
+		t.Errorf("a package added by a whole-file write was not reported: %v", outcomes)
+	}
+}
+
+// A file that does not exist yet has no prior state and needs none.
+func TestNewFileNeedsNoPriorState(t *testing.T) {
+	root := t.TempDir()
+	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
+		"tool_name":"Write","cwd":"` + root + `","tool_input":{"file_path":"src/new.ts","content":"x"}}`)
+
+	if _, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()}); err != nil {
+		t.Errorf("writing a new file must not fail: %v", err)
+	}
+}

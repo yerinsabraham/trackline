@@ -79,6 +79,13 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 	}
 
 	added, ok := addedPackages(in.Event.Action, pattern)
+	if ok {
+		// Firing on a package the user just asked for is technically correct
+		// and genuinely irritating, which is the same thing as wrong. Measured:
+		// "add the zod package to package.json" produced an alert saying a
+		// dependency had been added. Nobody needs telling.
+		added = notRequested(added, in)
+	}
 	if !ok {
 		return verdict.CannotMeasure(Name, fmt.Sprintf(
 			"%s is being rewritten whole, so an added package cannot be told from an upgraded one",
@@ -173,6 +180,43 @@ func packageSet(text string, re *regexp.Regexp) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range packages(text, re) {
 		out[p] = true
+	}
+	return out
+}
+
+// notRequested drops packages the user explicitly named.
+//
+// Only an exact name match counts. A vague "add a dependency" does not excuse
+// adding something in particular, and a request mentioning one package does not
+// license adding three.
+func notRequested(added []string, in signal.Input) []string {
+	var asked []string
+	for _, turn := range in.Intent.Recent(3) {
+		asked = append(asked, strings.ToLower(turn.Text))
+	}
+	if len(asked) == 0 {
+		return added
+	}
+
+	var out []string
+	for _, pkg := range added {
+		name := strings.ToLower(pkg)
+		// A scoped or pathed name is recognisable by its last segment too:
+		// "@scope/thing" is asked for as "thing" about as often.
+		short := name
+		if i := strings.LastIndex(short, "/"); i >= 0 {
+			short = short[i+1:]
+		}
+		named := false
+		for _, text := range asked {
+			if strings.Contains(text, name) || (len(short) > 3 && strings.Contains(text, short)) {
+				named = true
+				break
+			}
+		}
+		if !named {
+			out = append(out, pkg)
+		}
 	}
 	return out
 }

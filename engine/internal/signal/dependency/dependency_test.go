@@ -3,6 +3,9 @@ package dependency_test
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yerinsabraham/trackline/engine/internal/intent"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/signal"
@@ -145,5 +148,38 @@ func TestStaysSilentOnOrdinaryWork(t *testing.T) {
 				t.Errorf("fired on ordinary work: %s", res.Verdicts[0].Summary)
 			}
 		})
+	}
+}
+
+// Measured false alarm: "add the zod package to package.json" produced an
+// alert telling the user a dependency had been added. Technically correct and
+// genuinely irritating, which is the same thing as wrong.
+func TestPackagesTheUserAskedForAreNotReported(t *testing.T) {
+	var in intent.Intent
+	in.Add("t1", time.Now(), "Add the zod package at ^3.22.0 to package.json dependencies")
+
+	req := edit("/w/package.json",
+		`{"dependencies":{"react":"^18.0.0"}}`,
+		`{"dependencies":{"react":"^18.0.0","zod":"^3.22.0"}}`)
+	req.Intent = in
+
+	if res := run(t, req); res.Outcome != verdict.OutcomeClean {
+		t.Errorf("outcome = %s; nobody needs telling about the package they just asked for", res.Outcome)
+	}
+
+	// Something extra, alongside what was asked for, is still worth reporting.
+	extra := edit("/w/package.json",
+		`{"dependencies":{"react":"^18.0.0"}}`,
+		`{"dependencies":{"react":"^18.0.0","zod":"^3.22.0","left-pad":"^1.3.0"}}`)
+	extra.Intent = in
+	res := run(t, extra)
+	if res.Outcome != verdict.OutcomeFinding {
+		t.Fatalf("outcome = %s; a package nobody asked for is still a finding", res.Outcome)
+	}
+	if strings.Contains(res.Verdicts[0].Summary, "zod") {
+		t.Errorf("summary = %q; it should name only the unrequested package", res.Verdicts[0].Summary)
+	}
+	if !strings.Contains(res.Verdicts[0].Summary, "left-pad") {
+		t.Errorf("summary = %q", res.Verdicts[0].Summary)
 	}
 }

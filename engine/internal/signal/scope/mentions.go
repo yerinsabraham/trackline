@@ -30,7 +30,13 @@ var (
 	// because "package" is a qualifier and "Edit" precedes it. RE2 has no
 	// lookahead, so the qualifier must be followed by something that is
 	// neither a word character nor a dot.
-	qualified = regexp.MustCompile(`(?i)\b([\w.\-]+)\s+(?:module|directory|folder|package|service|component)(?:[^.\w]|$)`)
+	//
+	// The list grew after a measured false alarm: "add a test for the login
+	// function" produced test/login.test.mts, and with only container nouns in
+	// the list nothing in that request named anything, so the file looked
+	// unrelated to the ask. A function is a place in the code as much as a
+	// directory is.
+	qualified = regexp.MustCompile(`(?i)\b([\w.\-]+)\s+(?:module|directory|folder|package|service|component|function|method|class|handler|helper|endpoint|route|hook|component)(?:[^.\w]|$)`)
 	// a bare filename with a known-ish extension
 	filename = regexp.MustCompile(`\b([\w\-]+\.(?:go|ts|tsx|js|jsx|py|rb|rs|java|md|json|yml|yaml|toml|sql|sh))\b`)
 	// URLs contain slashes and are not references to the project tree

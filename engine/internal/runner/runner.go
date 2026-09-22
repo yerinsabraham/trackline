@@ -7,6 +7,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -139,6 +140,17 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	recording := filepath.Join(root, ".trackline", "events.jsonl")
 	turnState := &session.TurnCounter{Path: filepath.Join(root, ".trackline", "turn.json")}
 
+	// A whole-file write carries no prior state, so a check cannot tell an
+	// addition from a change. Measured: an agent asked to add a library
+	// rewrote package.json entirely, and dependency-added honestly reported it
+	// could not tell what was new.
+	//
+	// The hook runs *before* the tool, so whatever is on disk right now is the
+	// prior state. Reading it here rather than inside a check keeps the rule
+	// that checks touch nothing outside their input, and keeps replays
+	// deterministic: the content is captured into the event.
+	fillPriorBody(&ev)
+
 	e := engine.New(build(cfg, root, turnState)...)
 	rep := e.Run(ev, in, rules, intentUnavailable)
 
@@ -164,6 +176,32 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		}
 	}
 	return d, nil
+}
+
+// fillPriorBody reads what a file currently holds, for a write that replaces it
+// whole.
+//
+// Deliberately narrow: only for writes, only when the host gave no prior text,
+// only for a single known path, and only up to the usual body limit. Reading
+// more than that on every tool call would cost latency for content no check
+// asked for.
+func fillPriorBody(ev *event.Event) {
+	a := &ev.Action
+	if a.Type != event.ActionWriteFile || a.PriorBody != "" || a.PathsUnknown || len(a.Paths) != 1 {
+		return
+	}
+	info, err := os.Stat(a.Paths[0])
+	if err != nil || info.IsDir() || info.Size() > event.BodyLimit {
+		// A missing file is a new file, which has no prior state and needs
+		// none. A file too large to read is left alone, and the check will say
+		// it could not measure.
+		return
+	}
+	b, err := os.ReadFile(a.Paths[0])
+	if err != nil {
+		return
+	}
+	a.PriorBody, _ = event.TrimBody(string(b))
 }
 
 // build assembles the configured checks.
