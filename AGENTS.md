@@ -51,18 +51,30 @@ Cursor, or anything else. `CLAUDE.md` imports this file.
 
 ## What this is
 
-**Trackline** is a regression gate for LLM systems: a CLI that scores retrieval,
-tool selection and groundedness against committed golden datasets, compares the
-numbers to a committed baseline, and exits non-zero when something regressed.
-One line in CI, not a report somebody remembers to read.
+**Trackline is an alignment layer for AI agents.** It checks whether an agent's
+actions still match the task, the rules and the evidence it was given, across
+two surfaces: locally beside a coding agent while it works, and in production
+over agent traces. One core engine: normalise what the agent did, compare it
+against intent, produce an evidence-backed verdict.
 
-The problem it solves: unit tests prove the code does what it was written to
-do. They say nothing about whether a prompt edit, a model swap, a chunk-size
-change or a retiered tool quietly broke the system. This notices.
+**What exists today is the CI eval gate**, which is what this codebase currently
+is: a CLI that scores retrieval, tool selection and groundedness against
+committed golden datasets, compares the numbers to a committed baseline, and
+exits non-zero on a regression. It folds into the wider engine as the CI-side
+entry point. Everything else is roadmap, and `documents/BUILD-PLAN.md` holds the
+phases.
+
+Do not describe the project as only an eval gate. Do not describe the watcher as
+though it works. The README gets this split right; follow it.
 
 Extracted from the eval harness for Lira Intelligence, a production AI support
 agent with retrieval over customer knowledge bases and risk-tiered tool calling.
-MIT licensed. TypeScript, ESM, Node ≥ 20, zero runtime deps except `openai`.
+**Apache-2.0.** TypeScript, ESM, Node ≥ 20, zero runtime deps except `openai`.
+
+**The hook binary is written in Go**, decided by measurement in Phase 0: a Node
+hook costs ~88ms per tool call against Go's ~6.5ms, and it runs on every single
+tool call. See `documents/phase0/SPEED-DECISION.md`. Two languages in this repo
+is deliberate, not drift.
 
 ### The three suites
 
