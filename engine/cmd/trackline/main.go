@@ -36,6 +36,8 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "doctor":
 		err = cmdDoctor(os.Args[2:])
+	case "review":
+		err = cmdReview(os.Args[2:])
 	case "show":
 		err = cmdShow(os.Args[2:])
 	case "allow":
@@ -66,6 +68,7 @@ func usage() {
   status   show what the hook has seen, and whether it has ever run
   doctor   check the installation without changing anything
   show     replay a recorded session as a readable story
+  review   ask a model whether each turn's work served its request
   allow    approve something a check objected to
   allowed  list what has been approved
   revoke   withdraw an approval

@@ -56,7 +56,34 @@ type Config struct {
 
 	// Disabled names checks that should not run at all.
 	Disabled []string `json:"disabled,omitempty"`
+
+	// Judge configures the one check that asks a model whether work served the
+	// request. Off unless configured, and never on the hook's path.
+	Judge JudgeConfig `json:"judge,omitempty"`
 }
+
+// JudgeConfig says how to reach a model, if at all.
+//
+// Off by default, and deliberately not a single vendor. A judge should be a
+// different model from the one under test, and nobody can follow that rule if
+// the tool only speaks to one company. An OpenAI-compatible endpoint covers
+// OpenAI, Ollama, vLLM and anything local, so someone unwilling to send their
+// code to a third party can point this at their own machine.
+type JudgeConfig struct {
+	// Provider is "cli", "http", or empty for off.
+	Provider string `json:"provider,omitempty"`
+	// Binary is the command to run for the cli provider, e.g. "claude".
+	Binary string `json:"binary,omitempty"`
+	// BaseURL and Model configure the http provider.
+	BaseURL string `json:"baseUrl,omitempty"`
+	Model   string `json:"model,omitempty"`
+	// APIKeyEnv names the environment variable holding the key, so a key is
+	// never written into a file that gets committed.
+	APIKeyEnv string `json:"apiKeyEnv,omitempty"`
+}
+
+// Enabled reports whether a judge has been configured at all.
+func (j JudgeConfig) Enabled() bool { return j.Provider != "" }
 
 // Default is a configuration that works with no file present.
 func Default() Config {
@@ -144,6 +171,9 @@ func (c Config) merge(f Config) Config {
 	}
 	if len(f.RuleFiles) > 0 {
 		c.RuleFiles = f.RuleFiles
+	}
+	if f.Judge.Provider != "" {
+		c.Judge = f.Judge
 	}
 	// Off-limits adds to the defaults rather than replacing them. Someone
 	// protecting one more path should not lose protection on their keys.
