@@ -3,6 +3,13 @@ import path from 'node:path';
 
 import type { RetrievalCase, RiskTier, ToolSelectionCase } from './types.js';
 import { readRetrievalFixture, retrievalInputHash, toolInputHash } from './adapters/fixture.js';
+import {
+  CONFIG_NAMES,
+  findConfigFile,
+  isTypeScriptConfig,
+  nodeCanLoadTypeScript,
+  typeScriptConfigAdvice,
+} from './config.js';
 
 export type ValidationLevel = 'error' | 'warning';
 
@@ -326,9 +333,9 @@ function validateRiskCoverage(
   const riskRows = toolRows.filter((r) => r.maxRisk !== undefined);
   if (riskRows.length === 0) return;
 
-  const hasConfig = ['harness.config.ts', 'harness.config.js'].some((f) =>
-    fs.existsSync(path.join(root, f)),
-  );
+  // Use the shared lookup rather than a local list, or a `.mjs` config is
+  // invisible here and the run reports a hole that does not exist.
+  const hasConfig = findConfigFile(root) !== null;
   // A live run resolves tiers from the config; a fixture run replays recorded
   // ones, falling back to the config when the fixture predates the field.
   if (!fixtureMode) {
@@ -337,8 +344,8 @@ function validateRiskCoverage(
         issues,
         'error',
         'risk_unresolvable',
-        `${riskRows.length} tool row(s) declare maxRisk but there is no harness.config.ts to resolve tiers from. ` +
-          'riskViolationRate cannot be measured.',
+        `${riskRows.length} tool row(s) declare maxRisk but there is no harness config to resolve tiers from. ` +
+          `Add one of: ${CONFIG_NAMES.join(', ')}. riskViolationRate cannot be measured.`,
         'datasets/tool-selection.jsonl',
       );
     }
@@ -368,8 +375,8 @@ function validateRiskCoverage(
     'risk_unresolvable',
     `${missing.length} of ${riskRows.length} maxRisk row(s) have fixtures with no recorded risk tiers` +
       (hasConfig
-        ? '. They will fall back to harness.config.ts; re-record to store them.'
-        : `, and there is no harness.config.ts to fall back on. riskViolationRate cannot be measured. First: ${missing.slice(0, 3).join(', ')}`),
+        ? '. They will fall back to the harness config; re-record to store them.'
+        : `, and there is no harness config to fall back on. riskViolationRate cannot be measured. First: ${missing.slice(0, 3).join(', ')}`),
     file,
   );
 }
@@ -451,6 +458,34 @@ function validateFixtureFreshness(
   }
 }
 
+/**
+ * Will the harness config actually load on this Node?
+ *
+ * A TypeScript config is only importable where Node can strip types: not at all
+ * on Node 20, and only from 22.18 by default on Node 22. Catching it here means
+ * the answer arrives from `doctor` before a live run, rather than as an
+ * `ERR_UNKNOWN_FILE_EXTENSION` from Node internals partway through one.
+ *
+ * A warning in fixture mode, which never reads the config, and an error in live
+ * mode, which cannot proceed without it.
+ */
+function validateConfigLoadable(
+  root: string,
+  issues: ValidationIssue[],
+  fixtureMode: boolean,
+): void {
+  const file = findConfigFile(root);
+  if (!file || !isTypeScriptConfig(file) || nodeCanLoadTypeScript()) return;
+
+  issue(
+    issues,
+    fixtureMode ? 'warning' : 'error',
+    'config_unloadable',
+    typeScriptConfigAdvice(file) + (fixtureMode ? '\nFixture mode does not read it, so this run is unaffected.' : ''),
+    path.basename(file),
+  );
+}
+
 export function validateProject(root: string, options: ValidationOptions = {}): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const fixtureMode = (options.mode ?? 'fixture') === 'fixture';
@@ -482,6 +517,7 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
     fixtureMode,
   );
   validateBaseline(root, issues, Boolean(options.strictBaseline));
+  validateConfigLoadable(root, issues, fixtureMode);
 
   return issues;
 }

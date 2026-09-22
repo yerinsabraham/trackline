@@ -5,6 +5,8 @@ results/
 .env.*
 !.env.example
 harness.config.ts
+harness.config.mts
+harness.config.mjs
 harness.config.js
 
 # Local working notes. Never pushed.

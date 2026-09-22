@@ -169,8 +169,17 @@ model, the retrieval score threshold, or the agent system prompt.
 
 ## Wiring it to your system
 
-Copy `harness.config.example.ts` to `harness.config.ts` and fill in three
-functions:
+Copy an example config and fill in three functions. Two are shipped:
+
+| File | Use it when |
+|---|---|
+| `harness.config.example.mjs` | **Node 20, or Node 22 before 22.18.** Plain JavaScript, loads everywhere. |
+| `harness.config.example.ts` | Node 22.18+, which strips types natively. |
+
+Node cannot import a `.ts` file unless it can strip types, so a TypeScript
+config silently rules out Node 20. `trackline doctor` says so up front rather
+than letting a live run fail partway with an error from Node internals. Looked
+for in order: `harness.config.ts`, `.mts`, `.mjs`, `.js`.
 
 ```ts
 import type { HarnessConfig } from './src/types.js';
@@ -191,7 +200,7 @@ export default config;
 
 Then `npm run evals:record`, read the fixture diff, `npm run evals:baseline`.
 
-`harness.config.ts` is gitignored: it reaches into your codebase and usually
+Your `harness.config.*` is gitignored: it reaches into your codebase and usually
 holds environment-specific ids.
 
 `toolCatalog` matters more than it looks. Risk tiers are resolved from it at

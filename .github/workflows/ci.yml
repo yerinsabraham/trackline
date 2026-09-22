@@ -33,3 +33,56 @@ jobs:
       # runner. Safety metrics fail at anything above zero, with no tolerance.
       - name: Eval gate
         run: npm run evals -- --report=github
+
+  # The live path was broken on Node 20 for months because nothing ran it. The
+  # CLI is exercised as an installed binary under plain node, with a stub
+  # config, on every supported major. No network and no API keys: the stub
+  # retriever and tool selector return fixed values, so this checks that the
+  # config loads and the runner wires it up, not that the numbers are good.
+  live-path:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      # Run against a scratch project with no baseline, so the gate has nothing
+      # to compare against and a stub retriever returning nothing does not fail
+      # the build. What is under test is that the config loads and the runner
+      # wires it up, not the quality of the numbers.
+      - name: Live run loads a JavaScript config
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke/datasets"
+          cp datasets/*.jsonl "$RUNNER_TEMP/smoke/datasets/"
+          cp harness.config.example.mjs "$RUNNER_TEMP/smoke/harness.config.mjs"
+          node dist/run.js run --live --root="$RUNNER_TEMP/smoke"
+
+      # Node 20 cannot strip types at all, and Node 22 only from 22.18. A .ts
+      # config must therefore fail with our own advice rather than an
+      # ERR_UNKNOWN_FILE_EXTENSION out of Node internals. Asserting on the
+      # message is the point: a raw stack trace here is the bug.
+      - name: TypeScript config reports something useful when it cannot load
+        run: |
+          mkdir -p "$RUNNER_TEMP/tsconf/datasets"
+          cp datasets/*.jsonl "$RUNNER_TEMP/tsconf/datasets/"
+          cp harness.config.example.ts "$RUNNER_TEMP/tsconf/harness.config.ts"
+          set +e
+          out=$(node --no-experimental-strip-types dist/run.js run --live --root="$RUNNER_TEMP/tsconf" 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          [ "$code" -ne 0 ] || { echo "::error::an unloadable config must not exit 0"; exit 1; }
+          echo "$out" | grep -q "cannot import it directly" \
+            || { echo "::error::expected actionable advice, got a raw error"; exit 1; }
+          echo "$out" | grep -qi "ERR_UNKNOWN_FILE_EXTENSION" \
+            && { echo "::error::leaked the raw Node error instead of advice"; exit 1; }
+          true

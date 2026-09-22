@@ -53,6 +53,7 @@ import {
   toBaseline,
   type Baseline,
 } from './report.js';
+import { findConfigFile, isTypeScriptConfig, typeScriptConfigAdvice } from './config.js';
 import { renderValidationIssues, validateProject } from './validate.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -85,20 +86,30 @@ const reportFormats = new Set(['terminal', 'json', 'markdown', 'github']);
 process.env.TRACKLINE_ROOT = ROOT;
 
 /**
- * Your plug-ins, from `harness.config.ts` if it exists.
+ * Your plug-ins, from a `harness.config.*` file if one exists.
  *
  * Absent is fine and is the normal state for a fresh clone: fixture mode needs
  * nothing, which is what lets someone run the suite before wiring up a thing.
+ *
+ * The awkward case is a `.ts` config under a Node that cannot strip types.
+ * Node 20 cannot at all, and 22 only from 22.18 by default. The bare `import()`
+ * used to surface that as `ERR_UNKNOWN_FILE_EXTENSION` from Node internals,
+ * with no hint of what to do, on a path the project's own CI never exercised.
  */
 async function loadConfig(): Promise<HarnessConfig> {
-  for (const name of ['harness.config.ts', 'harness.config.js']) {
-    const file = path.join(ROOT, name);
-    if (fs.existsSync(file)) {
-      const mod = await import(pathToFileURL(file).href);
-      return (mod.default ?? mod) as HarnessConfig;
+  const file = findConfigFile(ROOT);
+  if (!file) return {};
+
+  try {
+    const mod = await import(pathToFileURL(file).href);
+    return (mod.default ?? mod) as HarnessConfig;
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code === 'ERR_UNKNOWN_FILE_EXTENSION' && isTypeScriptConfig(file)) {
+      throw new Error(`Cannot load your harness config.\n\n${typeScriptConfigAdvice(file)}`);
     }
+    throw e;
   }
-  return {};
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
