@@ -113,7 +113,18 @@ breaking one, say so explicitly rather than quietly eroding it.
 ## Layout
 
 ```
-src/
+engine/                   Go: the alignment engine and the hook binary.
+  cmd/inspect/            replay a recording, print what the engine saw
+  internal/event/         the normalised event every host maps into
+  internal/intent/        human turns; Anchor(), not the latest message
+  internal/verdict/       outcomes and findings; evidence is mandatory
+  internal/signal/        the one interface every check implements
+  internal/engine/        runs signals, holds no judgement itself
+  internal/session/       record and replay
+  internal/adapter/       per-host normalisation + the cross-host test
+  README.md               read this before touching the engine
+
+src/                      TypeScript: the CI eval gate.
   run.ts                  CLI entry + the three suite runners. The exit code is the product.
   types.ts                Shared types. RiskTier order matters, not the names.
   report.ts               Scorecard rendering + the gate (TOLERANCE, ZERO_FLOOR).
@@ -133,6 +144,10 @@ documents/                Local working notes. GITIGNORED.
 ### Commands
 
 ```bash
+# Go engine
+cd engine && go test ./... -race && gofmt -l .
+
+# TypeScript eval gate
 npm ci
 npm test                 # node:test, 22 tests, the scorers score themselves
 npm run typecheck

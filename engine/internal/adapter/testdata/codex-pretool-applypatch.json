@@ -1,0 +1,14 @@
+{
+  "session_id": "01a0c797-5411-7900-aeb1-8cc70ca344c4",
+  "turn_id": "01a0c797-555f-7f72-8c67-318add083c99",
+  "transcript_path": "/home/dev/.codex/sessions/2026/09/22/rollout-2026-09-22T06-29-38-01a0c797-5411-7900-aeb1-8cc70ca344c4.jsonl",
+  "cwd": "/work/project/documents/phase0/codex-scratch",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Add File: FORBIDDEN-codex.txt\n+hello\n*** End Patch\n"
+  },
+  "tool_use_id": "call_ls779fLB6sqAdC5uhITDBgoL"
+}

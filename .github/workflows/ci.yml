@@ -105,3 +105,42 @@ jobs:
             echo "::error::leaked the raw Node error instead of advice"
             exit 1
           fi
+
+  # The Go engine. Separate job because it is a separate program with a separate
+  # toolchain: the hook binary runs before every tool call on a developer's
+  # machine, where the TypeScript gate runs once per merge in CI.
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt'd: $unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./... -race
+
+      # The hook ships as a single file with no runtime to install. If a target
+      # stops building, that is a platform we can no longer support, and it
+      # should fail here rather than at release.
+      - name: Cross-compile every target
+        run: |
+          for pair in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            os="${pair%%/*}"; arch="${pair##*/}"
+            GOOS="$os" GOARCH="$arch" go build -ldflags="-s -w" -o /tmp/inspect-"$os"-"$arch" ./cmd/inspect \
+              || { echo "::error::$pair failed to build"; exit 1; }
+            echo "  $pair ok"
+          done

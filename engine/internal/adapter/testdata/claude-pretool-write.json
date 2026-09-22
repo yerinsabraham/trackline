@@ -1,0 +1,18 @@
+{
+  "session_id": "304d0ddf-4001-42c6-921d-2507ef4f62a1",
+  "transcript_path": "/home/dev/.agent/projects/-Users-apple-Documents-evalgate/304d0ddf-4001-42c6-921d-2507ef4f62a1.jsonl",
+  "cwd": "/work/project/documents/phase0",
+  "scratchpad_dir": "/tmp/agent/-Users-apple-Documents-evalgate/304d0ddf-4001-42c6-921d-2507ef4f62a1/scratchpad",
+  "prompt_id": "991242a0-95a1-4a85-a88f-0c78ee335853",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/dev/.agent/projects/-Users-apple-Documents-evalgate/memory/explain-direction-before-acting.md",
+    "content": "---\nname: explain-direction-before-acting\ndescription: Say what you are about to do next, in plain words, before doing it \u2014 especially when the user replies \"proceed\".\nmetadata:\n  type: feedback\n---\n\nBefore starting work, state the direction in plain words: what happens next,\nwhy, and what it will change. Then do it.\n\nOn 2026-09-22 the user explained that when they say \"proceed\" it is often\nbecause my summary left them unclear on what I was actually going to do next,\nso they had no basis to steer. They asked that I explain the direction first,\nin plain language, so they can correct course before the work happens rather\nthan after.\n\n**Why:** a summary of what already happened does not tell them what is coming.\nWithout that, \"proceed\" is them deferring rather than agreeing, and the chance\nto redirect is lost.\n\n**How to apply:** open with two or three plain sentences on what I am about to\ndo and what it will produce. No jargon. Then act in the same turn. Keep the\nexplanation short \u2014 it is a heads-up, not a plan document. Applies most when\nthey reply with a single word like \"proceed\", which signals they may be\nfollowing along rather than directing.\n\nSee [[act-on-stated-instructions]]: explaining the direction is not the same as\nasking permission again for something already decided.\n"
+  },
+  "tool_use_id": "toolu_016HjZtj9xpkq3YgqFHB55tU"
+}
