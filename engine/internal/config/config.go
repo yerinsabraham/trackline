@@ -66,7 +66,15 @@ func Default() Config {
 		RuleFiles: []string{"AGENTS.md", "CLAUDE.md", ".cursorrules"},
 		// Secrets are the one category where the default is not a judgement
 		// call. Nobody asks an agent to rewrite their credentials file.
-		OffLimits: []string{".env", ".env.*", "*.pem", "*.key", "id_rsa", ".npmrc", ".netrc"},
+		//
+		// The "!" entries are exceptions, and they are not optional. Protecting
+		// ".env.*" also catches ".env.example", which is a committed template
+		// people edit all day. Firing on it would be a false alarm on ordinary
+		// work, and a tool that interrupts wrongly gets uninstalled.
+		OffLimits: []string{
+			".env", ".env.*", "*.pem", "*.key", "id_rsa", ".npmrc", ".netrc",
+			"!.env.example", "!.env.sample", "!.env.template", "!.env.defaults",
+		},
 	}
 }
 
