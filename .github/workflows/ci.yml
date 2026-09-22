@@ -70,19 +70,38 @@ jobs:
       # config must therefore fail with our own advice rather than an
       # ERR_UNKNOWN_FILE_EXTENSION out of Node internals. Asserting on the
       # message is the point: a raw stack trace here is the bug.
+      #
+      # --no-experimental-strip-types only exists from Node 22.6, and Node 20
+      # rejects the flag outright, so it is probed rather than assumed. Node 20
+      # needs no flag: it cannot strip types under any circumstances.
       - name: TypeScript config reports something useful when it cannot load
         run: |
           mkdir -p "$RUNNER_TEMP/tsconf/datasets"
           cp datasets/*.jsonl "$RUNNER_TEMP/tsconf/datasets/"
           cp harness.config.example.ts "$RUNNER_TEMP/tsconf/harness.config.ts"
+
+          NO_STRIP=""
+          if node --no-experimental-strip-types -e "" >/dev/null 2>&1; then
+            NO_STRIP="--no-experimental-strip-types"
+          fi
+          echo "node $(node -v), type stripping disabled via: ${NO_STRIP:-not needed}"
+
+          # Guard the premise: if this Node can still strip types the assertions
+          # below would be testing nothing, and passing would be meaningless.
+          if node $NO_STRIP -e "process.exit(process.features.typescript ? 0 : 1)"; then
+            echo "::error::could not disable type stripping, so this check proves nothing"
+            exit 1
+          fi
+
           set +e
-          out=$(node --no-experimental-strip-types dist/run.js run --live --root="$RUNNER_TEMP/tsconf" 2>&1)
+          out=$(node $NO_STRIP dist/run.js run --live --root="$RUNNER_TEMP/tsconf" 2>&1)
           code=$?
           set -e
           echo "$out"
           [ "$code" -ne 0 ] || { echo "::error::an unloadable config must not exit 0"; exit 1; }
           echo "$out" | grep -q "cannot import it directly" \
             || { echo "::error::expected actionable advice, got a raw error"; exit 1; }
-          echo "$out" | grep -qi "ERR_UNKNOWN_FILE_EXTENSION" \
-            && { echo "::error::leaked the raw Node error instead of advice"; exit 1; }
-          true
+          if echo "$out" | grep -qi "ERR_UNKNOWN_FILE_EXTENSION"; then
+            echo "::error::leaked the raw Node error instead of advice"
+            exit 1
+          fi
