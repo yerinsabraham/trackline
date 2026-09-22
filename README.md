@@ -39,6 +39,15 @@ merges today; everything else is honest roadmap.
 Design notes and the reasoning behind the phases:
 [yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts](https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts).
 
+**The measurements behind the design are in [`docs/experiments/`](docs/experiments/),**
+with the code and raw data that produced them:
+
+| | Question | Answer |
+|---|---|---|
+| [1](docs/experiments/01-do-agents-self-correct.md) | When a hook blocks an agent and explains why, does the agent correct itself? | **Yes, 11 of 11**, across Claude Code and Codex |
+| [2](docs/experiments/02-hook-latency.md) | What does a check before every tool call cost? | **88ms in Node, 6.5ms in Go** |
+| [3](docs/experiments/03-otel-traces.md) | Can alignment be checked from production traces? | **Only with content capture on** — but it survives PII redaction |
+
 ---
 
 ## What works today: the eval gate

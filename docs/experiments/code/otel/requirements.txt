@@ -1,0 +1,4 @@
+openai
+opentelemetry-sdk
+opentelemetry-instrumentation-openai-v2
+httpx
