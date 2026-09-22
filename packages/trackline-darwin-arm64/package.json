@@ -1,0 +1,20 @@
+{
+  "name": "trackline-darwin-arm64",
+  "version": "0.1.0",
+  "description": "trackline binaries for darwin arm64. Installed automatically by the trackline package.",
+  "license": "Apache-2.0",
+  "author": "Yerins Abraham <https://yerinsabraham.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yerinsabraham/trackline.git"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin"
+  ]
+}

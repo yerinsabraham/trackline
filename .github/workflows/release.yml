@@ -1,0 +1,107 @@
+name: Release
+
+# Publishing happens here and nowhere else.
+#
+# npm provenance — the signed attestation tying a published tarball to the exact
+# commit that built it — is only produced from GitHub Actions or GitLab CI.
+# Running `npm publish` from a laptop succeeds, looks identical, and silently
+# produces none. Nothing warns you, and the first published version is the one
+# that sets expectations.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and check everything, publish nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # required for provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Nothing ships that has not passed everything.
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run evals
+      - name: Engine tests
+        working-directory: engine
+        run: |
+          gofmt -l . | (! grep .) || { echo "::error::not gofmt'd"; exit 1; }
+          go vet ./...
+          go test ./... -race
+
+      - run: npm run build
+      - run: ./scripts/build-binaries.sh
+
+      # A version mismatch between the shim and the binaries it loads would
+      # ship a package whose optional dependencies can never resolve.
+      - name: Versions agree
+        run: |
+          main=$(node -p "require('./package.json').version")
+          for d in packages/*/; do
+            got=$(node -p "require('./$d/package.json').version")
+            [ "$got" = "$main" ] || { echo "::error::$d is $got, main is $main"; exit 1; }
+          done
+          echo "all packages at $main"
+
+      # The install path is the thing users actually touch, and it broke twice
+      # during development in ways invisible from the repository: a CommonJS
+      # shim in an ESM package, and a binary resolved from the wrong place.
+      - name: Install from packed tarballs and run
+        run: |
+          mkdir -p /tmp/tarballs
+          npm pack --pack-destination /tmp/tarballs
+          (cd packages/trackline-linux-x64 && npm pack --pack-destination /tmp/tarballs)
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          npm install /tmp/tarballs/*.tgz
+          ./node_modules/.bin/trackline doctor
+          ./node_modules/.bin/trackline --help 2>&1 | grep -q "alignment layer" \
+            || { echo "::error::the installed CLI did not run"; exit 1; }
+
+      - name: Publish platform packages
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          for d in packages/*/; do
+            (cd "$d" && npm publish --provenance --access public)
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # After the platform packages, so its optional dependencies resolve the
+      # moment it is installable.
+      - name: Publish trackline
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Confirm attribution actually shipped
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          sleep 20
+          mkdir -p /tmp/verify && cd /tmp/verify
+          npm init -y >/dev/null
+          npm install trackline@$(node -p "require('/home/runner/work/trackline/trackline/package.json').version")
+          for f in LICENSE NOTICE README.md; do
+            test -f node_modules/trackline/$f || { echo "::error::$f missing from the published package"; exit 1; }
+          done
+          echo "LICENSE, NOTICE and README are in what npm actually served"

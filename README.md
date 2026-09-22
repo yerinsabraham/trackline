@@ -1,82 +1,141 @@
 # trackline
 
-**An alignment layer for AI agents.**
+**Watches whether an AI coding agent is still doing what you asked.**
 
-Trackline watches whether an AI agent's actions still match the task, the rules
-and the evidence it was given. It works across two surfaces:
+An agent that goes off task does not crash. It edits files you never mentioned,
+installs a package nobody asked for, ignores the rules file it read an hour ago
+— and the build stays green. Tests check that code does what it was written to
+do. They have no opinion on whether it is the code you asked for.
 
-- **Locally**, it runs beside coding agents like Claude Code, Codex and Cursor,
-  catching drift while the work is still happening.
-- **In production**, it ingests agent traces, scores alignment, and flags runs
-  where the agent appears to have gone off task.
+```bash
+npm install -g trackline
+cd your-project
+trackline init
+```
 
-The same core engine powers both: **normalise what the agent did, compare it
-against intent, produce an evidence-backed verdict.**
-
-An agent that goes off task does not crash. It edits files nobody mentioned,
-ignores the rules file it read an hour ago, and the build stays green. Tests
-check that code does what it was written to do; they have no opinion on whether
-it is the code you asked for. Trackline is the layer that notices.
+That is it. It runs beside Claude Code or Codex, notices things, and writes them
+down. **In its default mode it cannot interrupt you.**
 
 ---
 
-## Build status
+## What it actually catches
 
-Trackline is being built in phases. This section is the only part of this README
-that changes as they land.
+Five checks, each of which stays quiet unless it has something specific to say:
 
-| Component | Status |
+| | |
 |---|---|
-| **Eval gate** (CI regression gate) | ✅ **Working.** Documented below. |
-| **Core alignment engine** | Foundation phase |
-| **Local surface** (coding agents) | Not started |
-| **Production surface** (trace ingest) | Not started |
+| **off-limits** | a write to `.env`, a key, a credentials file |
+| **dependency-added** | a package added to a manifest, or installed by a command, that you never named |
+| **scope** | a write into an area your request did not mention |
+| **diff-size** | a change far larger than the request implied |
+| **repetition** | the same action attempted over and over, which usually means stuck |
 
-The eval gate is the first working component and will fold into the broader
-alignment engine as its CI-side entry point. It is real, tested and gating
-merges today; everything else is honest roadmap.
+When one fires, it says what it saw:
 
-Design notes and the reasoning behind the phases:
-[yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts](https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts).
+```
+▲  Bash
+     installed lodash.debounce, @types/lodash.debounce
+       command  npm install lodash.debounce && npm install -D @types/lodash.debounce
+       → confirm this dependency was intended before it is committed
+```
 
-**The measurements behind the design are in [`docs/experiments/`](docs/experiments/),**
-with the code and raw data that produced them:
+**A verdict that cannot name what it saw is rejected before it reaches you.**
+That is enforced in the type system, not by convention.
+
+## Three modes
+
+```jsonc
+// .trackline.json
+{
+  "mode": "warn",                      // the default: notices, never interrupts
+  "modes": { "off-limits": "auto" }    // per check
+}
+```
+
+- **warn** — records it. You read it later with `trackline status`.
+- **ask** — stops the agent and tells it to ask you. If you approve,
+  `trackline allow <check> <target>` and it continues.
+- **auto** — blocks and hands the reason back to the agent, which then corrects
+  itself. Measured at 11 out of 11 across Claude Code and Codex.
+
+Approvals are narrow on purpose: one thing, for one request, unless you say
+`--project`. Approving `src/auth` does not approve `src/authority`.
+
+## Commands
+
+```bash
+trackline init            # wire it into Claude Code or Codex
+trackline status          # what it has seen, per check
+trackline show            # replay a session as a readable story
+trackline allow / revoke  # approve something, or take it back
+trackline doctor          # check the install without changing anything
+trackline review          # ask a model whether the work served the request
+```
+
+`trackline review` is off unless you configure it, because it is the one check
+that costs money and the one that can be wrong in a way no test catches. If you
+already have a coding-agent CLI installed it needs no key:
+
+```bash
+trackline review --provider cli --binary claude
+```
+
+It also speaks to any OpenAI-compatible endpoint, including a local model. For a
+tool whose subject is what an agent may do, nobody should have to send their
+code to a third party to use it.
+
+---
+
+## What it does not do
+
+Named plainly, because a tool that looks complete stops getting better.
+
+- **`scope` is silent when your request does not name a file or directory.**
+  Measured on real usage, that was every request. It refuses to invent a scope
+  you did not state, which is the right call and also a real limit.
+- **Shell commands are only partly visible.** Redirects, installs, `rm`, `mv`,
+  `cp` and in-place `sed` are recognised. Anything else reports as unchecked
+  rather than clean — but unchecked is a gap, not a pass.
+- **The judge is barely tested.** Eight calibration cases, all correct, all
+  written by the same person who wrote the prompt. Off by default until that
+  means something.
+- **No multi-turn reasoning.** Each turn is judged against its own request.
+- **Production monitoring is not built.** The design carries it; the code does
+  not.
+
+## Why it is built this way
+
+Three claims sat under the design, so each was measured before being relied on.
+The code, the raw data and the numbers are in
+[`docs/experiments/`](docs/experiments/).
 
 | | Question | Answer |
 |---|---|---|
-| [1](docs/experiments/01-do-agents-self-correct.md) | When a hook blocks an agent and explains why, does the agent correct itself? | **Yes, 11 of 11**, across Claude Code and Codex |
-| [2](docs/experiments/02-hook-latency.md) | What does a check before every tool call cost? | **88ms in Node, 6.5ms in Go** |
-| [3](docs/experiments/03-otel-traces.md) | Can alignment be checked from production traces? | **Only with content capture on** — but it survives PII redaction |
+| [1](docs/experiments/01-do-agents-self-correct.md) | When a hook blocks an agent and explains why, does it correct itself? | **11 of 11**, across two agents |
+| [2](docs/experiments/02-hook-latency.md) | What does a check before every tool call cost? | **88ms in Node, 6.5ms in Go** — which is why the hook is compiled |
+| [3](docs/experiments/03-otel-traces.md) | Can this work from production traces? | only with content capture on, but it survives PII redaction |
+| [4](docs/experiments/04-false-alarms.md) | Does it cry wolf on ordinary work? | **0 false alarms in 23 actions** |
+| [5](docs/experiments/05-the-judge.md) | Can a model tell on-task work from drift? | **8 of 8**, including two correct abstentions |
+
+Every one of those changed a decision. Two overturned an assumption that was
+already written into the plan.
+
+There is a longer write-up at
+[yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts](https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts),
+with a real recorded session played back.
 
 ---
 
-## What works today: the eval gate
+## Also in this repository: the CI eval gate
 
-A regression gate for LLM systems. Retrieval, tool selection and groundedness,
-scored and gated in CI.
-
-A prompt edit, a model swap, a chunk-size change or a retiered tool can quietly
-make a system worse without anything failing. This catches that at merge time.
-
-```bash
-npm install
-npm run evals            # fixture mode, all suites, gated against baseline
-npm test                 # the scorers score themselves
-```
-
-A fresh clone runs immediately. No API key, no vector store, no config.
-
-As a CLI in another project:
+A separate tool for a different job, installed as `trackline-gate`. It scores
+retrieval, tool selection and groundedness against committed datasets and fails
+the build on a regression — the CI-side answer to the same question, for teams
+shipping an LLM product rather than working with a coding agent.
 
 ```bash
-npx trackline init
-npx trackline doctor
-npx trackline run
+trackline-gate run
 ```
-
-The npm scripts are thin aliases over the same runner. `trackline run` is the
-default command; `trackline record` and `trackline baseline` match `--record`
-and `--update-baseline`.
 
 ---
 

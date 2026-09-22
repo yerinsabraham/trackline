@@ -1,7 +1,7 @@
 {
   "name": "trackline",
   "version": "0.1.0",
-  "description": "An alignment layer for AI agents: checks whether an agent's actions still match the task, rules and evidence it was given, across local coding agents and production AI systems.",
+  "description": "Watches whether an AI coding agent is still doing what you asked. Runs beside Claude Code or Codex and says when the work stops matching the request.",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
   "homepage": "https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts",
   "repository": {
@@ -14,20 +14,24 @@
   "keywords": [
     "ai-agents",
     "agent-alignment",
+    "claude-code",
+    "codex",
+    "guardrails",
+    "hooks",
     "llm",
     "evaluation",
-    "claude-code",
-    "guardrails",
-    "prompt-injection",
-    "rag",
-    "ci"
+    "ci",
+    "developer-tools"
   ],
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "trackline": "./dist/run.js"
+    "trackline": "./bin/trackline.cjs",
+    "trackline-hook": "./bin/trackline-hook.cjs",
+    "trackline-gate": "./dist/run.js"
   },
   "files": [
+    "bin",
     "dist",
     "datasets",
     "fixtures",
@@ -50,7 +54,8 @@
     "doctor": "tsx src/run.ts doctor",
     "prepack": "npm run build",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:binaries": "./scripts/build-binaries.sh"
   },
   "dependencies": {
     "openai": "^6.25.0"
@@ -59,5 +64,12 @@
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "optionalDependencies": {
+    "trackline-darwin-arm64": "0.1.0",
+    "trackline-darwin-x64": "0.1.0",
+    "trackline-linux-x64": "0.1.0",
+    "trackline-linux-arm64": "0.1.0",
+    "trackline-win32-x64": "0.1.0"
   }
 }
