@@ -3,6 +3,7 @@ package session_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
@@ -90,21 +91,24 @@ func TestTurnStateDoesNotGrowWithTheSession(t *testing.T) {
 	}
 }
 
-// Bodies are the largest part of an event and no check reading this state needs
-// them.
-func TestTurnStateDropsBodies(t *testing.T) {
+// The turn state must stay small however much is written, because it is read
+// before every tool call. A short body is kept whole so the repetition check
+// can compare content; a long one is reduced to its shape.
+func TestTurnStateKeepsBodiesBounded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "turn.json")
 	e := ev("s", "t1", "/w/a.ts")
-	e.Action.Body = "a very large file body"
-	e.Action.PriorBody = "the previous contents"
+	e.Action.Body = strings.Repeat("x", 40_000)
+	e.Action.PriorBody = strings.Repeat("y", 40_000)
 
 	(&session.TurnCounter{Path: path}).Append(e)
 
 	b, _ := os.ReadFile(path)
-	for _, s := range []string{"a very large file body", "the previous contents"} {
-		if string(b) != "" && contains(string(b), s) {
-			t.Errorf("turn state kept a body: %q", s)
-		}
+	if len(b) > 4096 {
+		t.Errorf("turn state is %d bytes for one action; large bodies must not be kept", len(b))
+	}
+	// The prior body is never needed by anything reading this state.
+	if contains(string(b), "yyyy") {
+		t.Error("prior body was kept")
 	}
 }
 

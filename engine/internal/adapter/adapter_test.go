@@ -123,18 +123,18 @@ func TestUnknownIsNeverReportedAsNothing(t *testing.T) {
 		host string
 		raw  string
 	}{
-		{"claude shell command", "claude",
+		{"claude unrecognised command", "claude",
 			`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/w",
-			  "tool_input":{"command":"rm -rf build && cp -r a b"}}`},
+			  "tool_input":{"command":"./scripts/deploy.sh --all"}}`},
 		{"claude unrecognised tool", "claude",
 			`{"hook_event_name":"PreToolUse","tool_name":"SomeFutureTool","cwd":"/w",
 			  "tool_input":{"whatever":"x"}}`},
 		{"claude malformed tool input", "claude",
 			`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/w",
 			  "tool_input":"not-an-object"}`},
-		{"codex shell command", "codex",
+		{"codex unrecognised command", "codex",
 			`{"hook_event_name":"PreToolUse","tool_name":"shell","cwd":"/w",
-			  "tool_input":{"command":"rm -rf build"}}`},
+			  "tool_input":{"command":"make deploy && ./run.sh"}}`},
 		{"codex unparseable patch", "codex",
 			`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","cwd":"/w",
 			  "tool_input":{"command":"this is not a patch"}}`},
@@ -203,5 +203,52 @@ func TestMalformedPayloadErrorsRatherThanGuessing(t *testing.T) {
 	}
 	if _, err := codex.Parse([]byte(`{not json`), now); err == nil {
 		t.Error("a malformed payload must error, not produce a half-filled event")
+	}
+}
+
+// Most of a session happens through the shell. Treating all of it as unknowable
+// made whole sessions unexaminable: a measured run had 11 of 12 actions
+// reported as unseen. Recognised commands now give real paths.
+func TestRecognisedShellCommandsGivePaths(t *testing.T) {
+	cases := []struct {
+		name, host, raw, wantPath string
+		wantInstall               string
+	}{
+		{"claude redirect", "claude",
+			`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/w",
+			  "tool_input":{"command":"echo TOKEN=x >> .env"}}`, "/w/.env", ""},
+		{"claude install", "claude",
+			`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/w",
+			  "tool_input":{"command":"npm install lodash"}}`, "", "lodash"},
+		{"codex redirect", "codex",
+			`{"hook_event_name":"PreToolUse","tool_name":"shell","cwd":"/w",
+			  "tool_input":{"command":"printf x > config/prod.yml"}}`, "/w/config/prod.yml", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var ev event.Event
+			var err error
+			if c.host == "claude" {
+				ev, err = claudecode.Parse([]byte(c.raw), now)
+			} else {
+				ev, err = codex.Parse([]byte(c.raw), now)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ev.Action.PathsUnknown {
+				t.Error("a recognised command must not report its files as unknown")
+			}
+			if c.wantPath != "" {
+				if len(ev.Action.Paths) != 1 || ev.Action.Paths[0] != c.wantPath {
+					t.Errorf("paths = %v, want %q", ev.Action.Paths, c.wantPath)
+				}
+			}
+			if c.wantInstall != "" {
+				if len(ev.Action.Installs) != 1 || ev.Action.Installs[0] != c.wantInstall {
+					t.Errorf("installs = %v, want %q", ev.Action.Installs, c.wantInstall)
+				}
+			}
+		})
 	}
 }

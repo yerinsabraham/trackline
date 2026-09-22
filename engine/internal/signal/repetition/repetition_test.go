@@ -126,7 +126,7 @@ func TestGrowingADocumentIsNotALoop(t *testing.T) {
 	edit := func(body string) event.Event {
 		return event.Event{SessionID: "s", TurnID: "t1", Action: event.Action{
 			Type: event.ActionEditFile, ToolName: "Edit",
-			Paths: []string{"/w/CANDIDATE.md"}, Body: body,
+			Paths: []string{"/w/CANDIDATE.md"}, Body: body, BodySize: len(body),
 		}}
 	}
 	h := history{
@@ -146,7 +146,7 @@ func TestRetryingTheSameChangeIsALoop(t *testing.T) {
 	attempt := func(body string) event.Event {
 		return event.Event{SessionID: "s", TurnID: "t1", Action: event.Action{
 			Type: event.ActionEditFile, ToolName: "Edit",
-			Paths: []string{"/w/src/parser.ts"}, Body: body,
+			Paths: []string{"/w/src/parser.ts"}, Body: body, BodySize: len(body),
 		}}
 	}
 	h := history{

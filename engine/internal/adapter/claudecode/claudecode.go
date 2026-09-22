@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
+	"github.com/yerinsabraham/trackline/engine/internal/shell"
 )
 
 type payload struct {
@@ -123,14 +124,24 @@ func action(p payload) event.Action {
 
 	if t == event.ActionRunCommand {
 		a.Command = in.Command
-		// A shell command can touch anything. Extracting paths from arbitrary
-		// shell is a separate problem, and it is not solved by pretending the
-		// command touches nothing.
-		a.PathsUnknown = true
+		// A shell command is how most of a session actually happens, and
+		// treating it all as unknowable made whole sessions unexaminable.
+		// Recognised forms give real paths; anything unrecognised still
+		// reports unknown, because claiming to have read a command we did not
+		// would turn an unexamined action into a safe-looking one.
+		eff := shell.Parse(in.Command)
+		for _, touched := range eff.Writes {
+			a.Paths = append(a.Paths, resolve(p.CWD, touched))
+		}
+		for _, touched := range eff.Deletes {
+			a.Paths = append(a.Paths, resolve(p.CWD, touched))
+		}
+		a.Installs = eff.Installs
+		a.PathsUnknown = !eff.Understood
 		return a
 	}
 
-	a.Body, a.Truncated = event.TrimBody(in.body())
+	a.SetBody(in.body())
 	if in.OldString != "" {
 		a.PriorBody, _ = event.TrimBody(in.OldString)
 	}

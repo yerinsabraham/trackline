@@ -129,19 +129,20 @@ func alike(a, b event.Action) bool {
 		return true
 	}
 
-	// Neither carries content: a read, a delete, or a host that does not supply
+	// Neither wrote anything: a read, a delete, or a host that does not report
 	// it. There is nothing to distinguish one attempt from another, so the
 	// target alone decides, which is what this check did before content was
 	// available at all.
-	if a.Body == "" && b.Body == "" {
+	if a.BodySize == 0 && b.BodySize == 0 {
 		return true
 	}
-	// One has content and the other does not. They cannot be compared, and
+	// One wrote something and the other did not. They cannot be compared, and
 	// guessing in either direction is worse than declining.
-	if a.Body == "" || b.Body == "" {
+	if a.BodySize == 0 || b.BodySize == 0 {
 		return false
 	}
-	if a.Body == b.Body {
+	// Short bodies are kept whole, so identical attempts match exactly.
+	if a.Body != "" && a.Body == b.Body {
 		return true
 	}
 
@@ -152,7 +153,7 @@ func alike(a, b event.Action) bool {
 	// The tolerance has a floor. A tenth of a short line is two or three
 	// characters, which would call every variation of a one-line fix a
 	// different attempt — measured, that let a genuine loop through.
-	la, lb := len(a.Body), len(b.Body)
+	la, lb := a.BodySize, b.BodySize
 	if la > lb {
 		la, lb = lb, la
 	}

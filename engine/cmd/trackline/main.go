@@ -36,6 +36,8 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "doctor":
 		err = cmdDoctor(os.Args[2:])
+	case "show":
+		err = cmdShow(os.Args[2:])
 	case "allow":
 		err = cmdAllow(os.Args[2:])
 	case "allowed":
@@ -63,6 +65,7 @@ func usage() {
   init     wire the hook into an agent's configuration
   status   show what the hook has seen, and whether it has ever run
   doctor   check the installation without changing anything
+  show     replay a recorded session as a readable story
   allow    approve something a check objected to
   allowed  list what has been approved
   revoke   withdraw an approval

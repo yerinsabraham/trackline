@@ -92,6 +92,14 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 
 	var vs []verdict.Verdict
 	for _, path := range in.Event.Action.Paths {
+		// A file outside the project is not project drift. Agents write to
+		// their own scratch directories and to /tmp constantly, and a real
+		// session was flagged for writing a throwaway script into its own
+		// scratchpad. Nothing there is the user's code, so scope has no
+		// opinion about it.
+		if !s.insideProject(path) {
+			continue
+		}
 		rel := s.relative(path)
 		if !strings.Contains(filepath.ToSlash(rel), "/") {
 			// A file directly at the project root belongs to no area, so no
@@ -138,14 +146,45 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 	return verdict.Finding(Name, vs...)
 }
 
+// insideProject reports whether a path belongs to the project being watched.
+//
+// The comparison resolves symlinks, because macOS reports the same directory as
+// both /var/... and /private/var/..., and a root that does not match its own
+// paths would exclude everything.
+func (s Signal) insideProject(path string) bool {
+	if s.Root == "" {
+		return true
+	}
+	root, err := filepath.EvalSymlinks(s.Root)
+	if err != nil {
+		root = s.Root
+	}
+	real := path
+	if r, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
+		real = filepath.Join(r, filepath.Base(path))
+	}
+	for _, base := range []string{root, s.Root} {
+		if rel, err := filepath.Rel(base, real); err == nil && !strings.HasPrefix(rel, "..") {
+			return true
+		}
+	}
+	return false
+}
+
 // relative reduces a path to its position in the project, so the leading
 // segments of an absolute path do not swamp the comparison.
 func (s Signal) relative(path string) string {
 	if s.Root == "" {
 		return path
 	}
-	if rel, err := filepath.Rel(s.Root, path); err == nil && !strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(rel)
+	root, err := filepath.EvalSymlinks(s.Root)
+	if err != nil {
+		root = s.Root
+	}
+	for _, base := range []string{s.Root, root} {
+		if rel, err := filepath.Rel(base, path); err == nil && !strings.HasPrefix(rel, "..") {
+			return filepath.ToSlash(rel)
+		}
 	}
 	return path
 }

@@ -44,7 +44,7 @@ func TestNonAnswersMustExplainThemselves(t *testing.T) {
 }
 
 func TestOutcomesCannotContradictTheirContents(t *testing.T) {
-	good := verdict.Verdict{Signal: "s", Severity: verdict.SeverityWarn, Summary: "x",
+	good := verdict.Verdict{Signal: "s", Severity: verdict.SeverityWarn, Summary: "x", Target: "/a",
 		Evidence: []verdict.Evidence{{Kind: verdict.EvidenceFile, Value: "/a"}}}
 
 	cases := []struct {
@@ -68,7 +68,7 @@ func TestOutcomesCannotContradictTheirContents(t *testing.T) {
 }
 
 func TestConstructorsProduceValidResults(t *testing.T) {
-	good := verdict.Verdict{Severity: verdict.SeverityBlock, Summary: "x",
+	good := verdict.Verdict{Severity: verdict.SeverityBlock, Summary: "x", Target: "/w/.env",
 		Evidence: []verdict.Evidence{{Kind: verdict.EvidenceRule, Value: "never touch .env"}}}
 
 	for _, r := range []verdict.Result{
@@ -87,7 +87,7 @@ func TestConstructorsProduceValidResults(t *testing.T) {
 // reach a user without saying which check produced it.
 func TestFindingStampsTheSignalName(t *testing.T) {
 	r := verdict.Finding("scope", verdict.Verdict{
-		Severity: verdict.SeverityWarn, Summary: "x",
+		Severity: verdict.SeverityWarn, Summary: "x", Target: "/a",
 		Evidence: []verdict.Evidence{{Kind: verdict.EvidenceFile, Value: "/a"}},
 	})
 	if r.Verdicts[0].Signal != "scope" {

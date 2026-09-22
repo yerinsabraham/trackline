@@ -80,6 +80,11 @@ type Action struct {
 	// Command is set for ActionRunCommand.
 	Command string `json:"command,omitempty"`
 
+	// Installs are packages a command appears to add, for the commands that
+	// install rather than write. `npm install lodash` changes a manifest
+	// without any file write a hook can see, and without this it is invisible.
+	Installs []string `json:"installs,omitempty"`
+
 	// Body is what is being written: file content, an edit's replacement text,
 	// or a patch. Checks that need to know *what* changed rather than *which
 	// file* changed read this.
@@ -90,6 +95,16 @@ type Action struct {
 	// and a check reading a truncated body must degrade rather than conclude
 	// from the part it can see.
 	Body string `json:"body,omitempty"`
+
+	// BodySize is how much was written, in bytes, even where Body itself has
+	// been dropped.
+	//
+	// It exists so per-turn state can stay small while still supporting the
+	// one thing a check needs content for: telling a retried fix from a
+	// document being written. An earlier version preserved length by padding
+	// the body with spaces, which kept exactly the size it was supposed to
+	// shed.
+	BodySize int `json:"bodySize,omitempty"`
 
 	// PriorBody is the text being replaced, where the host provides it: an
 	// edit's old_string, for instance.
@@ -132,6 +147,13 @@ func TrimBody(s string) (string, bool) {
 		return s, false
 	}
 	return s[:BodyLimit], true
+}
+
+// SetBody fills Body, BodySize and Truncated together, so the size always
+// reflects what was actually written rather than what survived trimming.
+func (a *Action) SetBody(s string) {
+	a.BodySize = len(s)
+	a.Body, a.Truncated = TrimBody(s)
 }
 
 // Event is one thing an agent did.

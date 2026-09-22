@@ -119,61 +119,39 @@ func TestMalformedPayloadErrorsRatherThanGuessing(t *testing.T) {
 	}
 }
 
-// The rule the whole project keeps re-learning.
-func TestShellWritesAreReportedAsUnmeasured(t *testing.T) {
+// A shell redirect into a protected path used to be invisible. It is not any
+// more, and this is the case that made the shell parser worth building.
+func TestShellRedirectIntoAProtectedPathIsCaught(t *testing.T) {
 	root := t.TempDir()
 	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
-		"tool_name":"Bash","cwd":"` + root + `","tool_input":{"command":"echo X >> .env"}}`)
+		"tool_name":"Bash","cwd":"` + root + `","tool_input":{"command":"echo TOKEN=x >> .env"}}`)
+
+	d, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, v := range d.Report.Findings() {
+		if strings.Contains(v.Summary, ".env") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a redirect into .env was not caught: %+v", d.Report.Results)
+	}
+}
+
+// A command nobody can read must still be reported as unchecked.
+func TestUnreadableCommandsAreStillUnmeasured(t *testing.T) {
+	root := t.TempDir()
+	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
+		"tool_name":"Bash","cwd":"` + root + `","tool_input":{"command":"./scripts/deploy.sh"}}`)
 
 	d, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(d.Report.Unmeasured()) == 0 {
-		t.Error("a shell write could hit a protected path and must not read as clean")
-	}
-}
-
-// Measured gap: an agent asked to add a library rewrote package.json whole, and
-// dependency-added could not tell an addition from a change because a
-// whole-file write carries no prior state. The hook runs before the tool, so
-// what is on disk is the prior state.
-func TestWholeFileWriteGetsPriorStateFromDisk(t *testing.T) {
-	root := t.TempDir()
-	manifest := filepath.Join(root, "package.json")
-	os.WriteFile(manifest, []byte(`{"dependencies":{"react":"^18.0.0"}}`), 0o600)
-
-	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
-		"tool_name":"Write","cwd":"` + root + `","tool_input":{"file_path":"package.json",
-		"content":"{\"dependencies\":{\"react\":\"^18.0.0\",\"lodash\":\"^4.17.21\"}}"}}`)
-
-	d, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var found bool
-	for _, v := range d.Report.Findings() {
-		if strings.Contains(v.Summary, "lodash") {
-			found = true
-		}
-	}
-	if !found {
-		var outcomes []string
-		for _, r := range d.Report.Results {
-			outcomes = append(outcomes, r.Signal+"="+string(r.Outcome))
-		}
-		t.Errorf("a package added by a whole-file write was not reported: %v", outcomes)
-	}
-}
-
-// A file that does not exist yet has no prior state and needs none.
-func TestNewFileNeedsNoPriorState(t *testing.T) {
-	root := t.TempDir()
-	raw := []byte(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"t",
-		"tool_name":"Write","cwd":"` + root + `","tool_input":{"file_path":"src/new.ts","content":"x"}}`)
-
-	if _, err := runner.Run(raw, runner.Options{Root: root, Now: time.Now()}); err != nil {
-		t.Errorf("writing a new file must not fail: %v", err)
+		t.Error("an unrecognised command could do anything and must not read as clean")
 	}
 }

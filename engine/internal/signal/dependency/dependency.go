@@ -51,12 +51,37 @@ var manifests = map[string]*regexp.Regexp{
 }
 
 func (s Signal) Check(in signal.Input) verdict.Result {
-	if !modifies(in.Event.Action.Type) {
-		return verdict.NotApplicable(Name, "this action does not modify a file")
+	if !couldAddDependency(in.Event.Action.Type) {
+		return verdict.NotApplicable(Name, "this action cannot add a dependency")
 	}
+	// A command that installs states its packages outright, with no manifest
+	// diff to read.
+	if len(in.Event.Action.Installs) > 0 {
+		added := notRequested(in.Event.Action.Installs, in)
+		if len(added) == 0 {
+			return verdict.Clean(Name)
+		}
+		return verdict.Finding(Name, verdict.Verdict{
+			Severity: verdict.SeverityWarn,
+			Target:   strings.Join(added, ","),
+			Summary:  fmt.Sprintf("installed %s", strings.Join(added, ", ")),
+			Evidence: []verdict.Evidence{
+				{Kind: verdict.EvidenceCommand, Value: in.Event.Action.Command, Note: "the command run"},
+				{Kind: verdict.EvidenceRule, Value: strings.Join(added, ", "), Note: "packages added"},
+			},
+			Suggestion: "confirm this dependency was intended before it is committed",
+		})
+	}
+
 	if in.Event.Action.PathsUnknown {
-		return verdict.CannotMeasure(Name,
-			"this action does not report which files it touches, so a manifest change could not be seen")
+		// A shell command is how a dependency is usually added: `npm install`
+		// touches the manifest without any file write we can see. Measured, a
+		// real session added lodash through a command, and this check reported
+		// not-applicable on it — which reads as nothing to see here, when the
+		// truth was that nobody looked.
+		return verdict.CannotMeasure(Name, fmt.Sprintf(
+			"%s does not report what it changed, and a command can install a dependency without a visible file write",
+			describeTool(in.Event)))
 	}
 
 	var manifest string
@@ -222,6 +247,23 @@ func notRequested(added []string, in signal.Input) []string {
 	return out
 }
 
-func modifies(t event.ActionType) bool {
-	return t == event.ActionWriteFile || t == event.ActionEditFile
+// couldAddDependency is broader than "edits a manifest".
+//
+// `npm install lodash` adds a dependency without any file write this hook can
+// see, so a command has to reach the paths check and be reported as unchecked
+// rather than waved past as irrelevant.
+func couldAddDependency(t event.ActionType) bool {
+	switch t {
+	case event.ActionWriteFile, event.ActionEditFile, event.ActionRunCommand, event.ActionOther:
+		return true
+	default:
+		return false
+	}
+}
+
+func describeTool(e event.Event) string {
+	if e.Action.ToolName != "" {
+		return e.Action.ToolName
+	}
+	return string(e.Action.Type)
 }
