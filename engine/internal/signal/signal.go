@@ -28,6 +28,19 @@ type Input struct {
 	// latest turn: the latest is often "proceed".
 	Intent intent.Intent
 
+	// IntentUnavailable is non-empty when intent could not be read, and says
+	// why in words fit to show a user.
+	//
+	// An empty Intent means two very different things, and a check must not
+	// treat them alike: the user has not asked for anything yet, or we read a
+	// whole conversation and failed to recognise any of it. The second happened
+	// for real — headless sessions mark the human turn differently, so every
+	// scripted session looked like it contained no request — and the checks
+	// that depend on intent reported not-applicable while actually being blind.
+	//
+	// When this is set, a check needing intent must return CannotMeasure.
+	IntentUnavailable string
+
 	// Rules are the project's stated constraints, from CLAUDE.md, AGENTS.md or
 	// config. Empty is a real state and means no rules were found, which is
 	// different from no rules being violated.

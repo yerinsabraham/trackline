@@ -25,6 +25,20 @@ type Reader struct {
 
 	offset int64
 	size   int64
+
+	sawEntries   int
+	sawAssistant int
+}
+
+// ReadAnything reports whether the last Read saw a conversation at all.
+//
+// It exists to separate two states that look identical from the outside: a
+// session where the user has not said anything yet, and a session whose format
+// we failed to recognise. The first is ordinary. The second means every check
+// that depends on intent is silently blind, and must say so rather than
+// reporting that it found nothing to complain about.
+func (r *Reader) ReadAnything() (entries, assistantTurns int) {
+	return r.sawEntries, r.sawAssistant
 }
 
 // claudeEntry is the subset of a Claude Code transcript line that matters.
@@ -34,6 +48,7 @@ type Reader struct {
 // cleanly, so no heuristic is needed for this part.
 type claudeEntry struct {
 	Type       string `json:"type"`
+	UserType   string `json:"userType"`
 	TurnOrigin string `json:"turnOrigin"`
 	Origin     struct {
 		Kind string `json:"kind"`
@@ -45,8 +60,22 @@ type claudeEntry struct {
 	} `json:"message"`
 }
 
+// humanOrigins are the turnOrigin values that mean a person asked for this.
+//
+// "human" is an interactive session. "sdk" is a headless one, where the prompt
+// arrives through the SDK and carries no origin object at all.
+//
+// Missing "sdk" was a real bug: every headless session read as having no
+// request in it, so the checks that depend on intent reported not-applicable
+// and looked like they had nothing to say. They had nothing to *see*. That is
+// the same mistake this project keeps finding, in another costume.
+var humanOrigins = map[string]bool{"human": true, "sdk": true}
+
 func (e claudeEntry) isHumanTurn() bool {
-	return e.Type == "user" && (e.TurnOrigin == "human" || e.Origin.Kind == "human")
+	if e.Type != "user" {
+		return false
+	}
+	return humanOrigins[e.TurnOrigin] || e.Origin.Kind == "human"
 }
 
 // text pulls the human-written text out of a message body, which is either a
@@ -110,6 +139,12 @@ func (r *Reader) Read(in *Intent) error {
 		}
 	}
 
+	// Counted so the caller can tell "the user said nothing yet" from "we read a
+	// whole conversation and recognised none of it", which need different
+	// answers.
+	r.sawEntries = 0
+	r.sawAssistant = 0
+
 	sc := bufio.NewScanner(f)
 	// Transcript lines carry whole messages and can be large; the default
 	// 64 KiB limit truncates them mid-JSON.
@@ -123,6 +158,10 @@ func (r *Reader) Read(in *Intent) error {
 		var e claudeEntry
 		if json.Unmarshal(line, &e) != nil {
 			continue // a line we cannot read is skipped, not fatal
+		}
+		r.sawEntries++
+		if e.Type == "assistant" {
+			r.sawAssistant++
 		}
 		if !e.isHumanTurn() {
 			continue

@@ -72,6 +72,9 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 	if in.Event.TurnID == "" {
 		return verdict.NotApplicable(Name, "the host did not group this action under a turn, so a change cannot be totalled")
 	}
+	if in.IntentUnavailable != "" {
+		return verdict.CannotMeasure(Name, in.IntentUnavailable)
+	}
 	anchor, ok := in.Intent.Anchor()
 	if !ok {
 		return verdict.NotApplicable(Name, "nothing substantive has been asked yet")

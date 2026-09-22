@@ -49,6 +49,9 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 		return verdict.NotApplicable(Name, "this action does not write to a file")
 	}
 
+	if in.IntentUnavailable != "" {
+		return verdict.CannotMeasure(Name, in.IntentUnavailable)
+	}
 	anchor, ok := in.Intent.Anchor()
 	if !ok {
 		return verdict.NotApplicable(Name, "nothing substantive has been asked yet, so there is no scope to compare against")

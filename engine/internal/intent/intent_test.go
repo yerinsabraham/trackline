@@ -186,3 +186,57 @@ func TestRotatedTranscriptIsReadFromTheStart(t *testing.T) {
 		t.Errorf("got %d turns; a shrunken transcript must be re-read from the start", len(after.Turns))
 	}
 }
+
+// A headless session marks the human turn turnOrigin:"sdk" and carries no
+// origin object. Missing it meant every scripted session read as having no
+// request in it, and the checks that depend on intent reported not-applicable
+// when they were actually blind.
+func TestHeadlessSessionsAreHumanTurns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	os.WriteFile(path, []byte(
+		`{"type":"user","turnOrigin":"sdk","userType":"external","promptId":"t1","message":{"content":"Fix the login bug in src/auth"}}`+"\n"+
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}`+"\n"+
+			`{"type":"user","message":{"content":[{"type":"tool_result","content":"done"}]}}`+"\n"), 0o600)
+
+	r := &intent.Reader{Path: path}
+	var in intent.Intent
+	if err := r.Read(&in); err != nil {
+		t.Fatal(err)
+	}
+	if len(in.Turns) != 1 {
+		t.Fatalf("got %d turns, want the sdk prompt: %+v", len(in.Turns), in.Turns)
+	}
+	if in.Turns[0].Text != "Fix the login bug in src/auth" {
+		t.Errorf("text = %q", in.Turns[0].Text)
+	}
+}
+
+// Separating "nothing asked yet" from "we did not recognise this format".
+func TestReaderReportsWhetherItSawAConversation(t *testing.T) {
+	dir := t.TempDir()
+
+	empty := filepath.Join(dir, "empty.jsonl")
+	os.WriteFile(empty, []byte(""), 0o600)
+	r := &intent.Reader{Path: empty}
+	var in intent.Intent
+	r.Read(&in)
+	if entries, _ := r.ReadAnything(); entries != 0 {
+		t.Errorf("entries = %d, want 0 for an empty transcript", entries)
+	}
+
+	unknown := filepath.Join(dir, "unknown.jsonl")
+	os.WriteFile(unknown, []byte(
+		`{"type":"user","turnOrigin":"something-new","message":{"content":"a request"}}`+"\n"+
+			`{"type":"assistant","message":{"content":[{"type":"text","text":"a reply"}]}}`+"\n"), 0o600)
+	r2 := &intent.Reader{Path: unknown}
+	var in2 intent.Intent
+	r2.Read(&in2)
+	entries, assistant := r2.ReadAnything()
+	if len(in2.Turns) != 0 {
+		t.Fatal("this test needs an unrecognised origin")
+	}
+	if entries == 0 || assistant == 0 {
+		t.Errorf("entries=%d assistant=%d; a conversation was read but no request recognised, and the caller must be able to tell", entries, assistant)
+	}
+}

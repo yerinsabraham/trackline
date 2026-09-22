@@ -114,8 +114,22 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	rules, _ := config.LoadRules(root, cfg)
 
 	var in intent.Intent
+	var intentUnavailable string
 	if ev.TranscriptPath != "" {
-		_ = (&intent.Reader{Path: ev.TranscriptPath}).Read(&in)
+		reader := &intent.Reader{Path: ev.TranscriptPath}
+		if err := reader.Read(&in); err != nil {
+			intentUnavailable = fmt.Sprintf("the session transcript could not be read: %v", err)
+		} else if len(in.Turns) == 0 {
+			// A conversation we read but recognised nothing in is not a
+			// conversation with nothing in it.
+			if entries, assistant := reader.ReadAnything(); entries > 0 && assistant > 0 {
+				intentUnavailable = "the session transcript was read but no request could be recognised in it, " +
+					"so what the user asked for is unknown"
+			}
+		}
+	} else {
+		intentUnavailable = "this host did not say where the session transcript is, " +
+			"so what the user asked for is unknown"
 	}
 
 	// Two separate stores, on purpose. The recording is the full session, for
@@ -126,7 +140,7 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	turnState := &session.TurnCounter{Path: filepath.Join(root, ".trackline", "turn.json")}
 
 	e := engine.New(build(cfg, root, turnState)...)
-	rep := e.Run(ev, in, rules)
+	rep := e.Run(ev, in, rules, intentUnavailable)
 
 	// Recorded after the checks run, so a check counting earlier writes does
 	// not count the action it is currently judging twice.

@@ -69,9 +69,12 @@ func (r Report) Unmeasured() []verdict.Result {
 // A signal that panics is converted into a CannotMeasure result rather than
 // taking the process down. On Codex a crashed hook is a silently disabled hook,
 // so one bad signal must not switch off all the others.
-func (e *Engine) Run(ev event.Event, in intent.Intent, rules []signal.Rule) Report {
+func (e *Engine) Run(ev event.Event, in intent.Intent, rules []signal.Rule, intentUnavailable ...string) Report {
 	rep := Report{Event: ev}
 	input := signal.Input{Event: ev, Intent: in, Rules: rules}
+	if len(intentUnavailable) > 0 {
+		input.IntentUnavailable = intentUnavailable[0]
+	}
 
 	for _, s := range e.signals {
 		rep.Results = append(rep.Results, runOne(s, input))
