@@ -177,3 +177,52 @@ func dedupe(in []string) []string {
 	}
 	return out
 }
+
+// A live session was blocked for writing to the very file its request had
+// named, because "the charge function." ends a sentence and the pattern
+// excluded dots outright to stop "Edit package.json" matching. Both have to
+// work.
+func TestQualifiersSurvivePunctuation(t *testing.T) {
+	named := []string{
+		"add a 10% discount to the charge function.",
+		"add a discount to the charge function",
+		"update the charge function, then stop",
+		"look at the charge function; it is wrong",
+		"fix the charge handler.",
+	}
+	for _, text := range named {
+		var found bool
+		for _, m := range scope.Mentions(text) {
+			for _, p := range m.Parts {
+				if p == "charge" {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Errorf("Mentions(%q) did not find "+"charge"+"; the request named it", text)
+		}
+	}
+
+	// And the case the exclusion existed for.
+	for _, text := range []string{"Edit package.json", "update package.json now"} {
+		for _, m := range scope.Mentions(text) {
+			for _, p := range m.Parts {
+				if p == "edit" || p == "update" {
+					t.Errorf("Mentions(%q) captured a verb as a place: %v", text, m.Parts)
+				}
+			}
+		}
+	}
+}
+
+// The live case end to end: a request naming two areas must clear writes to
+// both.
+func TestARequestNamingTwoAreasClearsBoth(t *testing.T) {
+	in := ask("Fix the login function in src/auth to also accept 'root'. Then add a 10% discount to the charge function.")
+	for _, p := range []string{"src/auth/login.ts", "src/payments/charge.ts"} {
+		if res := run(t, wrote(in, p)); res.Outcome != verdict.OutcomeClean {
+			t.Errorf("%s: outcome = %s; the request named both", p, res.Outcome)
+		}
+	}
+}

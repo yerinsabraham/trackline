@@ -122,6 +122,7 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 
 	return verdict.Finding(Name, verdict.Verdict{
 		Severity: verdict.SeverityWarn,
+		Target:   anchor.ID,
 		Summary: fmt.Sprintf("%d files changed under one request%s",
 			len(files), why),
 		Evidence: []verdict.Evidence{

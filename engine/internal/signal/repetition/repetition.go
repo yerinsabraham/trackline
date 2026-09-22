@@ -100,6 +100,7 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 
 	return verdict.Finding(Name, verdict.Verdict{
 		Severity: verdict.SeverityWarn,
+		Target:   describeAction(in.Event),
 		Summary: fmt.Sprintf("the same action has now been attempted %d times in this request",
 			count),
 		Evidence: []verdict.Evidence{

@@ -18,6 +18,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/engine"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/intent"
+	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"github.com/yerinsabraham/trackline/engine/internal/session"
 	"github.com/yerinsabraham/trackline/engine/internal/signal"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/dependency"
@@ -46,6 +47,10 @@ type Decision struct {
 
 	// Report is everything the checks concluded, for the findings log.
 	Report engine.Report
+
+	// Overridden are findings a human had already approved. Recorded rather
+	// than dropped: a decision someone made is worth being able to review.
+	Overridden []verdict.Verdict
 
 	// Mode is what the configuration said to do.
 	Mode config.Mode
@@ -161,18 +166,31 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		_ = turnState.Append(ev)
 	}
 
-	d := Decision{Report: rep, Mode: cfg.Mode}
+	// Approvals are applied before anything is decided. A person who has
+	// already said yes should not be asked again, and being asked repeatedly
+	// about something already settled is how a tool gets switched off.
+	grants := override.NewStore(root)
+	d := Decision{Mode: cfg.Mode}
+	rep, d.Overridden = applyOverrides(rep, grants, ev)
+	d.Report = rep
 	if cfgErr != nil {
 		d.Report.Results = append(d.Report.Results,
 			verdict.CannotMeasure("config", cfgErr.Error()))
 	}
 
-	// Blocking needs two things: grounds, and permission. Phase 2 ships
-	// warn-only, so the second is absent by default and nothing is stopped.
-	if rep.Blocked() {
-		if mode := worstMode(cfg, rep); mode == config.ModeAuto {
+	// Acting needs two things: grounds, and permission. They are separate on
+	// purpose, so warn-only is enforced by the structure rather than by
+	// everyone remembering.
+	switch worstMode(cfg, rep) {
+	case config.ModeAuto:
+		if rep.Blocked() {
 			d.Block = true
 			d.Message = blockMessage(rep)
+		}
+	case config.ModeAsk:
+		if len(rep.Findings()) > 0 {
+			d.Block = true
+			d.Message = askMessage(rep)
 		}
 	}
 	return d, nil
@@ -202,6 +220,63 @@ func fillPriorBody(ev *event.Event) {
 		return
 	}
 	a.PriorBody, _ = event.TrimBody(string(b))
+}
+
+// applyOverrides removes findings a human has already approved.
+func applyOverrides(rep engine.Report, grants *override.Store, ev event.Event) (engine.Report, []verdict.Verdict) {
+	var removed []verdict.Verdict
+	out := rep
+	out.Results = nil
+
+	for _, res := range rep.Results {
+		if res.Outcome != verdict.OutcomeFinding {
+			out.Results = append(out.Results, res)
+			continue
+		}
+		var kept []verdict.Verdict
+		for _, v := range res.Verdicts {
+			if _, ok := grants.Allows(res.Signal, v.Target, ev.SessionID, ev.TurnID); ok {
+				removed = append(removed, v)
+				continue
+			}
+			kept = append(kept, v)
+		}
+		switch {
+		case len(kept) == 0:
+			// Everything here was approved. Clean is the right word: the check
+			// ran, and what it found has been settled.
+			out.Results = append(out.Results, verdict.Clean(res.Signal))
+		default:
+			res.Verdicts = kept
+			out.Results = append(out.Results, res)
+		}
+	}
+	return out, removed
+}
+
+// askMessage is what the agent is told when a finding needs a human decision.
+//
+// Neither host lets a hook prompt a person: "ask" is not a permitted decision,
+// only allow or deny. So asking means denying and telling the agent to put the
+// question to whoever it is working with.
+//
+// The message has to name the exact command that records the answer, or the
+// agent tries again, is denied identically, and the person is asked the same
+// thing forever.
+func askMessage(rep engine.Report) string {
+	var b strings.Builder
+	b.WriteString("PAUSED by trackline. This needs a decision from the person you are working with.\n")
+
+	for _, v := range rep.Findings() {
+		fmt.Fprintf(&b, "\n%s\n", v.Summary)
+		for _, e := range v.Evidence {
+			fmt.Fprintf(&b, "  %s: %s\n", e.Kind, e.Value)
+		}
+		fmt.Fprintf(&b, "\nAsk them whether to go ahead. If they say yes, run:\n")
+		fmt.Fprintf(&b, "    trackline allow %s %q\n", v.Signal, v.Target)
+		b.WriteString("and then try again. Do not work around this, and do not decide it yourself.\n")
+	}
+	return b.String()
 }
 
 // build assembles the configured checks.

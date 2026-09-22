@@ -103,3 +103,18 @@ func TestOnlyWarnAndBlockInterrupt(t *testing.T) {
 		t.Error("warn and block must interrupt")
 	}
 }
+
+// Without a target, the only responses available to a person are to live with
+// the finding or switch the check off. Naming what was objected to is what
+// makes a narrow approval possible.
+func TestInterruptingVerdictNeedsATarget(t *testing.T) {
+	v := verdict.Verdict{Signal: "s", Severity: verdict.SeverityWarn, Summary: "something",
+		Evidence: []verdict.Evidence{{Kind: verdict.EvidenceFile, Value: "/a"}}}
+	if err := v.Validate(); err == nil {
+		t.Error("a warn verdict with no target was accepted")
+	}
+	v.Target = "/a"
+	if err := v.Validate(); err != nil {
+		t.Errorf("a complete verdict was rejected: %v", err)
+	}
+}

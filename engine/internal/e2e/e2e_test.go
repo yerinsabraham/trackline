@@ -41,6 +41,7 @@ func (stubScope) Check(in signal.Input) verdict.Result {
 		if !contains(p, "auth") {
 			return verdict.Finding("scope-stub", verdict.Verdict{
 				Severity: verdict.SeverityWarn,
+				Target:   p,
 				Summary:  "edited a file the request never mentioned",
 				Evidence: []verdict.Evidence{
 					{Kind: verdict.EvidenceTurn, Value: anchor.Text, Note: "what was asked"},

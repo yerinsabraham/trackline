@@ -104,6 +104,7 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 		// Reported, not blocked. Adding a dependency is often exactly right,
 		// and a check that stops ordinary work gets uninstalled.
 		Severity: verdict.SeverityWarn,
+		Target:   strings.Join(added, ","),
 		Summary: fmt.Sprintf("added %s to %s",
 			strings.Join(added, ", "), filepath.Base(manifest)),
 		Evidence:   ev,

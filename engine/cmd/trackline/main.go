@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
+	"github.com/yerinsabraham/trackline/engine/internal/override"
 )
 
 func main() {
@@ -34,6 +36,12 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "doctor":
 		err = cmdDoctor(os.Args[2:])
+	case "allow":
+		err = cmdAllow(os.Args[2:])
+	case "allowed":
+		err = cmdAllowed(os.Args[2:])
+	case "revoke":
+		err = cmdRevoke(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -55,6 +63,9 @@ func usage() {
   init     wire the hook into an agent's configuration
   status   show what the hook has seen, and whether it has ever run
   doctor   check the installation without changing anything
+  allow    approve something a check objected to
+  allowed  list what has been approved
+  revoke   withdraw an approval
 
 Flags: --host claude|codex   --root DIR
 `)
@@ -225,4 +236,139 @@ func humanAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%d days ago", int(d.Hours()/24))
 	}
+}
+
+func cmdAllow(args []string) error {
+	// trackline allow <signal> <target> [--project] [--reason "..."]
+	var positional []string
+	scope := override.ScopeOnce
+	reason := ""
+	root := ""
+	session, turn := "", ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project", "-project":
+			scope = override.ScopeProject
+		case "--reason", "-reason":
+			if i+1 < len(args) {
+				i++
+				reason = args[i]
+			}
+		case "--root", "-root":
+			if i+1 < len(args) {
+				i++
+				root = args[i]
+			}
+		case "--session":
+			if i+1 < len(args) {
+				i++
+				session = args[i]
+			}
+		case "--turn":
+			if i+1 < len(args) {
+				i++
+				turn = args[i]
+			}
+		default:
+			positional = append(positional, args[i])
+		}
+	}
+	if len(positional) < 2 {
+		return fmt.Errorf(`usage: trackline allow <check> <target> [--project] [--reason "..."]`)
+	}
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+
+	// A one-off approval needs to know which request it belongs to. The most
+	// recent action tells us, which is the one the agent was just stopped on.
+	if scope == override.ScopeOnce && (session == "" || turn == "") {
+		s, tn, err := lastAction(root)
+		if err != nil {
+			return fmt.Errorf("could not work out which request this belongs to; pass --project to approve it for good: %w", err)
+		}
+		session, turn = s, tn
+	}
+
+	store := override.NewStore(root)
+	g := override.Grant{
+		Signal: positional[0], Target: positional[1],
+		Scope: scope, Session: session, Turn: turn, Reason: reason,
+	}
+	if err := store.Add(g); err != nil {
+		return err
+	}
+
+	fmt.Printf("approved: %s\n", g.Describe())
+	if scope == override.ScopeOnce {
+		fmt.Println("this covers the current request only; use --project to make it permanent")
+	}
+	return nil
+}
+
+func cmdAllowed(args []string) error {
+	f := parse(args)
+	grants := override.NewStore(f.root).List()
+	if len(grants) == 0 {
+		fmt.Println("nothing has been approved in this project.")
+		return nil
+	}
+	fmt.Printf("%d approval(s):\n", len(grants))
+	for _, g := range grants {
+		fmt.Printf("  %s\n", g.Describe())
+	}
+	return nil
+}
+
+func cmdRevoke(args []string) error {
+	var positional []string
+	root := ""
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--root" || args[i] == "-root" {
+			if i+1 < len(args) {
+				i++
+				root = args[i]
+			}
+			continue
+		}
+		positional = append(positional, args[i])
+	}
+	if len(positional) < 1 {
+		return fmt.Errorf("usage: trackline revoke <check> [target]")
+	}
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+	target := ""
+	if len(positional) > 1 {
+		target = positional[1]
+	}
+
+	n, err := override.NewStore(root).Remove(positional[0], target)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("removed %d approval(s)\n", n)
+	return nil
+}
+
+// lastAction reads which request the agent was most recently stopped on, so a
+// one-off approval attaches to the right one.
+func lastAction(root string) (session, turn string, err error) {
+	b, err := os.ReadFile(filepath.Join(root, ".trackline", "turn.json"))
+	if err != nil {
+		return "", "", err
+	}
+	var st struct {
+		SessionID string `json:"sessionId"`
+		TurnID    string `json:"turnId"`
+	}
+	if err := json.Unmarshal(b, &st); err != nil {
+		return "", "", err
+	}
+	if st.TurnID == "" {
+		return "", "", fmt.Errorf("no recent action recorded")
+	}
+	return st.SessionID, st.TurnID, nil
 }

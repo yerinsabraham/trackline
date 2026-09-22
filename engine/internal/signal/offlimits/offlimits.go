@@ -90,6 +90,7 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 			}
 			vs = append(vs, verdict.Verdict{
 				Severity: verdict.SeverityBlock,
+				Target:   path,
 				Summary:  fmt.Sprintf("writing to a protected path: %s", path),
 				Evidence: []verdict.Evidence{
 					{Kind: verdict.EvidenceFile, Value: path, Note: "the file being written"},

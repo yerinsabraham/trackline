@@ -116,6 +116,7 @@ func TestEvidenceBackedFindingSurvives(t *testing.T) {
 		}
 		return verdict.Finding("scope", verdict.Verdict{
 			Severity: verdict.SeverityBlock,
+			Target:   in.Event.Action.Paths[0],
 			Summary:  "edited a file outside the stated scope",
 			Evidence: []verdict.Evidence{
 				{Kind: verdict.EvidenceTurn, Value: anchor.Text, Note: "what was asked"},

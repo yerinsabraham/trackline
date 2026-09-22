@@ -96,6 +96,14 @@ type Verdict struct {
 	Summary  string     `json:"summary"`
 	Evidence []Evidence `json:"evidence"`
 
+	// Target is the specific thing objected to: a path, a package, a command.
+	//
+	// It exists so a human's approval can be matched against a later finding.
+	// Inferring it from the evidence would work until two checks described the
+	// same thing differently, and then an approval would silently stop
+	// applying.
+	Target string `json:"target,omitempty"`
+
 	// Suggestion is what the agent or human should do instead. Phase 0 found
 	// that a block naming a concrete alternative was corrected 11 times out of
 	// 11; whether a bare refusal works as well is untested. Until that is
@@ -116,6 +124,11 @@ func (v Verdict) Validate() error {
 	}
 	if v.Severity.Interrupts() && len(v.Evidence) == 0 {
 		return fmt.Errorf("%s: %w: a %s verdict must name what it saw", v.Signal, ErrNoEvidence, v.Severity)
+	}
+	if v.Severity.Interrupts() && v.Target == "" {
+		// Without a target, a person cannot approve this specific thing, and
+		// their only options are to live with it or switch the check off.
+		return fmt.Errorf("%s: a %s verdict must name its target so it can be approved", v.Signal, v.Severity)
 	}
 	return nil
 }

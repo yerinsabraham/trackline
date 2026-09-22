@@ -119,6 +119,7 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 			// get to stop someone's work until it has a measured false-alarm
 			// rate that earns it.
 			Severity: verdict.SeverityWarn,
+			Target:   rel,
 			Summary:  fmt.Sprintf("wrote to %s, which the request did not mention", rel),
 			Evidence: []verdict.Evidence{
 				{Kind: verdict.EvidenceTurn, Value: anchor.Text, Note: "what was asked"},
