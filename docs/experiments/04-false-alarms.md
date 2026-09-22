@@ -105,3 +105,52 @@ After the fix the same scenario is caught, naming both `lodash.debounce` and
 - **"Annoying" is not measured here, and it cannot be.** A check can be
   correct on every one of these and still be the thing that makes someone
   uninstall it. That judgement needs a person using it on their own work.
+
+---
+
+## Then it was used on real work, and found something the scripts could not
+
+The scripted tasks above were written by the same person who wrote the checks,
+which is a real limit on what they can prove. So it was installed on an actual
+project and left to watch ordinary work: ten actions, unsupervised.
+
+**One alert, and it was wrong.**
+
+`repetition` fired after four consecutive edits to a markdown document, warning
+that the same action had been attempted four times. The agent was not stuck. It
+was writing the document section by section, which is what writing a document
+looks like.
+
+The fix was not a higher threshold. The check could not tell **progress** from
+**stuck**, and counting attempts alone never can. Four edits each writing
+something different is work; four attempts at the same change is a loop. The
+content distinguishes them, so it is now compared — by size, because the
+per-turn state deliberately keeps the shape of a body rather than the body.
+
+Getting that comparison right took two corrections of its own. A tenth of a
+short line is two or three characters, so every variation of a one-line fix
+looked like a different attempt and a genuine loop slipped through; the
+tolerance now has a floor. And actions carrying no content at all, like a
+delete or a read, stopped being counted entirely; those fall back to matching
+on the target, which is what the check did before content was available.
+
+### The more useful finding
+
+**`scope` never judged a single action.** Its reason, five times over:
+
+> the request does not name a file or directory, so there is no stated scope
+
+The requests in that session were phrased without naming files, which is
+completely normal. The check behaved exactly as designed: it refuses to invent
+a scope nobody stated.
+
+But the scripted tasks all said things like *"fix the login bug in src/auth"*,
+so the check always had something to work with, and the measurement above
+reports it judging seven actions. On real usage it judged none.
+
+**A check that is silent is not a check with a good false-alarm rate.** The
+narrowness was chosen deliberately, to avoid firing on correct work, and this is
+the cost of that choice arriving as evidence rather than as a prediction. It is
+recorded here rather than tuned away, because the right response is not obvious:
+loosening it trades silence for noise, and noise is the failure that cannot be
+recovered from.

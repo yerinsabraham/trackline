@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 )
@@ -205,7 +206,10 @@ func (c *TurnCounter) Append(ev event.Event) error {
 	}
 	st.SessionID, st.TurnID = ev.SessionID, ev.TurnID
 
-	ev.Action.Body = ""
+	// Bodies are dropped, but their length is kept: the repetition check needs
+	// to tell a retried fix from a document being written section by section,
+	// and that only needs the shape of the content, not the content.
+	ev.Action.Body = summarise(ev.Action.Body)
 	ev.Action.PriorBody = ""
 	ev.Raw = nil
 	st.Events = append(st.Events, ev)
@@ -220,4 +224,19 @@ func (c *TurnCounter) Append(ev event.Event) error {
 	// Written whole each time rather than appended, so the file is always a
 	// complete state and never a half-updated one.
 	return os.WriteFile(c.Path, b, 0o600)
+}
+
+// summarise reduces a body to something the length comparison can use without
+// storing the content itself.
+//
+// Keeping whole bodies would make the turn state grow with everything written
+// in a request, which is the cost this file exists to avoid.
+func summarise(body string) string {
+	if body == "" {
+		return ""
+	}
+	if len(body) <= 64 {
+		return body
+	}
+	return body[:32] + strings.Repeat(" ", len(body)-64) + body[len(body)-32:]
 }

@@ -118,3 +118,54 @@ func TestNoHistoryMeansNoMeasurement(t *testing.T) {
 		t.Errorf("outcome = %s; without a record, repeats cannot be counted", res.Outcome)
 	}
 }
+
+// Measured on real usage: someone building a markdown file section by section
+// was told they might be stuck. Four edits to one file, each writing something
+// different, is work.
+func TestGrowingADocumentIsNotALoop(t *testing.T) {
+	edit := func(body string) event.Event {
+		return event.Event{SessionID: "s", TurnID: "t1", Action: event.Action{
+			Type: event.ActionEditFile, ToolName: "Edit",
+			Paths: []string{"/w/CANDIDATE.md"}, Body: body,
+		}}
+	}
+	h := history{
+		edit("## Summary\nshort"),
+		edit("## Summary\nshort\n\n## Experience\nquite a lot more text here than before"),
+		edit("## Summary\nshort\n\n## Experience\nquite a lot more text here than before\n\n## Skills\nand more again, growing steadily each time"),
+	}
+	now := edit("## Summary\nshort\n\n## Experience\nquite a lot more text here than before\n\n## Skills\nand more again, growing steadily each time\n\n## Contact\nplus a final section that makes it longer still")
+
+	if res := run(t, h, now); res.Outcome != verdict.OutcomeClean {
+		t.Errorf("outcome = %s; a document being written is progress, not a loop", res.Outcome)
+	}
+}
+
+// The case it must still catch: the same fix attempted over and over.
+func TestRetryingTheSameChangeIsALoop(t *testing.T) {
+	attempt := func(body string) event.Event {
+		return event.Event{SessionID: "s", TurnID: "t1", Action: event.Action{
+			Type: event.ActionEditFile, ToolName: "Edit",
+			Paths: []string{"/w/src/parser.ts"}, Body: body,
+		}}
+	}
+	h := history{
+		attempt("return parse(input, {strict: true})"),
+		attempt("return parse(input, {strict: false})"),
+		attempt("return parse(input, {strict: true, safe: 1})"),
+	}
+	now := attempt("return parse(input, {strict: false, safe: 0})")
+
+	if res := run(t, h, now); res.Outcome != verdict.OutcomeFinding {
+		t.Errorf("outcome = %s; four near-identical attempts at one line is a loop", res.Outcome)
+	}
+}
+
+// Commands carry no body, and the same command four times is the clearest loop
+// there is.
+func TestIdenticalCommandsStillLoop(t *testing.T) {
+	c := cmd("npm test -- auth")
+	if res := run(t, repeat(c, 3), c); res.Outcome != verdict.OutcomeFinding {
+		t.Errorf("outcome = %s; the same command four times is a loop", res.Outcome)
+	}
+}

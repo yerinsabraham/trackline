@@ -1,5 +1,14 @@
 // Package repetition notices an agent doing the same thing over and over.
 //
+// The distinction that matters is progress versus stuck. Four edits to a
+// document, each writing a different section, is work. Four attempts at the
+// same change is a loop. Counting attempts alone cannot tell them apart, and
+// measured on real usage it got this wrong: someone building a markdown file
+// section by section was told they might be stuck.
+//
+// So a repeat only counts when the *content* is also alike. Different content
+// is progress, however many times the same file is touched.
+//
 // The build plan called this "repeated failure", and the name had to change to
 // match what is actually observable. A PreToolUse hook runs *before* the tool,
 // so it cannot know whether the last attempt failed. What it can see is that
@@ -73,9 +82,16 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 
 	count := 1 // this attempt
 	for _, ev := range prior {
-		if k, ok := fingerprint(ev); ok && k == key {
-			count++
+		k, ok := fingerprint(ev)
+		if !ok || k != key {
+			continue
 		}
+		// Same target, but is it the same attempt? Editing one file repeatedly
+		// while writing something different each time is progress.
+		if !alike(ev.Action, in.Event.Action) {
+			continue
+		}
+		count++
 	}
 
 	if count < Threshold {
@@ -95,6 +111,60 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 		Suggestion: "if this is not converging, stop and say what is blocking rather than trying again",
 	})
 }
+
+// alike reports whether two attempts at the same target are also the same
+// attempt.
+//
+// Bodies are not compared directly: the turn state deliberately drops them, so
+// what is available is their shape. Two edits of very different size are
+// different work. Two of similar size on the same file, which is what a
+// retried fix looks like, are treated as the same attempt.
+//
+// Commands carry no body and are compared on their text alone, which the
+// fingerprint already did, so identical commands are always alike. Running the
+// same command four times is the clearest loop there is.
+func alike(a, b event.Action) bool {
+	if a.Type == event.ActionRunCommand {
+		return true
+	}
+
+	// Neither carries content: a read, a delete, or a host that does not supply
+	// it. There is nothing to distinguish one attempt from another, so the
+	// target alone decides, which is what this check did before content was
+	// available at all.
+	if a.Body == "" && b.Body == "" {
+		return true
+	}
+	// One has content and the other does not. They cannot be compared, and
+	// guessing in either direction is worse than declining.
+	if a.Body == "" || b.Body == "" {
+		return false
+	}
+	if a.Body == b.Body {
+		return true
+	}
+
+	// Compared on size, because the turn state keeps the shape of a body and
+	// not the body itself. A retried fix rewrites roughly the same thing; a
+	// document being written grows.
+	//
+	// The tolerance has a floor. A tenth of a short line is two or three
+	// characters, which would call every variation of a one-line fix a
+	// different attempt — measured, that let a genuine loop through.
+	la, lb := len(a.Body), len(b.Body)
+	if la > lb {
+		la, lb = lb, la
+	}
+	tolerance := lb / 10
+	if tolerance < minTolerance {
+		tolerance = minTolerance
+	}
+	return lb-la <= tolerance
+}
+
+// minTolerance is the smallest difference in body size still treated as the
+// same attempt, so short edits are not all considered distinct.
+const minTolerance = 16
 
 // fingerprint identifies an action precisely enough that two attempts at the
 // same thing match and two different attempts do not.
