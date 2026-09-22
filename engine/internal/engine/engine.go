@@ -80,13 +80,25 @@ func (e *Engine) Run(ev event.Event, in intent.Intent, rules []signal.Rule) Repo
 }
 
 func runOne(s signal.Signal, in signal.Input) (res verdict.Result) {
-	name := s.Name()
-
+	// The recover has to be installed before anything touches s, including
+	// Name(). A nil entry in the signal list, or a Name() that panics, would
+	// otherwise take the process down before the guard existed — and on Codex a
+	// crashed hook is read as permission to proceed, so the whole safety path
+	// would silently switch off.
+	name := "unknown"
 	defer func() {
 		if r := recover(); r != nil {
 			res = verdict.CannotMeasure(name, fmt.Sprintf("the check panicked: %v", r))
 		}
 	}()
+
+	if s == nil {
+		return verdict.CannotMeasure(name, "a nil signal was registered")
+	}
+	name = s.Name()
+	if name == "" {
+		return verdict.CannotMeasure("unnamed", "the check has no name, so its findings could not be attributed")
+	}
 
 	res = s.Check(in)
 	if res.Signal == "" {

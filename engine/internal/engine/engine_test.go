@@ -142,3 +142,47 @@ func TestEvidenceBackedFindingSurvives(t *testing.T) {
 		t.Errorf("evidence cites %q; it must cite the instruction, not the continuation", f[0].Evidence[0].Value)
 	}
 }
+
+// The guard has to be installed before anything touches the signal, including
+// Name(). On Codex a crashed hook is read as permission to proceed, so a
+// process that dies here switches the whole safety path off silently.
+func TestGuardCoversNameAndNilSignals(t *testing.T) {
+	cases := []struct {
+		name   string
+		sig    signal.Signal
+		expect string
+	}{
+		{"nil signal", nil, "nil signal"},
+		{"Name() panics", panicName{}, "panicked"},
+		{"empty name", stub{"", func(signal.Input) verdict.Result { return verdict.Clean("") }}, "no name"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var rep engine.Report
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				rep = engine.New(c.sig, stub{"healthy", func(signal.Input) verdict.Result {
+					return verdict.Clean("healthy")
+				}}).Run(ev(), intent.Intent{}, nil)
+			}()
+			<-done
+
+			if len(rep.Results) != 2 {
+				t.Fatalf("got %d results; the healthy signal must still run", len(rep.Results))
+			}
+			un := rep.Unmeasured()
+			if len(un) != 1 {
+				t.Fatalf("unmeasured = %+v, want exactly the broken signal", un)
+			}
+			if !strings.Contains(un[0].Reason, c.expect) {
+				t.Errorf("reason = %q, want it to mention %q", un[0].Reason, c.expect)
+			}
+		})
+	}
+}
+
+type panicName struct{}
+
+func (panicName) Name() string                      { panic("name blew up") }
+func (panicName) Check(signal.Input) verdict.Result { return verdict.Clean("never reached") }

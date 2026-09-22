@@ -83,6 +83,16 @@ type Action struct {
 	// ToolName is the host's own name for the tool, kept for evidence only.
 	ToolName string `json:"toolName,omitempty"`
 
+	// ToolNameUnknown is true when we know a tool was called but not which one.
+	//
+	// This is not hypothetical. A production OpenTelemetry trace with default
+	// settings reports gen_ai.response.finish_reasons = ["tool_calls"] and
+	// nothing else: the message content carrying the tool name is Opt-In and
+	// off by default. So the most basic safety check there is — did the agent
+	// call a forbidden tool — is unanswerable, and saying so is the only
+	// honest option. See docs/experiments/03-otel-traces.md.
+	ToolNameUnknown bool `json:"toolNameUnknown,omitempty"`
+
 	// Truncated marks content the host or an exporter cut short. A rule read
 	// from truncated content may be missing the clause that mattered, so a
 	// check reading it must degrade rather than assume.
@@ -128,6 +138,30 @@ type Event struct {
 // a check that fires there can warn but must not claim to have prevented
 // something.
 func (e Event) CanBlock() bool { return e.Phase == PhasePreTool }
+
+// Observable reports whether enough is known about this action to judge it.
+//
+// False means a check should return CannotMeasure rather than Clean: the action
+// happened and we could not see what it was.
+//
+// What counts as "enough" depends on the kind of action, and conflating them is
+// a mistake this method made once. A tool call reveals no file paths on any
+// surface, local or production, so demanding paths would mark every tool call
+// unobservable. What matters for a tool call is the name; what matters for a
+// file action is the paths; what matters for a command is the command.
+func (e Event) Observable() bool {
+	switch e.Action.Type {
+	case ActionCallTool:
+		return !e.Action.ToolNameUnknown && e.Action.ToolName != ""
+	case ActionRunCommand:
+		return e.Action.Command != ""
+	case ActionWriteFile, ActionEditFile, ActionReadFile, ActionDeleteFile:
+		return !e.Action.PathsUnknown && len(e.Action.Paths) > 0
+	default:
+		// An action we have not classified is one we cannot judge.
+		return false
+	}
+}
 
 // TouchesFiles reports whether this action is known to touch any file.
 // It is deliberately false when paths are unknown: callers must consult

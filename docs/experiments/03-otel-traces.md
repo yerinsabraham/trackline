@@ -30,7 +30,7 @@ change, against a stated rule. Captured under four configurations.
 | **Default**, nothing opted in | ❌ 8 metadata attributes. Cannot tell **which tool** was called |
 | `EVENT_ONLY` | ❌ produced exactly the default output |
 | `SPAN_AND_EVENT`, fully opted in | ✅ rule, request and tool call with arguments |
-| **Opted in + PII redaction** | ✅ **still works** |
+| **Opted in + PII redaction** | ✅ **still works**, if the redaction keeps the JSON valid |
 
 ### Default gives you almost nothing
 
@@ -82,6 +82,31 @@ on, plus an export-time pass scrubbing identifiers.
 alignment does not need — who the customer is, which order, what the number was
 — and keeps exactly what it does. An operator can satisfy a privacy review and
 still run alignment.
+
+### But only if the redaction preserves valid JSON
+
+**Correction, found while building the reader for these traces.** The first
+version of this experiment redacted with a regex run across the whole
+serialised attribute. That replaced a JSON *number* with a bare token:
+
+```json
+"arguments":{"customer_id":"[REDACTED]","new_limit":[REDACTED]}
+```
+
+which is not valid JSON. The analysis at the time only did substring checks, so
+it reported success while the message list had in fact become unreadable. A
+redaction meant to hide one value had destroyed every other.
+
+The fix is to parse, walk, redact inside string values, and re-serialise —
+replacing numbers with a placeholder **of the same type**, not a string token.
+[`code/otel/redacted_call.py`](code/otel/redacted_call.py) does this, and the
+captured span in [`data/`](data/otel-spans/) is the corrected one.
+
+The lesson generalises past redaction: **any consumer of these attributes must
+distinguish "no content" from "content that would not parse".** They need
+different answers. The first means enable content capture; the second means
+your redaction is corrupting the payload, and telling that operator to enable a
+setting they already enabled would send them the wrong way.
 
 **What is lost is magnitude.** `new_limit: [REDACTED]` means a limit change is
 visible but not that it was for 999999. So "did it touch a forbidden tool"
