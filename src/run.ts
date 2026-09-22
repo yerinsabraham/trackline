@@ -27,6 +27,7 @@ import type {
   HarnessConfig,
   Metric,
   RetrievalCase,
+  RetrievalFixture,
   RunMode,
   RunReport,
   SuiteResult,
@@ -37,10 +38,12 @@ import { emptyRate, ndcgAtK, precisionAtK, recallAtK, reciprocalRank } from './s
 import { scoreToolCase } from './scorers/tool-selection.js';
 import { DEFAULT_JUDGE_MODEL, judgeAgrees, judgeGroundedness } from './scorers/judge.js';
 import {
+  retrievalInputHash,
   runRetrieval,
   runToolSelection,
   saveRetrievalFixtures,
   saveToolFixtures,
+  toolInputHash,
 } from './adapters/fixture.js';
 import {
   findRegressions,
@@ -177,14 +180,14 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
   const cases = readJsonl<RetrievalCase>('retrieval');
   const results: CaseResult[] = [];
   const errors: SuiteResult['errors'] = [];
-  const rankings: Record<string, string[]> = {};
+  const rankings: Record<string, RetrievalFixture> = {};
   const latencies: number[] = [];
   const raw: { retrieved: string[] }[] = [];
 
   for (const c of cases) {
     try {
       const { retrieved, latencyMs } = await runRetrieval(c, mode, config);
-      rankings[c.id] = retrieved;
+      rankings[c.id] = { retrieved, inputHash: retrievalInputHash(c) };
       latencies.push(latencyMs);
       raw.push({ retrieved });
 
@@ -270,7 +273,12 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
   for (const c of cases) {
     try {
       const outcome = await runToolSelection(c, mode, config);
-      fixtures[c.id] = { called: outcome.called, refused: outcome.refused, risks: outcome.risks };
+      fixtures[c.id] = {
+        called: outcome.called,
+        refused: outcome.refused,
+        risks: outcome.risks,
+        inputHash: toolInputHash(c),
+      };
       if (outcome.risks !== undefined) riskResolvable.add(c.id);
       latencies.push(outcome.latencyMs);
 

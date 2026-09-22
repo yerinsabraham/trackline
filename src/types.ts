@@ -173,7 +173,39 @@ export interface ToolFixture {
   called: string[];
   refused: boolean;
   risks?: Record<string, RiskTier>;
+  /** See `InputHashed`. */
+  inputHash?: string;
 }
+
+/**
+ * A recorded retrieval ranking.
+ *
+ * Stored as an object rather than a bare array so it can carry `inputHash`. A
+ * bare array is still accepted on read: that is the pre-hash format, and it
+ * replays correctly, it just cannot be checked for staleness.
+ */
+export interface RetrievalFixture {
+  retrieved: string[];
+  /** See `InputHashed`. */
+  inputHash?: string;
+}
+
+/**
+ * Why fixtures carry a hash of their inputs.
+ *
+ * A fixture is keyed by case id alone. Edit the `query` of `ret-007`, keep the
+ * id, and the stale recording replays happily: the metric now answers a
+ * question the dataset no longer asks, and nothing anywhere notices.
+ *
+ * `inputHash` closes that. It covers only what the system under test actually
+ * sees — the query and segments for retrieval, the utterance and available
+ * tools for tool selection. Deliberately **not** the expected answers: editing
+ * `relevant` or `forbidden` changes how a recording is scored, but the
+ * recording itself is still a truthful record of what the system returned.
+ * Hashing the answer key would force a pointless re-record every time the
+ * grading changed.
+ */
+export type InputHashed = { inputHash?: string };
 
 // ── The two things you plug in ────────────────────────────────────────────────
 

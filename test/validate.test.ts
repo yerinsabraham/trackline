@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { validateProject } from '../src/validate.js';
+import { retrievalInputHash, toolInputHash } from '../src/adapters/fixture.js';
 
 function makeProject(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'trackline-'));
@@ -22,13 +23,25 @@ function makeProject(): string {
     path.join(root, 'datasets', 'groundedness.jsonl'),
     '{"id":"gnd-1","question":"q","context":["c"],"answer":"a","expect":"grounded"}\n',
   );
-  fs.writeFileSync(path.join(root, 'fixtures', 'retrieval.fixture.json'), '{"ret-1":["doc#0"]}\n');
+  fs.writeFileSync(
+    path.join(root, 'fixtures', 'retrieval.fixture.json'),
+    JSON.stringify({
+      'ret-1': { retrieved: ['doc#0'], inputHash: retrievalInputHash({ id: 'ret-1', query: 'q', relevant: ['doc#0'] }) },
+    }) + '\n',
+  );
   // `risks: {}` means resolved-and-nothing-privileged, which is a measurement.
   // Omitting the key means unresolved, which is the hole `risk_unresolvable`
   // exists to catch.
   fs.writeFileSync(
     path.join(root, 'fixtures', 'tool-selection.fixture.json'),
-    '{"tool-1":{"called":[],"refused":false,"risks":{}}}\n',
+    JSON.stringify({
+      'tool-1': {
+        called: [],
+        refused: false,
+        risks: {},
+        inputHash: toolInputHash({ id: 'tool-1', utterance: 'hello', available: ['kb_search'], expected: [] }),
+      },
+    }) + '\n',
   );
   fs.writeFileSync(
     path.join(root, 'baseline.json'),
@@ -113,5 +126,69 @@ describe('risk tier coverage', () => {
 
     const codes = validateProject(root, { mode: 'fixture' }).map((i) => i.code);
     assert.ok(!codes.includes('risk_unresolvable'));
+  });
+});
+
+describe('fixture freshness', () => {
+  // The failure this exists to catch: edit a row's inputs, keep its id, and the
+  // stale recording replays while scoring a question the row no longer asks.
+  it('errors when a retrieval row was edited after its fixture was recorded', () => {
+    const root = makeProject();
+    fs.writeFileSync(
+      path.join(root, 'datasets', 'retrieval.jsonl'),
+      '{"id":"ret-1","query":"a completely different question","relevant":["doc#0"]}\n',
+    );
+
+    const found = validateProject(root, { mode: 'fixture' }).find(
+      (i) => i.code === 'stale_fixture_inputs',
+    );
+    assert.ok(found, 'expected stale_fixture_inputs');
+    assert.equal(found?.level, 'error');
+    assert.equal(found?.id, 'ret-1');
+  });
+
+  it('errors when a tool row utterance was edited after recording', () => {
+    const root = makeProject();
+    fs.writeFileSync(
+      path.join(root, 'datasets', 'tool-selection.jsonl'),
+      '{"id":"tool-1","utterance":"something else entirely","available":["kb_search"],"expected":[],"maxRisk":"read_public"}\n',
+    );
+
+    const found = validateProject(root, { mode: 'fixture' }).find(
+      (i) => i.code === 'stale_fixture_inputs',
+    );
+    assert.equal(found?.level, 'error');
+    assert.equal(found?.id, 'tool-1');
+  });
+
+  it('does not fire when only the expected answers changed', () => {
+    // Editing the answer key changes how a recording is scored. It does not make
+    // the recording untrue, so it must not demand a re-record.
+    const root = makeProject();
+    fs.writeFileSync(
+      path.join(root, 'datasets', 'retrieval.jsonl'),
+      '{"id":"ret-1","query":"q","relevant":["doc#0","doc#1"],"grades":{"doc#0":3}}\n',
+    );
+
+    const codes = validateProject(root, { mode: 'fixture' }).map((i) => i.code);
+    assert.ok(!codes.includes('stale_fixture_inputs'));
+  });
+
+  it('warns rather than fails on fixtures recorded before hashing existed', () => {
+    const root = makeProject();
+    fs.writeFileSync(path.join(root, 'fixtures', 'retrieval.fixture.json'), '{"ret-1":["doc#0"]}\n');
+
+    const issues = validateProject(root, { mode: 'fixture' });
+    const found = issues.find((i) => i.code === 'unhashed_fixture');
+    assert.equal(found?.level, 'warning');
+    assert.ok(!issues.some((i) => i.code === 'stale_fixture_inputs'));
+  });
+
+  it('still accepts the pre-hash bare-array retrieval format', () => {
+    const root = makeProject();
+    fs.writeFileSync(path.join(root, 'fixtures', 'retrieval.fixture.json'), '{"ret-1":["doc#0"]}\n');
+
+    const codes = validateProject(root, { mode: 'fixture' }).map((i) => i.code);
+    assert.ok(!codes.includes('invalid_retrieval_fixture'));
   });
 });

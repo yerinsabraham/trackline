@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { RiskTier } from './types.js';
+import type { RetrievalCase, RiskTier, ToolSelectionCase } from './types.js';
+import { readRetrievalFixture, retrievalInputHash, toolInputHash } from './adapters/fixture.js';
 
 export type ValidationLevel = 'error' | 'warning';
 
@@ -248,8 +249,15 @@ function validateFixtureCoverage(
       issue(issues, 'warning', 'stale_fixture', `${kind} fixture "${id}" has no matching dataset row.`, file, id);
     }
 
-    if (kind === 'retrieval' && !isStringArray(value)) {
-      issue(issues, 'error', 'invalid_retrieval_fixture', `Retrieval fixture "${id}" must be a string array.`, file, id);
+    if (kind === 'retrieval' && readRetrievalFixture(value) === null) {
+      issue(
+        issues,
+        'error',
+        'invalid_retrieval_fixture',
+        `Retrieval fixture "${id}" must be {retrieved: string[]} (or a bare string array, the pre-hash format).`,
+        file,
+        id,
+      );
     }
     if (kind === 'tools') {
       if (!isRecord(value) || !isStringArray(value.called) || typeof value.refused !== 'boolean') {
@@ -366,6 +374,83 @@ function validateRiskCoverage(
   );
 }
 
+/**
+ * Has a dataset row been edited since its fixture was recorded?
+ *
+ * Fixtures key on case id alone, so an edited row with an unchanged id replays
+ * a stale recording and scores a question the dataset no longer asks. Nothing
+ * else in the harness can see that happen.
+ *
+ * A missing hash is a pre-hash fixture. It still replays, so this warns rather
+ * than failing, but it says plainly that staleness cannot be checked instead of
+ * reporting a clean result.
+ */
+function validateFixtureFreshness(
+  root: string,
+  kind: keyof typeof FIXTURE_FILES,
+  rows: Record<string, unknown>[],
+  hashOf: (row: never) => string,
+  issues: ValidationIssue[],
+  fixtureMode: boolean,
+): void {
+  if (!fixtureMode) return;
+  const file = `fixtures/${FIXTURE_FILES[kind]}`;
+  if (!fs.existsSync(path.join(root, file))) return;
+  const fixtures = readJsonObject(root, file, issues);
+  if (!fixtures) return;
+
+  const unhashed: string[] = [];
+
+  for (const row of rows) {
+    const id = typeof row.id === 'string' ? row.id : undefined;
+    if (!id) continue;
+    const fx = fixtures[id];
+    if (fx === undefined) continue; // coverage is a separate check
+
+    const recorded =
+      kind === 'retrieval'
+        ? readRetrievalFixture(fx)?.inputHash
+        : isRecord(fx) && typeof fx.inputHash === 'string'
+          ? fx.inputHash
+          : undefined;
+
+    if (recorded === undefined) {
+      unhashed.push(id);
+      continue;
+    }
+
+    let expected: string;
+    try {
+      expected = hashOf(row as never);
+    } catch {
+      continue; // a malformed row is already reported by the shape checks
+    }
+
+    if (recorded !== expected) {
+      issue(
+        issues,
+        'error',
+        'stale_fixture_inputs',
+        `Row "${id}" was edited after its fixture was recorded. The replay answers a question the row no longer asks. ` +
+          'Re-record, read the diff, then update the baseline.',
+        file,
+        id,
+      );
+    }
+  }
+
+  if (unhashed.length > 0) {
+    issue(
+      issues,
+      'warning',
+      'unhashed_fixture',
+      `${unhashed.length} ${kind} fixture(s) predate input hashing, so staleness cannot be checked. ` +
+        `Re-record to enable it. First: ${unhashed.slice(0, 3).join(', ')}`,
+      file,
+    );
+  }
+}
+
 export function validateProject(root: string, options: ValidationOptions = {}): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const fixtureMode = (options.mode ?? 'fixture') === 'fixture';
@@ -380,6 +465,22 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
   validateFixtureCoverage(root, 'retrieval', retrievalIds, issues, fixtureMode);
   validateFixtureCoverage(root, 'tools', toolIds, issues, fixtureMode);
   validateRiskCoverage(root, tools, issues, fixtureMode);
+  validateFixtureFreshness(
+    root,
+    'retrieval',
+    retrieval,
+    (row: RetrievalCase) => retrievalInputHash(row),
+    issues,
+    fixtureMode,
+  );
+  validateFixtureFreshness(
+    root,
+    'tools',
+    tools,
+    (row: ToolSelectionCase) => toolInputHash(row),
+    issues,
+    fixtureMode,
+  );
   validateBaseline(root, issues, Boolean(options.strictBaseline));
 
   return issues;

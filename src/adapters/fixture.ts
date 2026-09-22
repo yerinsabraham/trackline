@@ -21,15 +21,72 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type {
   HarnessConfig,
   RetrievalCase,
+  RetrievalFixture,
   RiskTier,
   RunMode,
   ToolFixture,
   ToolSelectionCase,
   ToolSelectionOutcome,
 } from '../types.js';
+
+// ── Input hashing ─────────────────────────────────────────────────────────────
+
+/**
+ * A fingerprint of what the system under test was actually asked.
+ *
+ * Fixtures key on case id alone, so editing a row's query while keeping its id
+ * leaves a stale recording that replays without complaint, answering a question
+ * the dataset no longer asks. This is what makes that detectable.
+ *
+ * It covers the *inputs* only, never the expected answers. Changing `relevant`
+ * or `forbidden` changes how a recording is scored; it does not make the
+ * recording untrue. Hashing the answer key would demand a re-record every time
+ * the grading was refined, and a re-record nobody needed is a re-record nobody
+ * reads.
+ *
+ * Twelve hex characters: enough that a collision is not a practical concern,
+ * short enough to read in a diff.
+ */
+function hashInputs(parts: unknown): string {
+  return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 12);
+}
+
+export function retrievalInputHash(testCase: RetrievalCase): string {
+  return hashInputs({ query: testCase.query, segments: testCase.segments ?? null });
+}
+
+export function toolInputHash(testCase: ToolSelectionCase): string {
+  return hashInputs({ utterance: testCase.utterance, available: testCase.available });
+}
+
+/**
+ * A recorded ranking, in either the current shape or the pre-hash bare array.
+ *
+ * Old fixtures keep working. They simply cannot be checked for staleness, and
+ * `doctor` says so rather than pretending the check passed.
+ */
+export function readRetrievalFixture(value: unknown): RetrievalFixture | null {
+  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+    return { retrieved: value as string[] };
+  }
+  if (value && typeof value === 'object' && Array.isArray((value as RetrievalFixture).retrieved)) {
+    return value as RetrievalFixture;
+  }
+  return null;
+}
+
+/** Message shared by the runner and `doctor` so they never drift apart. */
+export function staleFixtureMessage(kind: string, id: string): string {
+  return (
+    `Fixture for ${kind} case "${id}" was recorded against different inputs. ` +
+    'The dataset row was edited after it was recorded, so this replay answers a question the row no longer asks. ' +
+    'Re-record, read the diff, then update the baseline.'
+  );
+}
 
 const projectRoot = () => path.resolve(process.env.TRACKLINE_ROOT ?? process.cwd());
 const retrievalFixtures = () => path.join(projectRoot(), 'fixtures', 'retrieval.fixture.json');
@@ -47,7 +104,7 @@ function writeFixtures(file: string, data: unknown): void {
   fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
 }
 
-let retrievalCache: Record<string, string[]> | null = null;
+let retrievalCache: Record<string, unknown> | null = null;
 let toolCache: Record<string, ToolFixture> | null = null;
 
 // ── Retrieval ─────────────────────────────────────────────────────────────────
@@ -64,12 +121,23 @@ export async function runRetrieval(
   topK = 10,
 ): Promise<RetrievalRun> {
   if (mode === 'fixture') {
-    retrievalCache ??= readFixtures<string[]>(retrievalFixtures());
-    const recorded = retrievalCache[testCase.id];
-    if (!recorded) {
+    retrievalCache ??= readFixtures<unknown>(retrievalFixtures());
+    const raw = retrievalCache[testCase.id];
+    if (raw === undefined) {
       throw new Error(`No fixture for retrieval case "${testCase.id}". Re-record or remove the row.`);
     }
-    return { retrieved: recorded.slice(0, topK), latencyMs: 0 };
+    const recorded = readRetrievalFixture(raw);
+    if (!recorded) {
+      throw new Error(`Fixture for retrieval case "${testCase.id}" is malformed. Re-record it.`);
+    }
+    // A hash that disagrees means the row was edited after recording. Replaying
+    // it would score a question the dataset no longer asks. An absent hash is a
+    // pre-hash fixture: it replays, and `doctor` reports that it cannot be
+    // checked.
+    if (recorded.inputHash && recorded.inputHash !== retrievalInputHash(testCase)) {
+      throw new Error(staleFixtureMessage('retrieval', testCase.id));
+    }
+    return { retrieved: recorded.retrieved.slice(0, topK), latencyMs: 0 };
   }
 
   if (!config.retriever) {
@@ -81,7 +149,7 @@ export async function runRetrieval(
   return { retrieved, latencyMs: Date.now() - started };
 }
 
-export function saveRetrievalFixtures(rankings: Record<string, string[]>): void {
+export function saveRetrievalFixtures(rankings: Record<string, RetrievalFixture>): void {
   writeFixtures(retrievalFixtures(), rankings);
   retrievalCache = null;
 }
@@ -108,6 +176,9 @@ export async function runToolSelection(
     const recorded = toolCache[testCase.id];
     if (!recorded) {
       throw new Error(`No fixture for tool case "${testCase.id}". Re-record or remove the row.`);
+    }
+    if (recorded.inputHash && recorded.inputHash !== toolInputHash(testCase)) {
+      throw new Error(staleFixtureMessage('tool', testCase.id));
     }
     // Recorded tiers win. They were resolved from the live catalog at record
     // time, which is what lets fixture mode score risk violations at all on a

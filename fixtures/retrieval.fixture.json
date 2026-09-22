@@ -1,27 +1,192 @@
 {
-  "ret-001": ["kb-auth-reset#0", "kb-auth-reset#1", "kb-security-overview#0", "kb-onboarding#1"],
-  "ret-002": ["kb-auth-reset#1", "kb-email-deliverability#0", "kb-auth-reset#0", "kb-contact-channels#0"],
-  "ret-003": ["kb-security-overview#0", "kb-onboarding#1", "kb-auth-reset#0"],
-  "ret-004": ["kb-fees-international#0", "kb-fees-international#1", "kb-fees-domestic#0"],
-  "ret-005": ["kb-fees-international#0", "kb-fees-domestic#0", "kb-pricing#0"],
-  "ret-006": ["kb-contact-hours#0", "kb-contact-channels#0"],
-  "ret-007": ["kb-contact-hours#1", "kb-contact-hours#0", "kb-contact-channels#0"],
-  "ret-008": ["kb-refunds#0", "kb-disputes#0", "kb-card-declines#0"],
-  "ret-009": ["kb-refunds#0", "kb-disputes#0", "kb-transfer-failures#0"],
-  "ret-010": ["kb-card-declines#0", "kb-card-declines#1", "kb-transfer-failures#0"],
-  "ret-011": ["kb-card-declines#0", "kb-transfer-failures#0", "kb-card-declines#1"],
-  "ret-012": ["kb-kyc-requirements#0", "kb-onboarding#1"],
-  "ret-013": ["kb-kyc-requirements#0", "kb-onboarding#1", "kb-security-overview#1"],
-  "ret-014": ["kb-developer-api#0", "kb-developer-api#1", "kb-pricing#0"],
-  "ret-015": ["kb-developer-api#0", "kb-developer-api#1", "kb-pricing#0", "kb-coverage#0"],
-  "ret-016": ["kb-account-closure#0", "kb-account-closure#1", "kb-privacy#0"],
-  "ret-017": ["kb-pricing#0", "kb-fees-domestic#0", "kb-fees-international#0"],
-  "ret-018": ["kb-pricing#1", "kb-pricing#0", "kb-developer-api#0"],
-  "ret-019": ["kb-account-closure#1", "kb-privacy#0", "kb-account-closure#0"],
-  "ret-020": ["kb-security-overview#1", "kb-auth-reset#0", "kb-onboarding#1"],
-  "ret-021": ["kb-coverage#0", "kb-fees-international#0"],
-  "ret-022": ["kb-coverage#0", "kb-fees-international#0"],
-  "ret-023": ["kb-contact-channels#0", "kb-contact-hours#0"],
-  "ret-024": [],
-  "ret-025": []
+  "ret-001": {
+    "retrieved": [
+      "kb-auth-reset#0",
+      "kb-auth-reset#1",
+      "kb-security-overview#0",
+      "kb-onboarding#1"
+    ],
+    "inputHash": "2e425f8ae374"
+  },
+  "ret-002": {
+    "retrieved": [
+      "kb-auth-reset#1",
+      "kb-email-deliverability#0",
+      "kb-auth-reset#0",
+      "kb-contact-channels#0"
+    ],
+    "inputHash": "de753423f433"
+  },
+  "ret-003": {
+    "retrieved": [
+      "kb-security-overview#0",
+      "kb-onboarding#1",
+      "kb-auth-reset#0"
+    ],
+    "inputHash": "4c13058f6626"
+  },
+  "ret-004": {
+    "retrieved": [
+      "kb-fees-international#0",
+      "kb-fees-international#1",
+      "kb-fees-domestic#0"
+    ],
+    "inputHash": "a679db88687a"
+  },
+  "ret-005": {
+    "retrieved": [
+      "kb-fees-international#0",
+      "kb-fees-domestic#0",
+      "kb-pricing#0"
+    ],
+    "inputHash": "c692e4465b11"
+  },
+  "ret-006": {
+    "retrieved": [
+      "kb-contact-hours#0",
+      "kb-contact-channels#0"
+    ],
+    "inputHash": "47b912fd20c7"
+  },
+  "ret-007": {
+    "retrieved": [
+      "kb-contact-hours#1",
+      "kb-contact-hours#0",
+      "kb-contact-channels#0"
+    ],
+    "inputHash": "35c8218b5bf0"
+  },
+  "ret-008": {
+    "retrieved": [
+      "kb-refunds#0",
+      "kb-disputes#0",
+      "kb-card-declines#0"
+    ],
+    "inputHash": "aaa393e861df"
+  },
+  "ret-009": {
+    "retrieved": [
+      "kb-refunds#0",
+      "kb-disputes#0",
+      "kb-transfer-failures#0"
+    ],
+    "inputHash": "2f12c36a94cb"
+  },
+  "ret-010": {
+    "retrieved": [
+      "kb-card-declines#0",
+      "kb-card-declines#1",
+      "kb-transfer-failures#0"
+    ],
+    "inputHash": "610f2621543e"
+  },
+  "ret-011": {
+    "retrieved": [
+      "kb-card-declines#0",
+      "kb-transfer-failures#0",
+      "kb-card-declines#1"
+    ],
+    "inputHash": "d702405b7dcd"
+  },
+  "ret-012": {
+    "retrieved": [
+      "kb-kyc-requirements#0",
+      "kb-onboarding#1"
+    ],
+    "inputHash": "35c46707cc4d"
+  },
+  "ret-013": {
+    "retrieved": [
+      "kb-kyc-requirements#0",
+      "kb-onboarding#1",
+      "kb-security-overview#1"
+    ],
+    "inputHash": "d4ba5d0fb129"
+  },
+  "ret-014": {
+    "retrieved": [
+      "kb-developer-api#0",
+      "kb-developer-api#1",
+      "kb-pricing#0"
+    ],
+    "inputHash": "a0187c83c9e5"
+  },
+  "ret-015": {
+    "retrieved": [
+      "kb-developer-api#0",
+      "kb-developer-api#1",
+      "kb-pricing#0",
+      "kb-coverage#0"
+    ],
+    "inputHash": "437313dc9e72"
+  },
+  "ret-016": {
+    "retrieved": [
+      "kb-account-closure#0",
+      "kb-account-closure#1",
+      "kb-privacy#0"
+    ],
+    "inputHash": "eb0db1fb5f93"
+  },
+  "ret-017": {
+    "retrieved": [
+      "kb-pricing#0",
+      "kb-fees-domestic#0",
+      "kb-fees-international#0"
+    ],
+    "inputHash": "38018399bb80"
+  },
+  "ret-018": {
+    "retrieved": [
+      "kb-pricing#1",
+      "kb-pricing#0",
+      "kb-developer-api#0"
+    ],
+    "inputHash": "23f571f807c9"
+  },
+  "ret-019": {
+    "retrieved": [
+      "kb-account-closure#1",
+      "kb-privacy#0",
+      "kb-account-closure#0"
+    ],
+    "inputHash": "a12253e1b4f5"
+  },
+  "ret-020": {
+    "retrieved": [
+      "kb-security-overview#1",
+      "kb-auth-reset#0",
+      "kb-onboarding#1"
+    ],
+    "inputHash": "8479b20861aa"
+  },
+  "ret-021": {
+    "retrieved": [
+      "kb-coverage#0",
+      "kb-fees-international#0"
+    ],
+    "inputHash": "be60bffa0337"
+  },
+  "ret-022": {
+    "retrieved": [
+      "kb-coverage#0",
+      "kb-fees-international#0"
+    ],
+    "inputHash": "a931ba7d1cfc"
+  },
+  "ret-023": {
+    "retrieved": [
+      "kb-contact-channels#0",
+      "kb-contact-hours#0"
+    ],
+    "inputHash": "3b68c7b509a4"
+  },
+  "ret-024": {
+    "retrieved": [],
+    "inputHash": "9b53808fd523"
+  },
+  "ret-025": {
+    "retrieved": [],
+    "inputHash": "12325735e73e"
+  }
 }

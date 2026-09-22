@@ -150,9 +150,17 @@ commit at all. A change to chunking or a tool description that moves a ranking
 shows up as a **diff to a committed JSON file**, in review, next to the change
 that caused it, instead of as a number nobody re-ran.
 
+Each fixture stores an `inputHash` covering what the system under test was
+actually asked — the query and segments, or the utterance and available tools.
+Edit a row and keep its id, and `doctor` fails with the row named, because a
+stale replay answers a question the dataset no longer asks. The hash
+deliberately excludes the expected answers: refining `relevant` or `forbidden`
+changes how a recording is scored, but does not make the recording untrue.
+
 > **Read the fixture diff before committing it.** A fixture refreshed without
-> being read is how a regression gets blessed into the baseline. This is the
-> single way this harness can lie to you.
+> being read is how a regression gets blessed into the baseline. That is the one
+> remaining way this harness can lie to you, and there is no technical fix for
+> it — only the discipline of reading the diff.
 
 Run `npm run evals:live` before a release, and after any change to the embedding
 model, the retrieval score threshold, or the agent system prompt.
