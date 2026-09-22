@@ -85,3 +85,56 @@ Two languages, deliberately, because there are two performance regimes:
 
 They are different programs. What is shared between them is design — baselines,
 tolerances, safety metrics having no tolerance — not code.
+
+---
+
+## Follow-up: what the real hook actually costs
+
+The measurements above compare bare runtimes doing trivial work. The shipped
+hook does considerably more on every call: load configuration, read project
+rules, read the session transcript, consult per-turn state, run five checks,
+and write two files.
+
+Measured on the real binary, five checks enabled:
+
+| | median | p95 | per 265-call session |
+|---|---|---|---|
+| **trackline hook, all checks** | **11.5ms** | 13.4ms | **3.1s** |
+| the same logic in Node would be | ~90ms+ | — | ~24s |
+
+**The 10ms target in this document was derived from a trivial hook and the real
+one does not meet it.** Recording that rather than moving the goalposts: 11.5ms
+is the number, and it is still 8x better than the runtime it replaced.
+
+### One design change the measurement forced
+
+The first implementation of the checks that need memory — "how many files has
+this request touched", "has this action been tried before" — read the session
+recording back on every call. That made latency grow with the session:
+
+| session length | latency |
+|---|---|
+| 0 events | 10.8ms |
+| 150 events | 12.6ms |
+| 300 events | 15.1ms |
+| 600 events | 18.7ms |
+
+Every call paid for the whole session, so the total cost was O(n²) and the tool
+got slower the longer someone worked. That is the wrong shape for something
+that runs before every action, and it would have been invisible in a short test.
+
+The fix was to stop reading the recording on the hot path. A small state file
+holds only the current turn and resets when the request changes, so reads are
+bounded by how much an agent does in one request rather than by the length of
+the session. The full recording is still written and is still what replay reads;
+nothing time-critical touches it.
+
+| session length | after |
+|---|---|
+| 0 events | 10.8ms |
+| 150 events | 11.2ms |
+| 300 events | 11.7ms |
+| 600 events | 12.2ms |
+
+A regression test asserts the state file stays small no matter how long the
+session runs.

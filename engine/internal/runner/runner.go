@@ -7,6 +7,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,9 +17,12 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/engine"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/intent"
+	"github.com/yerinsabraham/trackline/engine/internal/session"
 	"github.com/yerinsabraham/trackline/engine/internal/signal"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/dependency"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/diffsize"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/offlimits"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/repetition"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
@@ -114,8 +118,22 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		_ = (&intent.Reader{Path: ev.TranscriptPath}).Read(&in)
 	}
 
-	e := engine.New(build(cfg, root)...)
+	// Two separate stores, on purpose. The recording is the full session, for
+	// replay and inspection, and nothing on the hot path reads it. The turn
+	// state holds only the current request, and is what the checks read, so
+	// their cost does not grow with the length of the session.
+	recording := filepath.Join(root, ".trackline", "events.jsonl")
+	turnState := &session.TurnCounter{Path: filepath.Join(root, ".trackline", "turn.json")}
+
+	e := engine.New(build(cfg, root, turnState)...)
 	rep := e.Run(ev, in, rules)
+
+	// Recorded after the checks run, so a check counting earlier writes does
+	// not count the action it is currently judging twice.
+	if root != "" {
+		_ = session.Recorder{Path: recording}.Append(ev)
+		_ = turnState.Append(ev)
+	}
 
 	d := Decision{Report: rep, Mode: cfg.Mode}
 	if cfgErr != nil {
@@ -135,7 +153,11 @@ func Run(raw []byte, opts Options) (Decision, error) {
 }
 
 // build assembles the configured checks.
-func build(cfg config.Config, root string) []signal.Signal {
+//
+// counter is shared: diff-size and repetition both need the session recording,
+// and letting each read it separately cost measurable latency on every tool
+// call.
+func build(cfg config.Config, root string, counter *session.TurnCounter) []signal.Signal {
 	var out []signal.Signal
 	if !cfg.IsDisabled(offlimits.Name) {
 		out = append(out, offlimits.New(cfg.OffLimits))
@@ -145,6 +167,12 @@ func build(cfg config.Config, root string) []signal.Signal {
 	}
 	if !cfg.IsDisabled(scope.Name) {
 		out = append(out, scope.New(root))
+	}
+	if !cfg.IsDisabled(diffsize.Name) {
+		out = append(out, diffsize.New(counter))
+	}
+	if !cfg.IsDisabled(repetition.Name) {
+		out = append(out, repetition.New(counter))
 	}
 	return out
 }
