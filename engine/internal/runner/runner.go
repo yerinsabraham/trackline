@@ -19,6 +19,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/signal"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/dependency"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/offlimits"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
 
@@ -113,7 +114,7 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		_ = (&intent.Reader{Path: ev.TranscriptPath}).Read(&in)
 	}
 
-	e := engine.New(build(cfg)...)
+	e := engine.New(build(cfg, root)...)
 	rep := e.Run(ev, in, rules)
 
 	d := Decision{Report: rep, Mode: cfg.Mode}
@@ -134,13 +135,16 @@ func Run(raw []byte, opts Options) (Decision, error) {
 }
 
 // build assembles the configured checks.
-func build(cfg config.Config) []signal.Signal {
+func build(cfg config.Config, root string) []signal.Signal {
 	var out []signal.Signal
 	if !cfg.IsDisabled(offlimits.Name) {
 		out = append(out, offlimits.New(cfg.OffLimits))
 	}
 	if !cfg.IsDisabled(dependency.Name) {
 		out = append(out, dependency.New())
+	}
+	if !cfg.IsDisabled(scope.Name) {
+		out = append(out, scope.New(root))
 	}
 	return out
 }

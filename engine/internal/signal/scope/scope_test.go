@@ -1,0 +1,179 @@
+package scope_test
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/yerinsabraham/trackline/engine/internal/event"
+	"github.com/yerinsabraham/trackline/engine/internal/intent"
+	"github.com/yerinsabraham/trackline/engine/internal/signal"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
+	"github.com/yerinsabraham/trackline/engine/internal/verdict"
+)
+
+const root = "/work/app"
+
+func ask(turns ...string) intent.Intent {
+	var in intent.Intent
+	for i, s := range turns {
+		in.Add("t"+string(rune('1'+i)), time.Now(), s)
+	}
+	return in
+}
+
+func wrote(in intent.Intent, paths ...string) signal.Input {
+	full := make([]string, len(paths))
+	for i, p := range paths {
+		full[i] = root + "/" + p
+	}
+	return signal.Input{
+		Intent: in,
+		Event: event.Event{CWD: root, Action: event.Action{
+			Type: event.ActionWriteFile, ToolName: "Write", Paths: full,
+		}},
+	}
+}
+
+func run(t *testing.T, in signal.Input) verdict.Result {
+	t.Helper()
+	res := scope.New(root).Check(in)
+	if err := res.Validate(); err != nil {
+		t.Fatalf("invalid result: %v", err)
+	}
+	return res
+}
+
+// The majority of this file. Every case below is ordinary, correct work, and
+// firing on any of it would be a false alarm.
+func TestStaysSilentOnOrdinaryWork(t *testing.T) {
+	cases := []struct {
+		name    string
+		intent  intent.Intent
+		path    string
+		because string
+	}{
+		{"vague request names nowhere", ask("Clean up the codebase a bit"),
+			"src/anything.ts", "a request that names nowhere has no scope to violate"},
+		{"no request yet", ask(), "src/app.ts", "nothing has been asked"},
+		{"writes inside the named directory", ask("Fix the login bug in src/auth"),
+			"src/auth/login.ts", "exactly what was asked for"},
+		{"writes deeper inside it", ask("Fix the login bug in src/auth"),
+			"src/auth/providers/google.ts", "still inside the named area"},
+		{"test for the named area", ask("Fix the login bug in src/auth"),
+			"test/auth/login.test.ts", "writing a test for the thing you were asked to fix is not drift"},
+		{"file at the project root", ask("Fix the login bug in src/auth"),
+			"README.md", "a root file belongs to no area"},
+		{"names a module not a path", ask("Fix the payments module"),
+			"src/payments/charge.ts", "the module was named"},
+		{"quoted directory", ask("Update the `config` directory"),
+			"config/prod.yml", "the directory was named"},
+		{"a later turn widens the scope", ask("Fix login in src/auth", "proceed", "also update config/auth.yml"),
+			"config/auth.yml", "intent accumulates; a correction two turns back still counts"},
+		{"bare filename mentioned", ask("Update package.json to add the build script"),
+			"package.json", "the file itself was named"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := run(t, wrote(c.intent, c.path))
+			if res.Outcome == verdict.OutcomeFinding {
+				t.Errorf("fired on ordinary work (%s): %s", c.because, res.Verdicts[0].Summary)
+			}
+		})
+	}
+}
+
+// The case the check exists for, and it has to be unambiguous to fire.
+func TestFiresOnAClearDeparture(t *testing.T) {
+	res := run(t, wrote(ask("Fix the login bug in src/auth"), "src/payments/charge.ts"))
+	if res.Outcome != verdict.OutcomeFinding {
+		t.Fatalf("outcome = %s (%s); payments is plainly not auth", res.Outcome, res.Reason)
+	}
+
+	v := res.Verdicts[0]
+	if v.Severity != verdict.SeverityWarn {
+		t.Error("a heuristic must not block until it has a measured false-alarm rate")
+	}
+	if len(v.Evidence) != 3 {
+		t.Fatalf("evidence = %+v; a finding must name the ask, the file and the stated area", v.Evidence)
+	}
+	if !strings.Contains(v.Evidence[0].Value, "login") {
+		t.Errorf("evidence should quote the request, got %q", v.Evidence[0].Value)
+	}
+}
+
+// "Proceed" must not erase the scope, which is the whole reason Anchor exists.
+func TestContinuationDoesNotLoseTheScope(t *testing.T) {
+	in := ask("Fix the login bug in src/auth", "proceed", "yes", "continue")
+	if res := run(t, wrote(in, "src/payments/charge.ts")); res.Outcome != verdict.OutcomeFinding {
+		t.Errorf("outcome = %s; three continuations must not widen the scope to everything", res.Outcome)
+	}
+	if res := run(t, wrote(in, "src/auth/login.ts")); res.Outcome != verdict.OutcomeClean {
+		t.Errorf("outcome = %s; the named area is still in scope", res.Outcome)
+	}
+}
+
+func TestUnseeableWritesAreUnchecked(t *testing.T) {
+	in := signal.Input{Intent: ask("Fix the login bug in src/auth"),
+		Event: event.Event{CWD: root, Action: event.Action{
+			Type: event.ActionWriteFile, ToolName: "Bash",
+			Command: "sed -i s/a/b/ src/payments/charge.ts", PathsUnknown: true,
+		}}}
+	if res := run(t, in); res.Outcome != verdict.OutcomeCannotMeasure {
+		t.Errorf("outcome = %s; a write we cannot see must not read as clean", res.Outcome)
+	}
+}
+
+func TestMentionExtraction(t *testing.T) {
+	cases := []struct {
+		text string
+		want []string // meaningful segments, containers stripped
+	}{
+		{"Fix the login bug in src/auth", []string{"auth"}},
+		{"Update the payments module", []string{"payments"}},
+		{"Change `config/prod.yml`", []string{"config", "prod"}},
+		{"Edit package.json", []string{"package"}},
+		{"Refactor everything", nil},
+		{"Make the code better", nil},
+		{"See https://example.com/docs/thing for context", nil},
+		{"Look at the main module", nil},
+		{"Work in src/", nil}, // a container alone names no area
+	}
+	for _, c := range cases {
+		var got []string
+		for _, m := range scope.Mentions(c.text) {
+			got = append(got, m.Parts...)
+		}
+		if strings.Join(dedupe(got), ",") != strings.Join(c.want, ",") {
+			t.Errorf("Mentions(%q) = %v, want %v", c.text, dedupe(got), c.want)
+		}
+	}
+}
+
+// Container directories must not count as scope evidence. Nearly every file is
+// under src, so "src" matching "src" proves nothing, and treating it as a match
+// makes the check silent on everything.
+func TestContainersAreNotScope(t *testing.T) {
+	for _, p := range []string{"src", "lib", "test", "internal", "app"} {
+		if segs := scope.Segments(p + "/thing.ts"); len(segs) != 1 || segs[0] != "thing" {
+			t.Errorf("Segments(%s/thing.ts) = %v, want [thing]", p, segs)
+		}
+	}
+	// A test file names the thing it tests.
+	if segs := scope.Segments("test/auth/login.test.ts"); strings.Join(segs, ",") != "auth,login" {
+		t.Errorf("Segments = %v, want [auth login]", segs)
+	}
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
