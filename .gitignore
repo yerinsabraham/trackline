@@ -11,3 +11,6 @@ harness.config.js
 
 # Local working notes. Never pushed.
 documents/
+
+# Local-only Claude Code settings (phase 0 experiment)
+.claude/settings.local.json
