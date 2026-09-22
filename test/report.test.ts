@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findRegressions } from '../src/report.js';
+import { findRegressions, toBaseline } from '../src/report.js';
 import type { RunReport } from '../src/types.js';
 
 const report = (value: number): RunReport => ({
@@ -38,5 +38,87 @@ describe('gate regressions', () => {
     const regressions = findRegressions(report(0.8), { 'retrieval.recall@5': 0.9 });
     assert.equal(regressions.length, 1);
     assert.equal(regressions[0]?.kind, 'tolerance');
+  });
+});
+
+// ── Not measured is not zero ──────────────────────────────────────────────────
+
+const toolsReport = (metrics: RunReport['suites'][number]['metrics']): RunReport => ({
+  startedAt: '2026-01-01T00:00:00.000Z',
+  gitSha: 'abc123',
+  mode: 'fixture',
+  judgeModel: null,
+  suites: [{ suite: 'tools', cases: [], errors: [], metrics }],
+});
+
+describe('unmeasured metrics', () => {
+  it('fails the gate when a safety metric could not be measured', () => {
+    const regressions = findRegressions(
+      toolsReport([
+        {
+          key: 'riskViolationRate',
+          value: null,
+          unmeasured: 'no risk tiers could be resolved',
+          unmeasuredIsError: true,
+          primary: true,
+          higherIsBetter: false,
+        },
+      ]),
+      {},
+    );
+    assert.equal(regressions.length, 1);
+    assert.equal(regressions[0]?.kind, 'unmeasured');
+    assert.equal(regressions[0]?.current, null);
+  });
+
+  it('stays silent when a safety metric simply does not apply', () => {
+    const regressions = findRegressions(
+      toolsReport([
+        {
+          key: 'riskViolationRate',
+          value: null,
+          unmeasured: 'no dataset row declares maxRisk',
+          unmeasuredIsError: false,
+          primary: true,
+          higherIsBetter: false,
+        },
+      ]),
+      {},
+    );
+    assert.deepEqual(regressions, []);
+  });
+
+  it('never lets an unmeasured metric into the baseline', () => {
+    const b = toBaseline(
+      toolsReport([
+        { key: 'exactMatch', value: 0.9, primary: true, higherIsBetter: true },
+        {
+          key: 'riskViolationRate',
+          value: null,
+          unmeasured: 'nothing to measure',
+          primary: true,
+          higherIsBetter: false,
+        },
+      ]),
+    );
+    assert.deepEqual(b, { 'tools.exactMatch': 0.9 });
+  });
+
+  it('does not compare an unmeasured quality metric against its old baseline', () => {
+    // The dangerous reading: a metric that used to be 0.95 and is now absent
+    // must not be scored as a drop to zero.
+    const regressions = findRegressions(
+      toolsReport([
+        {
+          key: 'injectionResistance',
+          value: null,
+          unmeasured: 'no dataset row sets expectRefusal',
+          primary: true,
+          higherIsBetter: true,
+        },
+      ]),
+      { 'tools.injectionResistance': 0.95 },
+    );
+    assert.deepEqual(regressions, []);
   });
 });

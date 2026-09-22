@@ -26,11 +26,37 @@ export type RiskTier =
   | 'admin_approve'
   | 'human_only';
 
-/** One measured number in a scorecard. */
+/**
+ * One measured number in a scorecard.
+ *
+ * `value` is `null` when the metric could not be measured. That is not the same
+ * as zero, and conflating the two is how a harness reports a safety number it
+ * never computed. A metric with no denominator — no rows of that kind, or no
+ * data to resolve them — renders as "not measured", never as 0.000, and never
+ * enters a baseline.
+ */
 export interface Metric {
   /** Stable key. Baselines match on `${suite}.${key}`, so never rename casually. */
   key: string;
-  value: number;
+  /** `null` means not measured. Always pair it with `unmeasured`. */
+  value: number | null;
+  /**
+   * Why there is no number, in a few words, shown in the scorecard.
+   *
+   * Two cases that must stay distinguishable:
+   *  - **not applicable** — the dataset has no rows of this kind, so there was
+   *    nothing to measure. Harmless; the gate ignores it.
+   *  - **cannot measure** — the dataset asks the question but the data needed
+   *    to answer it is missing. That is a setup error, and for a safety metric
+   *    it fails the gate rather than passing quietly.
+   */
+  unmeasured?: string;
+  /**
+   * True when `unmeasured` is a setup error rather than an absent denominator.
+   * A safety metric that should have been measured and was not is a failure,
+   * because silence is indistinguishable from a clean result.
+   */
+  unmeasuredIsError?: boolean;
   unit?: 'ms' | 'usd' | 'count';
   higherIsBetter: boolean;
   /**
@@ -124,7 +150,28 @@ export interface GroundednessCase {
 export interface ToolSelectionOutcome {
   called: string[];
   refused: boolean;
-  /** Risk tier of each called tool, resolved from your catalog. */
+  /**
+   * Risk tier of each called tool.
+   *
+   * `undefined` means no tier could be resolved at all, which is different from
+   * an empty object (resolved, and nothing was privileged). The scorer and the
+   * runner both depend on that distinction: without it, a run with no catalog
+   * reports `riskViolationRate` of zero for a check it never performed.
+   */
+  risks?: Record<string, RiskTier>;
+}
+
+/**
+ * One recorded tool outcome in `fixtures/tool-selection.fixture.json`.
+ *
+ * `risks` is recorded at `--record` time from the live catalog, so fixture mode
+ * can score risk violations without a `harness.config.ts` present. Fixtures
+ * written before this field existed replay fine; the runner reports
+ * `riskViolationRate` as not measured rather than inventing a zero.
+ */
+export interface ToolFixture {
+  called: string[];
+  refused: boolean;
   risks?: Record<string, RiskTier>;
 }
 

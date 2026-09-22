@@ -28,9 +28,16 @@ export type Baseline = Record<string, number>;
 export interface Regression {
   key: string;
   baseline: number | null;
-  current: number;
+  /** `null` when the metric was not measured at all. */
+  current: number | null;
   delta: number;
-  kind: 'tolerance' | 'floor' | 'missing-baseline';
+  /**
+   * `unmeasured` is a safety metric the dataset asked for and the run could not
+   * compute. It fails the gate because a silent safety metric is
+   * indistinguishable from a clean one, which is the worse of the two readings.
+   */
+  kind: 'tolerance' | 'floor' | 'missing-baseline' | 'unmeasured';
+  detail?: string;
 }
 
 const metricKey = (suite: string, metric: Metric) => `${suite}.${metric.key}`;
@@ -38,7 +45,13 @@ const metricKey = (suite: string, metric: Metric) => `${suite}.${metric.key}`;
 export function toBaseline(report: RunReport): Baseline {
   const out: Baseline = {};
   for (const suite of report.suites) {
-    for (const metric of suite.metrics) out[metricKey(suite.suite, metric)] = metric.value;
+    for (const metric of suite.metrics) {
+      // A metric that was not measured never enters the baseline. Recording it
+      // would freeze an absence as though it were an observation, and every
+      // later run would compare against a number nobody computed.
+      if (metric.value === null) continue;
+      out[metricKey(suite.suite, metric)] = metric.value;
+    }
   }
   return out;
 }
@@ -55,6 +68,21 @@ export function findRegressions(
       const key = metricKey(suite.suite, metric);
 
       if (ZERO_FLOOR.has(metric.key)) {
+        if (metric.value === null) {
+          // Not applicable (no rows of this kind) is fine and silent. Could not
+          // measure, when the dataset asked for it, is a failure.
+          if (metric.unmeasuredIsError) {
+            regressions.push({
+              key,
+              baseline: 0,
+              current: null,
+              delta: 0,
+              kind: 'unmeasured',
+              detail: metric.unmeasured,
+            });
+          }
+          continue;
+        }
         if (metric.value > 0) {
           regressions.push({ key, baseline: 0, current: metric.value, delta: metric.value, kind: 'floor' });
         }
@@ -62,6 +90,7 @@ export function findRegressions(
       }
 
       if (!metric.primary) continue;
+      if (metric.value === null) continue;
 
       const before = baseline[key];
       // A metric with no baseline is new, not regressed. It gets recorded on the
@@ -93,6 +122,7 @@ const BOLD = '\x1b[1m';
 const RESET = '\x1b[0m';
 
 function fmt(metric: Metric): string {
+  if (metric.value === null) return '     —';
   if (metric.unit === 'ms') return `${Math.round(metric.value)}ms`;
   if (metric.unit === 'usd') return `$${metric.value.toFixed(4)}`;
   if (metric.unit === 'count') return String(metric.value);
@@ -115,7 +145,7 @@ function renderSuite(suite: SuiteResult, baseline: Baseline): string {
     const key = metricKey(suite.suite, metric);
     const before = baseline[key];
     let delta = '';
-    if (before !== undefined) {
+    if (metric.value !== null && before !== undefined) {
       const raw = metric.value - before;
       if (Math.abs(raw) >= 0.001) {
         const good = metric.higherIsBetter ? raw > 0 : raw < 0;
@@ -124,6 +154,12 @@ function renderSuite(suite: SuiteResult, baseline: Baseline): string {
       } else {
         delta = ` ${DIM}—${RESET}`;
       }
+    }
+    // An unmeasured metric says so, in place of a number and a delta. Printing
+    // 0.000 here is the bug this whole path exists to prevent.
+    if (metric.value === null) {
+      const colour = metric.unmeasuredIsError ? RED : DIM;
+      delta = ` ${colour}not measured: ${metric.unmeasured ?? 'no reason given'}${RESET}`;
     }
     const tag = metric.primary ? '' : ` ${DIM}(tracked)${RESET}`;
     lines.push(`  ${metric.key.padEnd(22)} ${fmt(metric).padStart(8)}${delta}${tag}`);
@@ -163,9 +199,11 @@ export function renderGate(regressions: Regression[]): string {
     lines.push(
       r.kind === 'missing-baseline'
         ? `  ${RED}${r.key}${RESET} has no committed baseline. Run --update-baseline after reviewing the current value.`
+        : r.kind === 'unmeasured'
+        ? `  ${RED}${r.key}${RESET} was not measured: ${r.detail ?? 'reason unknown'}. A safety metric that cannot be computed is not a passing one.`
         : r.kind === 'floor'
-        ? `  ${RED}${r.key}${RESET} is ${r.current.toFixed(3)}, must be 0. Safety metrics have no tolerance.`
-        : `  ${RED}${r.key}${RESET} ${r.baseline?.toFixed(3)} → ${r.current.toFixed(3)} (worse by ${r.delta.toFixed(3)}, tolerance ${TOLERANCE})`,
+        ? `  ${RED}${r.key}${RESET} is ${r.current?.toFixed(3)}, must be 0. Safety metrics have no tolerance.`
+        : `  ${RED}${r.key}${RESET} ${r.baseline?.toFixed(3)} → ${r.current?.toFixed(3)} (worse by ${r.delta.toFixed(3)}, tolerance ${TOLERANCE})`,
     );
   }
   lines.push(
@@ -175,6 +213,7 @@ export function renderGate(regressions: Regression[]): string {
 }
 
 function plainFmt(metric: Metric): string {
+  if (metric.value === null) return 'not measured';
   if (metric.unit === 'ms') return `${Math.round(metric.value)}ms`;
   if (metric.unit === 'usd') return `$${metric.value.toFixed(4)}`;
   if (metric.unit === 'count') return String(metric.value);
@@ -203,7 +242,7 @@ export function renderMarkdownReport(report: RunReport, baseline: Baseline, regr
     for (const metric of suite.metrics) {
       const key = metricKey(suite.suite, metric);
       const before = baseline[key];
-      const raw = before === undefined ? null : metric.value - before;
+      const raw = before === undefined || metric.value === null ? null : metric.value - before;
       const delta = raw === null || Math.abs(raw) < 0.001 ? '-' : `${raw > 0 ? '+' : ''}${raw.toFixed(3)}`;
       lines.push(
         `| ${metric.key} | ${plainFmt(metric)} | ${before === undefined ? '-' : before.toFixed(3)} | ${delta} | ${metric.primary ? 'yes' : 'tracked'} |`,
@@ -228,10 +267,12 @@ export function renderMarkdownReport(report: RunReport, baseline: Baseline, regr
     for (const r of regressions) {
       if (r.kind === 'missing-baseline') {
         lines.push(`- ${r.key}: missing committed baseline.`);
+      } else if (r.kind === 'unmeasured') {
+        lines.push(`- ${r.key}: not measured (${r.detail ?? 'reason unknown'}). A safety metric that cannot be computed is not a passing one.`);
       } else if (r.kind === 'floor') {
-        lines.push(`- ${r.key}: ${r.current.toFixed(3)}, must be 0.`);
+        lines.push(`- ${r.key}: ${r.current?.toFixed(3)}, must be 0.`);
       } else {
-        lines.push(`- ${r.key}: ${r.baseline?.toFixed(3)} -> ${r.current.toFixed(3)}.`);
+        lines.push(`- ${r.key}: ${r.baseline?.toFixed(3)} -> ${r.current?.toFixed(3)}.`);
       }
     }
   }

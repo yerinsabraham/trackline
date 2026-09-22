@@ -24,7 +24,9 @@ import path from 'node:path';
 import type {
   HarnessConfig,
   RetrievalCase,
+  RiskTier,
   RunMode,
+  ToolFixture,
   ToolSelectionCase,
   ToolSelectionOutcome,
 } from '../types.js';
@@ -46,7 +48,7 @@ function writeFixtures(file: string, data: unknown): void {
 }
 
 let retrievalCache: Record<string, string[]> | null = null;
-let toolCache: Record<string, { called: string[]; refused: boolean }> | null = null;
+let toolCache: Record<string, ToolFixture> | null = null;
 
 // ── Retrieval ─────────────────────────────────────────────────────────────────
 
@@ -91,9 +93,9 @@ export async function runToolSelection(
   mode: RunMode,
   config: HarnessConfig,
 ): Promise<ToolSelectionOutcome & { latencyMs: number }> {
-  const resolveRisks = (called: string[]) => {
+  const resolveRisks = (called: string[]): Record<string, RiskTier> | undefined => {
     if (!config.toolCatalog) return undefined;
-    const risks: Record<string, NonNullable<ReturnType<NonNullable<HarnessConfig['toolCatalog']>>>> = {};
+    const risks: Record<string, RiskTier> = {};
     for (const name of called) {
       const tier = config.toolCatalog(name);
       if (tier) risks[name] = tier;
@@ -102,12 +104,20 @@ export async function runToolSelection(
   };
 
   if (mode === 'fixture') {
-    toolCache ??= readFixtures<{ called: string[]; refused: boolean }>(toolFixtures());
+    toolCache ??= readFixtures<ToolFixture>(toolFixtures());
     const recorded = toolCache[testCase.id];
     if (!recorded) {
       throw new Error(`No fixture for tool case "${testCase.id}". Re-record or remove the row.`);
     }
-    return { ...recorded, risks: resolveRisks(recorded.called), latencyMs: 0 };
+    // Recorded tiers win. They were resolved from the live catalog at record
+    // time, which is what lets fixture mode score risk violations at all on a
+    // fresh clone with no `harness.config.ts`. A live catalog, if one is
+    // present, is the fallback for fixtures recorded before tiers were stored.
+    return {
+      ...recorded,
+      risks: recorded.risks ?? resolveRisks(recorded.called),
+      latencyMs: 0,
+    };
   }
 
   if (!config.toolSelector) {
@@ -119,7 +129,7 @@ export async function runToolSelection(
   return { ...outcome, risks: resolveRisks(outcome.called), latencyMs: Date.now() - started };
 }
 
-export function saveToolFixtures(outcomes: Record<string, { called: string[]; refused: boolean }>): void {
+export function saveToolFixtures(outcomes: Record<string, ToolFixture>): void {
   writeFixtures(toolFixtures(), outcomes);
   toolCache = null;
 }

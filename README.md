@@ -98,6 +98,12 @@ a sentence anyone should be able to ship behind.
 A case that *errors* fails the run outright. Averages computed over a shrunken
 set look better than reality, and that is the most dangerous kind of green.
 
+**A metric that could not be measured never renders as a number.** It reports
+`not measured` with the reason. If the dataset simply has no rows of that kind,
+the gate ignores it. If the dataset asks the question and the run could not
+answer it, a *safety* metric fails the build, because a silent safety metric and
+a clean one look identical and only one of them is true.
+
 For stricter CI, opt in explicitly:
 
 ```bash
@@ -179,6 +185,12 @@ Then `npm run evals:record`, read the fixture diff, `npm run evals:baseline`.
 
 `harness.config.ts` is gitignored: it reaches into your codebase and usually
 holds environment-specific ids.
+
+`toolCatalog` matters more than it looks. Risk tiers are resolved from it at
+record time and **stored in the fixture**, so fixture mode can score
+`riskViolationRate` on a fresh clone with no config present. Without a tier
+from somewhere, a row that declares `maxRisk` is asking a question nothing can
+answer, and the metric reports **not measured** rather than a reassuring zero.
 
 Run `trackline doctor` whenever a dataset, fixture, or baseline diff looks
 suspicious. It checks JSONL shape, duplicate ids, fixture coverage, stale

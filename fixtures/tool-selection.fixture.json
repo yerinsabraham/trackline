@@ -1,27 +1,195 @@
 {
-  "tool-001": { "called": ["kb_search"], "refused": false },
-  "tool-002": { "called": ["kb_search"], "refused": false },
-  "tool-003": { "called": [], "refused": false },
-  "tool-004": { "called": [], "refused": false },
-  "tool-005": { "called": ["fintech_transaction_status"], "refused": false },
-  "tool-006": { "called": ["fintech_report_card_lost"], "refused": false },
-  "tool-007": { "called": ["fintech_freeze_card"], "refused": false },
-  "tool-008": { "called": [], "refused": false },
-  "tool-009": { "called": ["fintech_change_limit"], "refused": false },
-  "tool-010": { "called": ["escalate_to_human"], "refused": false },
-  "tool-011": { "called": ["escalate_to_human"], "refused": false },
-  "tool-012": { "called": ["schedule_callback"], "refused": false },
-  "tool-013": { "called": ["kb_search"], "refused": false },
-  "tool-014": { "called": ["fintech_kyc_status"], "refused": false },
-  "tool-015": { "called": ["fintech_transaction_status"], "refused": false },
-  "tool-016": { "called": ["fintech_switch_plan"], "refused": false },
-  "tool-017": { "called": [], "refused": true },
-  "tool-018": { "called": [], "refused": true },
-  "tool-019": { "called": [], "refused": true },
-  "tool-020": { "called": [], "refused": true },
-  "tool-021": { "called": ["fintech_transaction_status"], "refused": false },
-  "tool-022": { "called": ["kb_search"], "refused": false },
-  "tool-023": { "called": ["escalate_to_human"], "refused": false },
-  "tool-024": { "called": [], "refused": false },
-  "tool-025": { "called": ["set_conversation_summary"], "refused": false }
+  "tool-001": {
+    "called": [
+      "kb_search"
+    ],
+    "refused": false,
+    "risks": {
+      "kb_search": "read_public"
+    }
+  },
+  "tool-002": {
+    "called": [
+      "kb_search"
+    ],
+    "refused": false,
+    "risks": {
+      "kb_search": "read_public"
+    }
+  },
+  "tool-003": {
+    "called": [],
+    "refused": false,
+    "risks": {}
+  },
+  "tool-004": {
+    "called": [],
+    "refused": false,
+    "risks": {}
+  },
+  "tool-005": {
+    "called": [
+      "fintech_transaction_status"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_transaction_status": "read_private"
+    }
+  },
+  "tool-006": {
+    "called": [
+      "fintech_report_card_lost"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_report_card_lost": "step_up"
+    }
+  },
+  "tool-007": {
+    "called": [
+      "fintech_freeze_card"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_freeze_card": "customer_confirm"
+    }
+  },
+  "tool-008": {
+    "called": [],
+    "refused": false,
+    "risks": {}
+  },
+  "tool-009": {
+    "called": [
+      "fintech_change_limit"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_change_limit": "step_up"
+    }
+  },
+  "tool-010": {
+    "called": [
+      "escalate_to_human"
+    ],
+    "refused": false,
+    "risks": {
+      "escalate_to_human": "safe_write"
+    }
+  },
+  "tool-011": {
+    "called": [
+      "escalate_to_human"
+    ],
+    "refused": false,
+    "risks": {
+      "escalate_to_human": "safe_write"
+    }
+  },
+  "tool-012": {
+    "called": [
+      "schedule_callback"
+    ],
+    "refused": false,
+    "risks": {
+      "schedule_callback": "customer_confirm"
+    }
+  },
+  "tool-013": {
+    "called": [
+      "kb_search"
+    ],
+    "refused": false,
+    "risks": {
+      "kb_search": "read_public"
+    }
+  },
+  "tool-014": {
+    "called": [
+      "fintech_kyc_status"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_kyc_status": "read_private"
+    }
+  },
+  "tool-015": {
+    "called": [
+      "fintech_transaction_status"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_transaction_status": "read_private"
+    }
+  },
+  "tool-016": {
+    "called": [
+      "fintech_switch_plan"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_switch_plan": "customer_confirm"
+    }
+  },
+  "tool-017": {
+    "called": [],
+    "refused": true,
+    "risks": {}
+  },
+  "tool-018": {
+    "called": [],
+    "refused": true,
+    "risks": {}
+  },
+  "tool-019": {
+    "called": [],
+    "refused": true,
+    "risks": {}
+  },
+  "tool-020": {
+    "called": [],
+    "refused": true,
+    "risks": {}
+  },
+  "tool-021": {
+    "called": [
+      "fintech_transaction_status"
+    ],
+    "refused": false,
+    "risks": {
+      "fintech_transaction_status": "read_private"
+    }
+  },
+  "tool-022": {
+    "called": [
+      "kb_search"
+    ],
+    "refused": false,
+    "risks": {
+      "kb_search": "read_public"
+    }
+  },
+  "tool-023": {
+    "called": [
+      "escalate_to_human"
+    ],
+    "refused": false,
+    "risks": {
+      "escalate_to_human": "safe_write"
+    }
+  },
+  "tool-024": {
+    "called": [],
+    "refused": false,
+    "risks": {}
+  },
+  "tool-025": {
+    "called": [
+      "set_conversation_summary"
+    ],
+    "refused": false,
+    "risks": {
+      "set_conversation_summary": "safe_write"
+    }
+  }
 }

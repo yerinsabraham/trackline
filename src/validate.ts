@@ -301,6 +301,71 @@ function validateBaseline(root: string, issues: ValidationIssue[], strict: boole
   }
 }
 
+/**
+ * Can `riskViolationRate` actually be computed?
+ *
+ * A dataset row that declares `maxRisk` is asking a safety question. If nothing
+ * can resolve a tool's tier, that question goes unanswered, and before this
+ * check existed the runner reported a clean `0.000` for it. Catch it here,
+ * before the scorer produces a number nobody can stand behind.
+ */
+function validateRiskCoverage(
+  root: string,
+  toolRows: Record<string, unknown>[],
+  issues: ValidationIssue[],
+  fixtureMode: boolean,
+): void {
+  const riskRows = toolRows.filter((r) => r.maxRisk !== undefined);
+  if (riskRows.length === 0) return;
+
+  const hasConfig = ['harness.config.ts', 'harness.config.js'].some((f) =>
+    fs.existsSync(path.join(root, f)),
+  );
+  // A live run resolves tiers from the config; a fixture run replays recorded
+  // ones, falling back to the config when the fixture predates the field.
+  if (!fixtureMode) {
+    if (!hasConfig) {
+      issue(
+        issues,
+        'error',
+        'risk_unresolvable',
+        `${riskRows.length} tool row(s) declare maxRisk but there is no harness.config.ts to resolve tiers from. ` +
+          'riskViolationRate cannot be measured.',
+        'datasets/tool-selection.jsonl',
+      );
+    }
+    return;
+  }
+
+  const file = `fixtures/${FIXTURE_FILES.tools}`;
+  if (!fs.existsSync(path.join(root, file))) return;
+  const fixtures = readJsonObject(root, file, issues);
+  if (!fixtures) return;
+
+  const missing = riskRows
+    .map((r) => (typeof r.id === 'string' ? r.id : undefined))
+    .filter((id): id is string => Boolean(id))
+    .filter((id) => {
+      const fx = fixtures[id];
+      return isRecord(fx) && fx.risks === undefined;
+    });
+
+  if (missing.length === 0) return;
+
+  // With a config present the runner can still resolve tiers itself, so this is
+  // staleness rather than a hole.
+  issue(
+    issues,
+    hasConfig ? 'warning' : 'error',
+    'risk_unresolvable',
+    `${missing.length} of ${riskRows.length} maxRisk row(s) have fixtures with no recorded risk tiers` +
+      (hasConfig
+        ? '. They will fall back to harness.config.ts; re-record to store them.'
+        : `, and there is no harness.config.ts to fall back on. riskViolationRate cannot be measured. First: ${missing.slice(0, 3).join(', ')}`),
+    file,
+  );
+}
+
 export function validateProject(root: string, options: ValidationOptions = {}): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const fixtureMode = (options.mode ?? 'fixture') === 'fixture';
@@ -314,6 +379,7 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
   validateGroundedness(groundedness, issues);
   validateFixtureCoverage(root, 'retrieval', retrievalIds, issues, fixtureMode);
   validateFixtureCoverage(root, 'tools', toolIds, issues, fixtureMode);
+  validateRiskCoverage(root, tools, issues, fixtureMode);
   validateBaseline(root, issues, Boolean(options.strictBaseline));
 
   return issues;
