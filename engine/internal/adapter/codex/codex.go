@@ -81,6 +81,8 @@ func action(p payload) event.Action {
 
 	switch p.ToolName {
 	case "apply_patch":
+		// The patch is both the instruction and the content, so it is the body.
+		a.Body, a.Truncated = event.TrimBody(in.Command)
 		ops, ok := parsePatch(in.Command)
 		if !ok {
 			// A patch that would not parse may have touched anything.

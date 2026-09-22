@@ -33,6 +33,22 @@ type toolInput struct {
 	Path         string `json:"path"`
 	Command      string `json:"command"`
 	NotebookPath string `json:"notebook_path"`
+
+	// What is being written, under the name each tool uses for it.
+	Content   string `json:"content"`
+	NewString string `json:"new_string"`
+	OldString string `json:"old_string"`
+	NewSource string `json:"new_source"`
+}
+
+// body returns whichever field carries the written content.
+func (in toolInput) body() string {
+	for _, s := range []string{in.Content, in.NewString, in.NewSource} {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 var phases = map[string]event.Phase{
@@ -112,6 +128,11 @@ func action(p payload) event.Action {
 		// command touches nothing.
 		a.PathsUnknown = true
 		return a
+	}
+
+	a.Body, a.Truncated = event.TrimBody(in.body())
+	if in.OldString != "" {
+		a.PriorBody, _ = event.TrimBody(in.OldString)
 	}
 
 	for _, c := range []string{in.FilePath, in.Path, in.NotebookPath} {

@@ -80,6 +80,26 @@ type Action struct {
 	// Command is set for ActionRunCommand.
 	Command string `json:"command,omitempty"`
 
+	// Body is what is being written: file content, an edit's replacement text,
+	// or a patch. Checks that need to know *what* changed rather than *which
+	// file* changed read this.
+	//
+	// Capped at BodyLimit. A body is the largest thing in an event by far, and
+	// this type is written to a recording on every tool call, so an uncapped
+	// field would make replays enormous. When it is cut, Truncated says so,
+	// and a check reading a truncated body must degrade rather than conclude
+	// from the part it can see.
+	Body string `json:"body,omitempty"`
+
+	// PriorBody is the text being replaced, where the host provides it: an
+	// edit's old_string, for instance.
+	//
+	// Without it, adding a dependency and upgrading one look identical — both
+	// are just a line mentioning a package. Checks that must distinguish an
+	// addition from a change need both sides, and must report cannot-measure
+	// when only one is available rather than guessing.
+	PriorBody string `json:"priorBody,omitempty"`
+
 	// ToolName is the host's own name for the tool, kept for evidence only.
 	ToolName string `json:"toolName,omitempty"`
 
@@ -93,10 +113,25 @@ type Action struct {
 	// honest option. See docs/experiments/03-otel-traces.md.
 	ToolNameUnknown bool `json:"toolNameUnknown,omitempty"`
 
-	// Truncated marks content the host or an exporter cut short. A rule read
-	// from truncated content may be missing the clause that mattered, so a
-	// check reading it must degrade rather than assume.
+	// Truncated marks content the host, an exporter, or BodyLimit cut short. A
+	// rule or a diff read from truncated content may be missing the part that
+	// mattered, so a check reading it must degrade rather than assume.
 	Truncated bool `json:"truncated,omitempty"`
+}
+
+// BodyLimit caps Action.Body.
+//
+// Large enough for a realistic file write or patch, small enough that a
+// recording of a long session stays readable and a hook stays inside its
+// latency budget.
+const BodyLimit = 64 << 10
+
+// TrimBody applies BodyLimit, reporting whether it had to cut.
+func TrimBody(s string) (string, bool) {
+	if len(s) <= BodyLimit {
+		return s, false
+	}
+	return s[:BodyLimit], true
 }
 
 // Event is one thing an agent did.

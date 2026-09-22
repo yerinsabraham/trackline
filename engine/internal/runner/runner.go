@@ -17,6 +17,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/intent"
 	"github.com/yerinsabraham/trackline/engine/internal/signal"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/dependency"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/offlimits"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
@@ -137,6 +138,9 @@ func build(cfg config.Config) []signal.Signal {
 	var out []signal.Signal
 	if !cfg.IsDisabled(offlimits.Name) {
 		out = append(out, offlimits.New(cfg.OffLimits))
+	}
+	if !cfg.IsDisabled(dependency.Name) {
+		out = append(out, dependency.New())
 	}
 	return out
 }
