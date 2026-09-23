@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/config"
+	"github.com/yerinsabraham/trackline/engine/internal/hosts"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
 	"github.com/yerinsabraham/trackline/engine/internal/mcp"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
@@ -171,13 +172,9 @@ func cmdInit(args []string) error {
 	fmt.Printf("\nmode: warn — it will notice things and write them down, and never interrupt you.\n")
 	fmt.Printf("findings go to %s\n", filepath.Join(".trackline", "findings.jsonl"))
 
-	if install.Host(f.host) == install.Codex {
-		fmt.Print("\nCodex requires hooks to be reviewed before they run.\n" +
-			"Run /hooks in Codex and trust this one, or it will silently never fire.\n")
-	}
-	if install.Host(f.host) == install.Cursor {
-		fmt.Print("\nCursor loads project hooks only once the agent is inside this folder.\n" +
-			"Start the agent here. Anything it does elsewhere first is not seen.\n")
+	// Said at install, not discovered later. See internal/hosts.
+	if caps, ok := hosts.For(f.host); ok {
+		fmt.Print("\n" + caps.Describe())
 	}
 
 	fmt.Print("\nOne thing left, and it matters: a misconfigured hook does not warn, it\n" +
@@ -220,6 +217,9 @@ func cmdDoctor(args []string) error {
 		fmt.Printf("wiring:      not installed for %s (run trackline init)\n", f.host)
 	} else {
 		fmt.Printf("wiring:      %s exists\n", rel(f.root, path))
+	}
+	if caps, ok := hosts.For(f.host); ok {
+		fmt.Print("\n" + caps.Describe())
 	}
 	return nil
 }
