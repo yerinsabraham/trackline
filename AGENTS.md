@@ -37,8 +37,10 @@ Cursor, or anything else. `CLAUDE.md` imports this file.
    ```
 
 3. **`documents/` is local-only and gitignored.** Working notes, the issue
-   tracker, the build plan, research. Never commit it, and never reference it
-   from a file that *is* committed. The README must not link into it.
+   tracker, the build plan, strategy, research. Never commit it, and never link
+   into it from anything public — the README, `docs/`, the website. Agent
+   guidance like this file may name it, since it only exists where an agent is
+   working locally anyway.
 
 4. **`harness.config.ts` is gitignored** and reaches into the user's own
    codebase. Never commit one, never assume one exists.
@@ -51,11 +53,13 @@ Cursor, or anything else. `CLAUDE.md` imports this file.
 
 ## What this is
 
-**Trackline is an alignment layer for AI agents.** It checks whether an agent's
+**Trackline is a neutral alignment layer for AI agents.** It checks whether an agent's
 actions still match the task, the rules and the evidence it was given, across
 two surfaces: locally beside a coding agent while it works, and in production
 over agent traces. One core engine: normalise what the agent did, compare it
-against intent, produce an evidence-backed verdict.
+against intent, produce an evidence-backed verdict. Neutral is the point: it
+governs every agent a team uses from one place, which no single vendor can do
+for a competitor's agent. Do not add anything that ties the engine to one host.
 
 **What exists today is the CI eval gate**, which is what this codebase currently
 is: a CLI that scores retrieval, tool selection and groundedness against
@@ -198,6 +202,9 @@ which one moved the number.
 `documents/` holds the planning material, and it is gitignored. Read it before
 starting work:
 
+- `STRATEGY.md` — **read first.** The position (a neutral layer across every
+  agent, not a competitor to any one vendor), the OpenRouter case study, and
+  when a product front end gets built
 - `ISSUES.md` — the reviewed, prioritised issue list
 - `BUILD-PLAN.md` — the phase plan, with a review log
 - `IDEA-agent-watcher.md`, `RESEARCH-market-and-prior-art.md` — the reasoning

@@ -16,6 +16,12 @@ trackline init
 That is it. It runs beside Claude Code or Codex, notices things, and writes them
 down. **In its default mode it cannot interrupt you.**
 
+**It is not tied to any one agent.** The same rules apply whether a task runs
+through Claude Code or Codex, and the same findings come out, because each
+agent's events are turned into one shape before anything is checked. A vendor
+can govern its own agent; only something that belongs to none of them can
+govern all of them the same way.
+
 ---
 
 ## What it actually catches
