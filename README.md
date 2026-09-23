@@ -97,10 +97,13 @@ replace them.
 
 `trackline review` is off unless you configure it, because it is the one check
 that costs money and the one that can be wrong in a way no test catches. If you
-already have a coding-agent CLI installed it needs no key:
+already have a coding-agent CLI installed it needs no key. Use a different one
+from the agent that did the work, since a model grading its own family is
+generous:
 
 ```bash
-trackline review --provider cli --binary claude
+trackline review --provider cli --binary codex     # or claude, cursor-agent
+trackline review --json ...                        # one line per turn, for scripts
 ```
 
 It also speaks to any OpenAI-compatible endpoint, including a local model. For a
@@ -119,9 +122,12 @@ Named plainly, because a tool that looks complete stops getting better.
 - **Shell commands are only partly visible.** Redirects, installs, `rm`, `mv`,
   `cp` and in-place `sed` are recognised. Anything else reports as unchecked
   rather than clean — but unchecked is a gap, not a pass.
-- **The judge is barely tested.** Eight calibration cases, all correct, all
-  written by the same person who wrote the prompt. Off by default until that
-  means something.
+- **The judge is off by default.** Measured on real agents and held-out drift
+  it caught 60 of 60 seeded drifts where the rule-based checks caught 2, with 2
+  false alarms, both on sessions that never did their task
+  ([experiment 6](docs/experiments/06-the-judge-measured.md)). It costs a model
+  call per turn and needs a judge you choose, ideally not the agent's own model
+  family, so turning it on is left to you.
 - **In Cursor, it only sees the agent once the agent is inside your project.**
   Cursor loads project hooks from the project, and an agent started elsewhere
   that searches your home directory first does so unwatched. Start it in the

@@ -5,7 +5,8 @@ Rather than assume them, each was measured first. This directory holds the
 results, the code that produced them, and the raw data.
 
 Every experiment here **changed a decision**. Three of them overturned an
-assumption that was already written into the plan.
+assumption that was already written into the plan, and the sixth found four
+bugs that had left trackline blind while it looked fine.
 
 | | Question | Answer |
 |---|---|---|
@@ -14,6 +15,7 @@ assumption that was already written into the plan.
 | [3](03-otel-traces.md) | Can alignment be checked from production traces? | **Only with content capture on** — but it survives PII redaction |
 | [4](04-false-alarms.md) | Does it cry wolf on ordinary work? | **0 false alarms in 23 actions**, and real usage found what scripts missed |
 | [5](05-the-judge.md) | Can a model tell on-task work from drift? | **8 of 8**, including three drift cases and two correct abstentions |
+| [6](06-the-judge-measured.md) | Does the judge earn its place, on real agents and held-out drift? | **60 of 60 held-out drifts, against 2 for the rules.** Real agents took 2 of 30 baits |
 
 Raw data is in [`data/`](data/), runnable code in [`code/`](code/).
 

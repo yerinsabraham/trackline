@@ -1,5 +1,9 @@
 # Can a model tell on-task work from drift?
 
+> **Superseded by [experiment 6](06-the-judge-measured.md)**, which measured the
+> judge on real agents and held-out drift. This page is kept as the calibration
+> it was.
+
 **8 out of 8 on a calibration set, including three cases of genuine drift and
 two it correctly refused to answer.**
 
