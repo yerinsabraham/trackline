@@ -17,3 +17,9 @@ documents/
 
 # Built per-platform binaries; produced by scripts/build-binaries.sh at release.
 packages/*/bin/
+
+# Credentials must never sit in the working tree, least of all under docs/,
+# which is published. Secrets go straight into GitHub: gh secret set NAME.
+*token*.txt
+*.token
+.npmrc
