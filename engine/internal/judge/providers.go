@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -45,7 +46,14 @@ func (c CLI) Ask(ctx context.Context, system, user string) (string, error) {
 	// interface.
 	prompt := system + "\n\n---\n\n" + user
 
-	cmd := exec.CommandContext(ctx, c.Binary, "-p", prompt)
+	args, lastMessage, err := invocation(c.Binary, prompt)
+	if err != nil {
+		return "", err
+	}
+	if lastMessage != "" {
+		defer os.Remove(lastMessage)
+	}
+	cmd := exec.CommandContext(ctx, c.Binary, args...)
 	// The judge must not be able to touch anything. A CLI given no working
 	// directory of consequence and no tools has nothing to reach for, and an
 	// empty stdin stops it waiting on input that will never arrive.
@@ -57,6 +65,14 @@ func (c CLI) Ask(ctx context.Context, system, user string) (string, error) {
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("%s failed: %w (%.200s)", c.Binary, err, errb.String())
+	}
+	if lastMessage != "" {
+		// Codex prints its progress to stdout; the answer alone is in the file.
+		b, err := os.ReadFile(lastMessage)
+		if err != nil {
+			return "", fmt.Errorf("%s gave no final answer: %w", c.Binary, err)
+		}
+		return string(b), nil
 	}
 	return out.String(), nil
 }
@@ -151,4 +167,33 @@ func (h HTTP) Ask(ctx context.Context, system, user string) (string, error) {
 		return "", fmt.Errorf("%s returned no answer", base)
 	}
 	return parsed.Choices[0].Message.Content, nil
+}
+
+// invocation says how to ask each CLI one question and get one answer.
+//
+// They do not share a convention. `claude -p` is print mode; `codex -p` is a
+// config profile, so for as long as this passed -p to every binary, the
+// documented `--binary codex` never worked. Each is now spelled out, and an
+// unknown binary is refused rather than guessed at.
+//
+// lastMessage, when set, is a file the CLI writes its final answer to.
+func invocation(binary, prompt string) (args []string, lastMessage string, err error) {
+	switch filepath.Base(binary) {
+	case "claude":
+		return []string{"-p", prompt}, "", nil
+	case "codex":
+		f, err := os.CreateTemp("", "trackline-judge-*.txt")
+		if err != nil {
+			return nil, "", err
+		}
+		f.Close()
+		// Read-only and ephemeral: a judge that can write, or that leaves a
+		// session behind in the user's history, is not observing.
+		return []string{"exec", "--skip-git-repo-check", "--sandbox", "read-only",
+			"--ephemeral", "--color", "never", "-o", f.Name(), prompt}, f.Name(), nil
+	case "cursor-agent", "agent":
+		// Plan mode reads and answers; it does not edit.
+		return []string{"-p", "--mode", "plan", "--output-format", "text", prompt}, "", nil
+	}
+	return nil, "", fmt.Errorf("do not know how to ask %q for one answer; supported: claude, codex, cursor-agent", binary)
 }

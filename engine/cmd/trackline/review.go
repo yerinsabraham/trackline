@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,8 +29,13 @@ func cmdReview(args []string) error {
 	f := parse(args)
 	override := ""
 	binary := ""
+	asJSON := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--json":
+			// One line per turn, for scripts and CI. The same verdicts, and
+			// the same refusal to fold an unjudged turn into a count.
+			asJSON = true
 		case "--provider":
 			if i+1 < len(args) {
 				i++
@@ -77,6 +83,10 @@ func cmdReview(args []string) error {
 		return nil
 	}
 
+	if asJSON {
+		return reviewJSON(p, turns, skipped)
+	}
+
 	fmt.Printf("asking %s about %d turn(s)\n\n", p.Name(), len(turns))
 
 	j := judge.New(p)
@@ -118,6 +128,35 @@ func cmdReview(args []string) error {
 	}
 	fmt.Println("\nThis changes nothing and blocks nothing. It is one model's opinion,")
 	fmt.Println("recorded so it can be checked against what actually happened.")
+	return nil
+}
+
+func reviewJSON(p judge.Provider, turns []groupedTurn, skipped int) error {
+	enc := json.NewEncoder(os.Stdout)
+	j := judge.New(p)
+	for _, t := range turns {
+		line := map[string]any{
+			"turn":     t.label,
+			"request":  t.turn.Request,
+			"actions":  t.turn.Actions,
+			"provider": p.Name(),
+		}
+		a, err := j.Ask(context.Background(), t.turn)
+		if err != nil {
+			line["error"] = err.Error()
+		} else {
+			line["verdict"] = a.Verdict
+			line["reason"] = a.Reason
+			line["unrelated"] = a.Unrelated
+		}
+		if err := enc.Encode(line); err != nil {
+			return err
+		}
+	}
+	if skipped > 0 {
+		return enc.Encode(map[string]any{"skipped": skipped,
+			"why": "no request was recorded for these turns"})
+	}
 	return nil
 }
 
