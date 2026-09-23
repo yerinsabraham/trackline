@@ -17,7 +17,7 @@
 //
 // Usage, from a PreToolUse hook:
 //
-//	trackline-hook [-host auto|claude|codex] [-root DIR] [-log FILE]
+//	trackline-hook [-host auto|claude|codex|cursor] [-root DIR] [-log FILE]
 package main
 
 import (
@@ -40,40 +40,79 @@ const (
 )
 
 func main() {
+	// Resolved before anything can fail, because how to say "allow" depends
+	// on it.
+	resolved := runner.HostAuto
+
 	// Nothing below may take the process down. A crashed hook is a disabled
 	// hook, and a disabled safety tool that nobody noticed is worse than no
 	// safety tool at all.
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(os.Stderr, "trackline: internal error, allowing the action: %v\n", r)
-			os.Exit(exitAllow)
+			allow(resolved)
 		}
 	}()
 
-	host := flag.String("host", runner.HostAuto, "claude, codex, or auto to detect")
+	host := flag.String("host", runner.HostAuto, "claude, codex, cursor, or auto to detect")
 	root := flag.String("root", "", "project root (defaults to the event's cwd)")
 	logPath := flag.String("log", "", "findings log (defaults to <root>/.trackline/findings.jsonl)")
 	flag.Parse()
+	resolved = *host
 
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil || len(raw) == 0 {
 		// No readable event means nothing to judge. Allow.
-		os.Exit(exitAllow)
+		allow(resolved)
+	}
+	if resolved == runner.HostAuto {
+		resolved = runner.Detect(raw)
 	}
 
-	d, err := runner.Run(raw, runner.Options{Host: *host, Root: *root, Now: time.Now()})
+	d, err := runner.Run(raw, runner.Options{Host: resolved, Root: *root, Now: time.Now()})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "trackline: %v\n", err)
-		os.Exit(exitAllow)
+		allow(resolved)
 	}
 
 	record(*logPath, *root, d)
 
 	if d.Block {
-		fmt.Fprint(os.Stderr, d.Message)
-		os.Exit(exitBlock)
+		block(resolved, d.Message)
+	}
+	allow(resolved)
+}
+
+// allow lets the action proceed.
+//
+// Cursor treats a permission hook's unreadable output as a denial, so it gets
+// a JSON answer. That answer is an empty object, not "permission":"allow":
+// an explicit allow can override Cursor's own approval prompt, and a watcher
+// must never grant what the user would otherwise have been asked about.
+func allow(host string) {
+	if host == runner.HostCursor {
+		fmt.Print("{}")
 	}
 	os.Exit(exitAllow)
+}
+
+// block stops the action and gives the agent the reason.
+//
+// Claude Code and Codex read the reason from stderr on exit 2. Cursor reads
+// agent_message from JSON on stdout, which is the documented path for a reason
+// the model sees; exit 2 there is also a denial, but carries no message.
+func block(host, message string) {
+	if host == runner.HostCursor {
+		out, _ := json.Marshal(map[string]string{
+			"permission":    "deny",
+			"agent_message": message,
+			"user_message":  message,
+		})
+		fmt.Print(string(out))
+		os.Exit(exitAllow)
+	}
+	fmt.Fprint(os.Stderr, message)
+	os.Exit(exitBlock)
 }
 
 // record appends findings to the log.

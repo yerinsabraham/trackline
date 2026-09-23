@@ -18,6 +18,10 @@ func TestDetectsHostFromPayloadShape(t *testing.T) {
 		{`{"turn_id":"t","tool_name":"apply_patch"}`, runner.HostCodex},
 		{`{"model":"gpt-5","tool_name":"shell"}`, runner.HostCodex},
 		{`{"tool_name":"Write"}`, runner.HostClaude},
+		{`{"cursor_version":"3.21.18","generation_id":"g","tool_name":"Write"}`, runner.HostCursor},
+		// Cursor also runs Claude-format hooks. Its payload still says Cursor.
+		{`{"cursor_version":"3.21.18","prompt_id":"p","tool_name":"Write"}`, runner.HostCursor},
+		{"\xEF\xBB\xBF" + `{"cursor_version":"3.21.18","tool_name":"Write"}`, runner.HostCursor},
 		{`not json`, runner.HostClaude},
 	}
 	for _, c := range cases {
@@ -153,5 +157,29 @@ func TestUnreadableCommandsAreStillUnmeasured(t *testing.T) {
 	}
 	if len(d.Report.Unmeasured()) == 0 {
 		t.Error("an unrecognised command could do anything and must not read as clean")
+	}
+}
+
+// The same protected write, arriving from Cursor, reaches the same decision
+// through the unchanged core.
+func TestCursorPayloadIsJudgedLikeAnyOther(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, ".trackline.json"),
+		[]byte(`{"modes":{"off-limits":"auto"}}`), 0o600)
+
+	raw := []byte(`{"hook_event_name":"preToolUse","conversation_id":"c","generation_id":"g",
+		"tool_use_id":"u","tool_name":"Write","cursor_version":"3.21.18",
+		"workspace_roots":["` + root + `"],"transcript_path":null,
+		"tool_input":{"file_path":"` + filepath.Join(root, ".env") + `","content":"SECRET=1"}}`)
+
+	d, err := runner.Run(raw, runner.Options{Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Block {
+		t.Fatal("a protected write from Cursor must block in auto mode, as from any host")
+	}
+	if !strings.Contains(d.Message, ".env") {
+		t.Errorf("block message must name the file:\n%s", d.Message)
 	}
 }

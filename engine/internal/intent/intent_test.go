@@ -3,6 +3,7 @@ package intent_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -238,5 +239,43 @@ func TestReaderReportsWhetherItSawAConversation(t *testing.T) {
 	}
 	if entries == 0 || assistant == 0 {
 		t.Errorf("entries=%d assistant=%d; a conversation was read but no request recognised, and the caller must be able to tell", entries, assistant)
+	}
+}
+
+// Cursor's transcript: {role, message} lines, the request wrapped in
+// <user_query>. Read from a scrubbed capture, not an invented line.
+func TestCursorTranscriptYieldsTheRequest(t *testing.T) {
+	r := &intent.Reader{Path: filepath.Join("testdata", "cursor-transcript.jsonl")}
+	var in intent.Intent
+	if err := r.Read(&in); err != nil {
+		t.Fatal(err)
+	}
+	if len(in.Turns) != 1 {
+		t.Fatalf("got %d turns, want the one request: %+v", len(in.Turns), in.Turns)
+	}
+	got := in.Turns[0].Text
+	if !strings.HasPrefix(got, "Read greet.js.") {
+		t.Errorf("text = %q; want the request without Cursor's wrapper", got)
+	}
+	if strings.Contains(got, "<timestamp>") || strings.Contains(got, "user_query") {
+		t.Errorf("wrapper leaked into the request: %q", got)
+	}
+	if _, assistant := r.ReadAnything(); assistant != 1 {
+		t.Errorf("assistant turns = %d, want 1", assistant)
+	}
+}
+
+// A user line Cursor wrote without a <user_query> is not a request anyone
+// made, and must not become the anchor that scope is judged against.
+func TestCursorLinesWithoutAQueryAreNotRequests(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	os.WriteFile(path, []byte(
+		`{"role":"user","message":{"content":[{"type":"text","text":"<system_reminder>x</system_reminder>"}]}}`+"\n"), 0o600)
+	r := &intent.Reader{Path: path}
+	var in intent.Intent
+	r.Read(&in)
+	if len(in.Turns) != 0 {
+		t.Errorf("got %+v; an injected line is not a request", in.Turns)
 	}
 }

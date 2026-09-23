@@ -1,0 +1,18 @@
+{
+  "conversation_id": "a485abca-3fce-4d61-af3f-fad829c301e3",
+  "generation_id": "cbd6bbc9-3d0b-463b-bb7c-7273f14b9cf2",
+  "model": "grok-4.6",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/work/lab/farewell.js"
+  },
+  "tool_use_id": "call-66590cd9-ee88-4941-b74e-285c8c978c72-13\nfc_bfcd5ccb-66c4-97d3-ab0f-0f9a018cdbf0_1",
+  "session_id": "a485abca-3fce-4d61-af3f-fad829c301e3",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "3.21.18",
+  "workspace_roots": [
+    "/work/lab"
+  ],
+  "user_email": "user@example.com",
+  "transcript_path": "/home/user/.cursor/projects/work-lab/agent-transcripts/a485abca-3fce-4d61-af3f-fad829c301e3/a485abca-3fce-4d61-af3f-fad829c301e3.jsonl"
+}

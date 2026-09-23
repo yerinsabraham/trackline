@@ -1,0 +1,21 @@
+{
+  "conversation_id": "a485abca-3fce-4d61-af3f-fad829c301e3",
+  "generation_id": "cbd6bbc9-3d0b-463b-bb7c-7273f14b9cf2",
+  "model": "grok-4.6",
+  "tool_name": "Shell",
+  "tool_input": {
+    "command": "node -e \"console.log(require('./greet').greet('Ada'))\"",
+    "cwd": "/work/lab",
+    "timeout": 30000
+  },
+  "tool_use_id": "c925eeb1-54dd-4543-b354-5bc9dfdf6ba3",
+  "cwd": "/work/lab",
+  "session_id": "a485abca-3fce-4d61-af3f-fad829c301e3",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "3.21.18",
+  "workspace_roots": [
+    "/work/lab"
+  ],
+  "user_email": "user@example.com",
+  "transcript_path": "/home/user/.cursor/projects/work-lab/agent-transcripts/a485abca-3fce-4d61-af3f-fad829c301e3/a485abca-3fce-4d61-af3f-fad829c301e3.jsonl"
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -47,7 +48,11 @@ func (r *Reader) ReadAnything() (entries, assistantTurns int) {
 // 31 were genuine human turns. TurnOrigin and Origin.Kind separate them
 // cleanly, so no heuristic is needed for this part.
 type claudeEntry struct {
-	Type       string `json:"type"`
+	Type string `json:"type"`
+	// Role is Cursor's field. Its transcript lines are {role, message} with no
+	// type, timestamp or id, and share the message.content shape with Claude,
+	// so one struct reads both.
+	Role       string `json:"role"`
 	UserType   string `json:"userType"`
 	TurnOrigin string `json:"turnOrigin"`
 	Origin     struct {
@@ -76,6 +81,36 @@ func (e claudeEntry) isHumanTurn() bool {
 		return false
 	}
 	return humanOrigins[e.TurnOrigin] || e.Origin.Kind == "human"
+}
+
+func (e claudeEntry) isAssistant() bool {
+	return e.Type == "assistant" || (e.Type == "" && e.Role == "assistant")
+}
+
+// cursorRequest returns what the person typed, from a Cursor user line.
+//
+// Cursor wraps it: a <timestamp> block, then the request inside <user_query>.
+// The hook's own beforeSubmitPrompt payload carried an empty prompt in the
+// captured session, so this is the only place the request is recorded at all.
+//
+// A user line with no <user_query> is something Cursor injected rather than
+// something a person asked for, and is skipped rather than guessed at.
+func (e claudeEntry) cursorRequest() (string, bool) {
+	if e.Type != "" || e.Role != "user" {
+		return "", false
+	}
+	txt := e.text()
+	const open, close = "<user_query>", "</user_query>"
+	i := strings.Index(txt, open)
+	if i < 0 {
+		return "", false
+	}
+	rest := txt[i+len(open):]
+	if j := strings.Index(rest, close); j >= 0 {
+		rest = rest[:j]
+	}
+	rest = strings.TrimSpace(rest)
+	return rest, rest != ""
 }
 
 // text pulls the human-written text out of a message body, which is either a
@@ -160,8 +195,15 @@ func (r *Reader) Read(in *Intent) error {
 			continue // a line we cannot read is skipped, not fatal
 		}
 		r.sawEntries++
-		if e.Type == "assistant" {
+		if e.isAssistant() {
 			r.sawAssistant++
+		}
+		if req, ok := e.cursorRequest(); ok {
+			// No id and no timestamp on the line. Turns stay in order, which is
+			// what Anchor and Recent need; matching a turn to its actions by id
+			// is not available for Cursor, and review says so.
+			in.Add("", time.Time{}, req)
+			continue
 		}
 		if !e.isHumanTurn() {
 			continue

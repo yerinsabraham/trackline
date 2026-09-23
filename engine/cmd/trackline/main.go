@@ -4,7 +4,7 @@
 // never run by hand: it is what the agent invokes, and it exists apart so that
 // the thing on the latency-critical path carries nothing it does not need.
 //
-//	trackline init [--host claude|codex] [--root DIR]
+//	trackline init [--host claude|codex|cursor] [--root DIR]
 //	trackline status [--root DIR]
 //	trackline doctor
 package main
@@ -73,7 +73,7 @@ func usage() {
   allowed  list what has been approved
   revoke   withdraw an approval
 
-Flags: --host claude|codex   --root DIR
+Flags: --host claude|codex|cursor   --root DIR
 `)
 }
 
@@ -159,6 +159,10 @@ func cmdInit(args []string) error {
 	if install.Host(f.host) == install.Codex {
 		fmt.Print("\nCodex requires hooks to be reviewed before they run.\n" +
 			"Run /hooks in Codex and trust this one, or it will silently never fire.\n")
+	}
+	if install.Host(f.host) == install.Cursor {
+		fmt.Print("\nCursor loads project hooks only once the agent is inside this folder.\n" +
+			"Start the agent here. Anything it does elsewhere first is not seen.\n")
 	}
 
 	fmt.Print("\nOne thing left, and it matters: a misconfigured hook does not warn, it\n" +

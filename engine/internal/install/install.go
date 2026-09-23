@@ -25,6 +25,7 @@ type Host string
 const (
 	Claude Host = "claude"
 	Codex  Host = "codex"
+	Cursor Host = "cursor"
 )
 
 // Result describes what an install did, so it can be reported honestly rather
@@ -47,6 +48,11 @@ func Plan(host Host, root string) (string, error) {
 		// Project-local Codex hooks require the .codex layer to be trusted, and
 		// trust is hash-based, so the user must review it once via /hooks.
 		return filepath.Join(root, ".codex", "hooks.json"), nil
+	case Cursor:
+		// Project-level, so it only sees what the agent does once it is inside
+		// the project. In the captured session the agent started in the home
+		// directory and searched it before moving in; none of that fired.
+		return filepath.Join(root, ".cursor", "hooks.json"), nil
 	default:
 		return "", fmt.Errorf("unknown host %q", host)
 	}
@@ -101,6 +107,9 @@ func Install(host Host, root, binary string) (Result, error) {
 // key; Claude Code puts "hooks" at the top level. Getting this wrong is silent,
 // which is why Verify exists.
 func addHook(host Host, doc map[string]any, binary string) (bool, error) {
+	if host == Cursor {
+		return addCursorHook(doc, binary)
+	}
 	container := doc
 	if host == Codex {
 		inner, _ := doc["hooks"].(map[string]any)
@@ -159,4 +168,46 @@ func indexOf(h, n string) int {
 		}
 	}
 	return -1
+}
+
+// addCursorHook wires preToolUse, and only that. It covers Shell, Write, Read,
+// Delete and MCP tools in one event and runs in Cursor's cloud agents, where
+// beforeMCPExecution does not. Shell commands also fire beforeShellExecution;
+// hooking both would judge every command twice.
+//
+// Cursor's schema differs from the other two: a required version field, and
+// each event holds a flat list of hooks rather than matcher groups.
+func addCursorHook(doc map[string]any, binary string) (bool, error) {
+	if v, ok := doc["version"]; ok {
+		if n, isNum := v.(float64); !isNum || n != 1 {
+			// A version this code has never seen may mean a schema it would
+			// write wrongly, and a wrong hooks file fails silently.
+			return false, fmt.Errorf("unsupported Cursor hooks version %v; expected 1", v)
+		}
+	} else {
+		doc["version"] = 1
+	}
+
+	hooks, _ := doc["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		doc["hooks"] = hooks
+	}
+
+	entries, _ := hooks["preToolUse"].([]any)
+	for _, e := range entries {
+		m, _ := e.(map[string]any)
+		if cmd, _ := m["command"].(string); containsBinary(cmd, binary) {
+			return false, nil
+		}
+	}
+
+	// failClosed is deliberately left at its default, false. If trackline
+	// itself breaks, the user keeps working: a watcher that jams the editor
+	// gets uninstalled, and then it watches nothing.
+	hooks["preToolUse"] = append(entries, map[string]any{
+		"command": binary,
+		"timeout": 15,
+	})
+	return true, nil
 }

@@ -5,6 +5,7 @@
 package runner
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/claudecode"
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/codex"
+	"github.com/yerinsabraham/trackline/engine/internal/adapter/cursor"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/engine"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
@@ -34,6 +36,7 @@ const (
 	HostAuto   = "auto"
 	HostClaude = "claude"
 	HostCodex  = "codex"
+	HostCursor = "cursor"
 )
 
 // Decision is what the hook should do about an event.
@@ -58,19 +61,27 @@ type Decision struct {
 
 // Detect works out which host sent a payload.
 //
-// The two are distinguishable without being told: Claude Code sends prompt_id
-// and Codex sends turn_id. A flag still wins, because a host that later changes
-// its payload should be overridable without waiting for a release.
+// The hosts are distinguishable without being told: Claude Code sends
+// prompt_id, Codex sends turn_id, and Cursor sends cursor_version on every
+// event. A flag still wins, because a host that later changes its payload
+// should be overridable without waiting for a release.
+//
+// Cursor is checked first because it also runs Claude-format hooks from
+// .claude/settings.json, so a payload arriving through Claude's wiring may
+// still be Cursor's.
 func Detect(raw []byte) string {
 	var probe struct {
-		PromptID string `json:"prompt_id"`
-		TurnID   string `json:"turn_id"`
-		Model    string `json:"model"`
+		PromptID      string `json:"prompt_id"`
+		TurnID        string `json:"turn_id"`
+		Model         string `json:"model"`
+		CursorVersion string `json:"cursor_version"`
 	}
-	if json.Unmarshal(raw, &probe) != nil {
+	if json.Unmarshal(bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF}), &probe) != nil {
 		return HostClaude
 	}
 	switch {
+	case probe.CursorVersion != "":
+		return HostCursor
 	case probe.TurnID != "":
 		return HostCodex
 	case probe.PromptID != "":
@@ -102,6 +113,8 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	switch host {
 	case HostCodex:
 		ev, err = codex.Parse(raw, opts.Now)
+	case HostCursor:
+		ev, err = cursor.Parse(raw, opts.Now)
 	default:
 		ev, err = claudecode.Parse(raw, opts.Now)
 	}

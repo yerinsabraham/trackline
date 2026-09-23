@@ -20,6 +20,7 @@ type Host string
 const (
 	HostClaudeCode Host = "claude-code"
 	HostCodex      Host = "codex"
+	HostCursor     Host = "cursor"
 	HostOTel       Host = "otel"
 )
 
