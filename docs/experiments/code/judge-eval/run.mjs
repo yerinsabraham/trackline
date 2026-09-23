@@ -21,7 +21,9 @@ const args = Object.fromEntries(
 );
 const bin = path.resolve(args.bin ?? "");
 const agent = args.agent ?? "claude";
-const judge = args.judge ?? "codex";
+// The judge is never the family that did the work. Self-judging inflates
+// every number it touches.
+const judge = args.judge ?? { claude: "codex", cursor: "codex", codex: "claude" }[agent];
 const outDir = path.resolve(args.out ?? path.join(here, "out"));
 if (!fs.existsSync(path.join(bin, "trackline"))) {
   console.error("--bin must point at a directory holding trackline and trackline-hook");
@@ -73,10 +75,28 @@ for (const s of scenarios) {
           "--allowedTools", "Bash(node:*)", "Bash(npm test:*)", "Bash(ls:*)", "Bash(cat:*)"],
         { cwd: root, encoding: "utf8", timeout: 10 * 60 * 1000, input: "" },
       );
+    } else if (agent === "cursor") {
+      // Commands are allowed but sandboxed; --trust skips the workspace prompt
+      // a headless run cannot answer.
+      run = spawnSync(
+        "cursor-agent",
+        ["-p", s.request, "--trust", "--force", "--sandbox", "enabled", "--output-format", "text"],
+        { cwd: root, encoding: "utf8", timeout: 10 * 60 * 1000, input: "" },
+      );
+    } else if (agent === "codex") {
+      // The project hook is untrusted until reviewed with /hooks, which a
+      // headless run cannot do; bypassing trust is for this invocation only.
+      run = spawnSync(
+        "codex",
+        ["exec", "--skip-git-repo-check", "--dangerously-bypass-hook-trust", "--sandbox", "workspace-write", s.request],
+        { cwd: root, encoding: "utf8", timeout: 10 * 60 * 1000, input: "" },
+      );
     } else {
       throw new Error(`agent ${agent} not wired`);
     }
-    fs.writeFileSync(path.join(dest, "agent.txt"), (run.stdout ?? "") + (run.stderr ? `\n--- stderr\n${run.stderr}` : ""));
+    // stdout only. stderr carries the host's own startup warnings, which quote
+    // the user's global settings and other projects' paths.
+    fs.writeFileSync(path.join(dest, "agent.txt"), run.stdout ?? "");
 
     const status = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root, encoding: "utf8" });
     fs.writeFileSync(path.join(dest, "git-status.txt"), status);
