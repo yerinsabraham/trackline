@@ -279,3 +279,54 @@ func TestCursorLinesWithoutAQueryAreNotRequests(t *testing.T) {
 		t.Errorf("got %+v; an injected line is not a request", in.Turns)
 	}
 }
+
+// Codex's rollout format, in the shape captured from a real session: the
+// request is an event_msg user_message, and its turn comes from the
+// task_started line before it. That turn id is the one Codex's hook sends, so
+// actions can be matched to the request they were made under.
+func TestCodexTranscriptYieldsRequestsWithTheirTurns(t *testing.T) {
+	r := &intent.Reader{Path: filepath.Join("testdata", "codex-transcript.jsonl")}
+	var in intent.Intent
+	if err := r.Read(&in); err != nil {
+		t.Fatal(err)
+	}
+	if len(in.Turns) != 2 {
+		t.Fatalf("got %d turns, want the two requests and not the injected AGENTS.md: %+v", len(in.Turns), in.Turns)
+	}
+	if in.Turns[0].Text != "Fix the greeting in src/greet.js" || in.Turns[0].ID != "turn-1" {
+		t.Errorf("turn 1 = %+v", in.Turns[0])
+	}
+	if in.Turns[1].ID != "turn-2" {
+		t.Errorf("turn 2 id = %q", in.Turns[1].ID)
+	}
+	anchor, ok := in.Anchor()
+	if !ok || anchor.ID != "turn-1" {
+		t.Errorf("anchor = %+v; \"proceed\" must not replace the real request", anchor)
+	}
+	if _, ok := in.TurnByID("turn-1"); !ok {
+		t.Error("the hook's turn_id must find its request")
+	}
+	if r.Unrecognised() {
+		t.Error("a Codex transcript is recognised")
+	}
+}
+
+// The gap Codex fell through: a transcript with lines in it, none of them in a
+// known shape, and no assistant turn the reader could spot. That must read as
+// unrecognised, never as "nothing has been asked".
+func TestAnUnknownFormatIsNeverReadAsSilence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	os.WriteFile(path, []byte(
+		`{"kind":"prompt","body":"Refactor the auth module"}`+"\n"+
+			`{"kind":"reply","body":"ok"}`+"\n"), 0o600)
+	r := &intent.Reader{Path: path}
+	var in intent.Intent
+	r.Read(&in)
+	if len(in.Turns) != 0 {
+		t.Fatal("this test needs a format the reader does not know")
+	}
+	if !r.Unrecognised() {
+		t.Error("a transcript full of lines in an unknown shape must be reported as unrecognised")
+	}
+}

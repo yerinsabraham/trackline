@@ -135,7 +135,7 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		} else if len(in.Turns) == 0 {
 			// A conversation we read but recognised nothing in is not a
 			// conversation with nothing in it.
-			if entries, assistant := reader.ReadAnything(); entries > 0 && assistant > 0 {
+			if entries, assistant := reader.ReadAnything(); (entries > 0 && assistant > 0) || reader.Unrecognised() {
 				intentUnavailable = "the session transcript was read but no request could be recognised in it, " +
 					"so what the user asked for is unknown"
 			}

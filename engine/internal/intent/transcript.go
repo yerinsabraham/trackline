@@ -29,6 +29,23 @@ type Reader struct {
 
 	sawEntries   int
 	sawAssistant int
+	sawKnown     int
+
+	// codexTurn is the turn a Codex request belongs to. Codex writes it on a
+	// task_started line just before the request, not on the request itself.
+	codexTurn string
+}
+
+// Unrecognised reports a transcript with lines in it, none of which were in a
+// shape this reader knows.
+//
+// ReadAnything alone missed exactly this. It flagged a conversation only when
+// it spotted an assistant turn, and a format it could not read has no
+// assistant turns it can spot. Codex sessions went through that gap from the
+// start: every one read as "nothing asked yet", and scope reported it had
+// nothing to compare against rather than that it could not see.
+func (r *Reader) Unrecognised() bool {
+	return r.sawEntries > 0 && r.sawKnown == 0
 }
 
 // ReadAnything reports whether the last Read saw a conversation at all.
@@ -60,7 +77,9 @@ type claudeEntry struct {
 	} `json:"origin"`
 	PromptID  string `json:"promptId"`
 	Timestamp string `json:"timestamp"`
-	Message   struct {
+	// Payload is Codex's. Its lines are {timestamp, type, payload}.
+	Payload json.RawMessage `json:"payload"`
+	Message struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
@@ -85,6 +104,30 @@ func (e claudeEntry) isHumanTurn() bool {
 
 func (e claudeEntry) isAssistant() bool {
 	return e.Type == "assistant" || (e.Type == "" && e.Role == "assistant")
+}
+
+// codexLine reads the parts of a Codex rollout line that matter.
+//
+// The request is the event_msg of type user_message. Codex also writes
+// response_item messages with role user, but those include the instructions and
+// environment it injects itself; five real requests in a measured session sat
+// beside seven role-user items.
+type codexLine struct {
+	Type    string `json:"type"`
+	TurnID  string `json:"turn_id"`
+	Message string `json:"message"`
+	Role    string `json:"role"`
+}
+
+func (e claudeEntry) codex() (codexLine, bool) {
+	if (e.Type != "event_msg" && e.Type != "response_item") || len(e.Payload) == 0 {
+		return codexLine{}, false
+	}
+	var c codexLine
+	if json.Unmarshal(e.Payload, &c) != nil {
+		return codexLine{}, false
+	}
+	return c, true
 }
 
 // cursorRequest returns what the person typed, from a Cursor user line.
@@ -179,6 +222,7 @@ func (r *Reader) Read(in *Intent) error {
 	// answers.
 	r.sawEntries = 0
 	r.sawAssistant = 0
+	r.sawKnown = 0
 
 	sc := bufio.NewScanner(f)
 	// Transcript lines carry whole messages and can be large; the default
@@ -197,6 +241,25 @@ func (r *Reader) Read(in *Intent) error {
 		r.sawEntries++
 		if e.isAssistant() {
 			r.sawAssistant++
+		}
+		switch {
+		case e.Type == "user" || e.Type == "assistant":
+			r.sawKnown++
+		case e.Type == "" && (e.Role == "user" || e.Role == "assistant"):
+			r.sawKnown++
+		}
+		if c, ok := e.codex(); ok {
+			r.sawKnown++
+			switch {
+			case e.Type == "event_msg" && c.Type == "task_started":
+				r.codexTurn = c.TurnID
+			case e.Type == "event_msg" && c.Type == "user_message" && strings.TrimSpace(c.Message) != "":
+				at, _ := time.Parse(time.RFC3339, e.Timestamp)
+				in.Add(r.codexTurn, at, strings.TrimSpace(c.Message))
+			case e.Type == "response_item" && c.Type == "message" && c.Role == "assistant":
+				r.sawAssistant++
+			}
+			continue
 		}
 		if req, ok := e.cursorRequest(); ok {
 			// No id and no timestamp on the line. Turns stay in order, which is
