@@ -98,30 +98,34 @@ Now the packages exist, so they can be configured to publish without one. This
 is worth doing: a long-lived token in repository secrets is a credential that
 can leak, and trusted publishing has none.
 
-For **each** of the six packages, at
-`npmjs.com/package/<name>/access` → **Trusted Publisher**:
+From the terminal, logged in with `npm login`. npm asks for browser approval on
+each:
 
-| Field | Value |
-|---|---|
-| Publisher | GitHub Actions |
-| Organization or user | `yerinsabraham` |
-| Repository | `trackline` |
-| Workflow filename | `release.yml` |
-| Environment | leave empty |
-
-The packages:
-
-```
-trackline
-@trackline/darwin-arm64
-@trackline/darwin-x64
-@trackline/linux-arm64
-@trackline/linux-x64
-@trackline/win32-x64
+```bash
+for p in trackline @trackline/darwin-arm64 @trackline/darwin-x64 \
+         @trackline/linux-arm64 @trackline/linux-x64 @trackline/win32-x64; do
+  npm trust github "$p" --file release.yml \
+    --repo yerinsabraham/trackline --allow-publish -y
+done
 ```
 
-Then **delete the token** at
-[npmjs.com/settings/~/tokens](https://www.npmjs.com/settings/~/tokens).
+`--allow-publish` is required; without a permission flag npm refuses. Then
+check all six, because a missed one only shows up as a failed release later:
+
+```bash
+for p in trackline @trackline/darwin-arm64 @trackline/darwin-x64 \
+         @trackline/linux-arm64 @trackline/linux-x64 @trackline/win32-x64; do
+  echo "== $p"; npm trust list "$p"
+done
+```
+
+Every package should name `yerinsabraham/trackline` and `release.yml`. The same
+thing can be done by hand at `npmjs.com/package/<name>/access` → **Trusted
+Publisher**, with the environment left empty.
+
+Then delete the token in both places: `npm token list` and
+`npm token revoke <id>`, and
+`gh secret delete NPM_TOKEN --repo yerinsabraham/trackline`.
 
 No workflow change is needed. `permissions: id-token: write` is already there,
 and npm uses OIDC automatically when no token is present.
