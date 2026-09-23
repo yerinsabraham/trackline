@@ -129,3 +129,56 @@ func TestQuotedPathsSurvive(t *testing.T) {
 		t.Errorf("writes = %q", got)
 	}
 }
+
+// Commands that only read in some forms. Each of these was once reported as
+// understood and touching nothing, which is the one answer a safety check must
+// never give about a command that can write anywhere.
+func TestCommandsThatCanWriteAreNotReads(t *testing.T) {
+	for _, cmd := range []string{
+		`node -e "require('fs').writeFileSync('.env','x')"`,
+		`node scripts/migrate.js`,
+		`python3 -c "open('.env','w').write('x')"`,
+		`python manage.py flush`,
+		`awk '{print > "out.txt"}' in.txt`,
+		`find . -name '*.log' -delete`,
+		`find . -name '*.tmp' -exec rm {} +`,
+		`git reset --hard`,
+		`git checkout -- .`,
+		`git clean -fdx`,
+		`git -C sub reset --hard HEAD~3`,
+		`git branch -D main`,
+		`git stash drop`,
+		`env FOO=1 ./deploy.sh`,
+		`command rm -rf build`,
+		`sort -o data.txt data.txt`,
+	} {
+		if e := shell.Parse(cmd); e.Understood {
+			t.Errorf("%s: reported as understood; it can change files and must be unknown", cmd)
+		}
+	}
+}
+
+// The narrowing must not swing the other way. Read-only forms of the same
+// commands stay understood, or every session fills with unknowns and the
+// signal drowns.
+func TestReadOnlyFormsStayUnderstood(t *testing.T) {
+	for _, cmd := range []string{
+		`node --version`,
+		`python3 -V`,
+		`find . -name '*.go'`,
+		`git status`,
+		`git diff --stat`,
+		`git -C sub log --oneline`,
+		`git branch`,
+		`git branch -a`,
+		`git remote -v`,
+		`git stash list`,
+		`sort data.txt`,
+		`env`,
+		`command -v go`,
+	} {
+		if e := shell.Parse(cmd); !e.Understood {
+			t.Errorf("%s: reported as unknown; it only reads", cmd)
+		}
+	}
+}

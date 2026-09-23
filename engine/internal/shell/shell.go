@@ -159,7 +159,7 @@ func parsePart(part string, e *Effects) {
 		}
 	case isInstall(cmd, fields):
 		e.Installs = append(e.Installs, packages(fields)...)
-	case isRead(cmd):
+	case isRead(cmd) && readOnlyUse(cmd, fields):
 		// Reading changes nothing, and saying so is what keeps the unknown
 		// list meaningful.
 	default:
@@ -220,6 +220,73 @@ func isRead(cmd string) bool {
 		"test", "[", "printf", "seq", "yes", "basename", "dirname", "realpath",
 		"uname", "whoami", "hostname", "sleep", "tr", "cut", "column", "less",
 		"nl", "tree", "du", "df", "ps", "type", "command", "printenv":
+		return true
+	}
+	return false
+}
+
+// readOnlyUse narrows isRead for the commands that only read in some forms.
+//
+// These were once listed as reads outright, and a Cursor capture exposed it:
+// `node -e "..."` was reported as understood and touching nothing, when it can
+// write any file on disk. So can `python3 -c`, `awk` with a redirect in its
+// script, `find -delete`, `git reset --hard`, and `env` or `command` running
+// whatever follows them. Each of those is now unknown unless the form is one
+// that cannot change anything.
+func readOnlyUse(cmd string, fields []string) bool {
+	args := fields[1:]
+	switch cmd {
+	case "node", "python", "python3":
+		// A version query is the only form that runs no code.
+		return len(args) == 1 && (args[0] == "--version" || args[0] == "-v" || args[0] == "-V")
+	case "awk":
+		return false
+	case "env", "command":
+		// With arguments these run another command, which is the one that
+		// matters and is not examined here.
+		return len(args) == 0 || (cmd == "command" && len(args) == 2 && args[0] == "-v")
+	case "find":
+		for _, a := range args {
+			switch a {
+			case "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls":
+				return false
+			}
+		}
+		return true
+	case "sort":
+		return !hasFlag(fields, "-o") && !hasPrefixFlag(fields, "-o") && !hasPrefixFlag(fields, "--output")
+	case "git":
+		return gitReadOnly(args)
+	}
+	return true
+}
+
+// gitReadOnly recognises the subcommands that only look. Everything else,
+// including the ones that discard work, is left unknown.
+func gitReadOnly(args []string) bool {
+	// Global options before the subcommand; -C and -c take a value.
+	i := 0
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		if args[i] == "-C" || args[i] == "-c" {
+			i++
+		}
+		i++
+	}
+	if i >= len(args) {
+		return true // bare `git`, or `git --version`
+	}
+	switch args[i] {
+	case "status", "log", "diff", "show", "rev-parse", "ls-files", "blame",
+		"shortlog", "describe", "cat-file", "ls-tree", "grep", "reflog":
+		return true
+	case "branch", "tag", "remote", "stash":
+		// Listing forms only: any further operand creates, deletes or moves.
+		for _, a := range args[i+1:] {
+			if a == "list" || a == "-v" || a == "-vv" || a == "-a" || a == "-r" || a == "--list" || a == "--show-current" {
+				continue
+			}
+			return false
+		}
 		return true
 	}
 	return false
