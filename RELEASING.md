@@ -78,6 +78,18 @@ already on npm is skipped, so a run that fails partway can simply be re-run.
 The workflow afterwards installs from the registry to confirm `LICENSE`, `NOTICE`
 and `README` are in what npm actually served.
 
+### 6. Record the platform packages in the lockfile
+
+```bash
+npm install --package-lock-only
+git commit -am "Record the published platform packages in the lockfile"
+```
+
+Until the platform packages exist on npm, the lockfile cannot hold entries for
+them, and npm 11 (Node 24) refuses `npm ci` without them. CI's Node 24 job is
+red from the moment `optionalDependencies` is added until this runs. Node 20 and
+22 do not check, which is why the release itself is unaffected.
+
 ---
 
 ## Then switch to trusted publishing and throw the token away
