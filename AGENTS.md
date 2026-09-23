@@ -126,6 +126,8 @@ engine/                   Go: the alignment engine and the hook binary.
   internal/engine/        runs signals, holds no judgement itself
   internal/session/       record and replay
   internal/adapter/       per-host normalisation + the cross-host test
+  internal/hosts/         what each host can and cannot do, with evidence
+  internal/mcp/           the MCP server: check_action, get_rules (advisory)
   README.md               read this before touching the engine
 
 src/                      TypeScript: the CI eval gate.

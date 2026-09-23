@@ -79,7 +79,21 @@ trackline show            # replay a session as a readable story
 trackline allow / revoke  # approve something, or take it back
 trackline doctor          # check the install without changing anything
 trackline review          # ask a model whether the work served the request
+trackline mcp             # let any MCP agent ask before it acts (advisory)
 ```
+
+### What it can do in each agent
+
+| | Claude Code | Codex | Cursor | Any MCP client |
+|---|---|---|---|---|
+| Stops an action before it happens | yes | yes | yes | **no, advises only** |
+| Tells the agent why | yes | yes | yes | yes |
+| Knows what you asked | transcript | transcript | transcript | what the agent says |
+
+Each has limits of its own, and `trackline doctor --host <name>` prints them. The
+biggest: through MCP **the agent chooses whether to ask**, so an agent that does
+not ask is not watched. MCP widens reach to agents with no hooks; it does not
+replace them.
 
 `trackline review` is off unless you configure it, because it is the one check
 that costs money and the one that can be wrong in a way no test catches. If you
