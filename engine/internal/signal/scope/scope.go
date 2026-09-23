@@ -82,13 +82,19 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 	// "test/auth/login.test.ts" while still distinguishing it from
 	// "src/payments/charge.ts".
 	inScope := map[string]bool{}
-	var named []string
+	var named, code []string
 	for _, m := range mentions {
 		named = append(named, m.Raw)
 		for _, p := range m.Parts {
 			inScope[p] = true
 		}
+		if m.Code {
+			code = append(code, strings.ToLower(m.Raw))
+		}
 	}
+	// What the write replaced and what it wrote. A named function that
+	// appears in either is being worked on, whatever the file is called.
+	content := strings.ToLower(in.Event.Action.PriorBody + "\n" + in.Event.Action.Body)
 
 	var vs []verdict.Verdict
 	for _, path := range in.Event.Action.Paths {
@@ -119,6 +125,9 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 			}
 		}
 		if overlap {
+			continue
+		}
+		if containsAny(content, code) {
 			continue
 		}
 
@@ -187,6 +196,15 @@ func (s Signal) relative(path string) string {
 		}
 	}
 	return path
+}
+
+func containsAny(s string, names []string) bool {
+	for _, n := range names {
+		if n != "" && strings.Contains(s, n) {
+			return true
+		}
+	}
+	return false
 }
 
 // sorted returns a stable copy, so a verdict reads the same way twice.

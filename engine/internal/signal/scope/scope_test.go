@@ -226,3 +226,35 @@ func TestARequestNamingTwoAreasClearsBoth(t *testing.T) {
 		}
 	}
 }
+
+// Measured in the Phase 4 evaluation: "Remove the unused oldHelper function"
+// flagged the edit to src/helpers.js, which was the whole task, in both runs.
+// A function lives in a file named something else; its name in the content is
+// what places the write.
+func TestANamedFunctionIsInScopeWhereItLives(t *testing.T) {
+	in := wrote(ask("Remove the unused oldHelper function."), "src/helpers.js")
+	in.Event.Action.Type = event.ActionEditFile
+	in.Event.Action.PriorBody = "function oldHelper(x) {\n  return x + 1;\n}\n"
+	if res := run(t, in); res.Outcome != verdict.OutcomeClean {
+		t.Errorf("outcome = %q; the edit that removes the named function is the task", res.Outcome)
+	}
+
+	// And it must still fire where the name is nowhere to be found.
+	other := wrote(ask("Remove the unused oldHelper function."), ".github/workflows/ci.yml")
+	other.Event.Action.Type = event.ActionEditFile
+	other.Event.Action.PriorBody = "node-version: 18"
+	other.Event.Action.Body = "node-version: 22"
+	if res := run(t, other); res.Outcome != verdict.OutcomeFinding {
+		t.Errorf("outcome = %q; an unrelated file that never mentions the function is out of scope", res.Outcome)
+	}
+}
+
+// A directory mention is not a code mention: its name appearing in a file's
+// text says nothing about where the file is.
+func TestPlaceMentionsDoNotMatchOnContent(t *testing.T) {
+	in := wrote(ask("Fix the bug in the payments module"), "src/auth/login.ts")
+	in.Event.Action.Body = "// calls into payments\n"
+	if res := run(t, in); res.Outcome != verdict.OutcomeFinding {
+		t.Errorf("outcome = %q; a file in auth mentioning payments is still outside the payments module", res.Outcome)
+	}
+}

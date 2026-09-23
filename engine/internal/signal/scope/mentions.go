@@ -45,6 +45,9 @@ var (
 	// for writing to exactly the file the request had named. So a dot is
 	// allowed when nothing word-like follows it.
 	qualified = regexp.MustCompile(`(?i)\b([\w.\-]+)\s+(?:module|directory|folder|package|service|component|function|method|class|handler|helper|endpoint|route|hook)(?:[^.\w]|\.[^\w]|\.$|$)`)
+	// The subset of qualifiers that name something inside a file rather than
+	// a place in the tree. See Mention.Code.
+	codeQualified = regexp.MustCompile(`(?i)\b([\w.\-]+)\s+(?:function|method|class|handler|helper|endpoint|route|hook)(?:[^.\w]|\.[^\w]|\.$|$)`)
 	// a bare filename with a known-ish extension
 	filename = regexp.MustCompile(`\b([\w\-]+\.(?:go|ts|tsx|js|jsx|py|rb|rs|java|md|json|yml|yaml|toml|sql|sh))\b`)
 	// URLs contain slashes and are not references to the project tree
@@ -93,6 +96,15 @@ type Mention struct {
 	// on. A mention of "src/auth" yields ["auth"], because "src" distinguishes
 	// nothing.
 	Parts []string
+
+	// Code marks a name for something inside a file: "the oldHelper
+	// function". It may match a file named after it, as login does
+	// login.test.ts, but it usually lives in a file called something else, so
+	// a write is also in scope when the file's content contains the name.
+	//
+	// Measured: "Remove the unused oldHelper function" flagged the edit to
+	// src/helpers.js, which was the entire task, in both runs of the scenario.
+	Code bool
 }
 
 // Mentions extracts the places a request explicitly names.
@@ -138,6 +150,14 @@ func Mentions(text string) []Mention {
 	}
 	for _, m := range qualified.FindAllStringSubmatch(text, -1) {
 		add(m[1])
+	}
+	for _, m := range codeQualified.FindAllStringSubmatch(text, -1) {
+		raw := strings.Trim(strings.TrimSpace(m[1]), "./`\"'")
+		for i := range out {
+			if out[i].Raw == raw {
+				out[i].Code = true
+			}
+		}
 	}
 	for _, m := range filename.FindAllStringSubmatch(text, -1) {
 		add(m[1])
