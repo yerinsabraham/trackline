@@ -14,10 +14,11 @@ trackline init
 ```
 
 That is it. It runs beside Claude Code or Codex, notices things, and writes them
-down. **In its default mode it cannot interrupt you.**
+down. Cursor support is on `main` and arrives in the next release
+(`trackline init --host cursor`). **In its default mode it cannot interrupt you.**
 
 **It is not tied to any one agent.** The same rules apply whether a task runs
-through Claude Code or Codex, and the same findings come out, because each
+through Claude Code, Codex or Cursor, and the same findings come out, because each
 agent's events are turned into one shape before anything is checked. A vendor
 can govern its own agent; only something that belongs to none of them can
 govern all of them the same way.
@@ -62,7 +63,9 @@ That is enforced in the type system, not by convention.
 - **ask** — stops the agent and tells it to ask you. If you approve,
   `trackline allow <check> <target>` and it continues.
 - **auto** — blocks and hands the reason back to the agent, which then corrects
-  itself. Measured at 11 out of 11 across Claude Code and Codex.
+  itself. Measured at 11 out of 11 across Claude Code and Codex. In Cursor,
+  one live run so far: blocked once, did not retry, told the user to make the
+  change by hand.
 
 Approvals are narrow on purpose: one thing, for one request, unless you say
 `--project`. Approving `src/auth` does not approve `src/authority`.
@@ -70,7 +73,7 @@ Approvals are narrow on purpose: one thing, for one request, unless you say
 ## Commands
 
 ```bash
-trackline init            # wire it into Claude Code or Codex
+trackline init            # wire it into Claude Code (--host codex|cursor for the others)
 trackline status          # what it has seen, per check
 trackline show            # replay a session as a readable story
 trackline allow / revoke  # approve something, or take it back
@@ -105,6 +108,10 @@ Named plainly, because a tool that looks complete stops getting better.
 - **The judge is barely tested.** Eight calibration cases, all correct, all
   written by the same person who wrote the prompt. Off by default until that
   means something.
+- **In Cursor, it only sees the agent once the agent is inside your project.**
+  Cursor loads project hooks from the project, and an agent started elsewhere
+  that searches your home directory first does so unwatched. Start it in the
+  project.
 - **No multi-turn reasoning.** Each turn is judged against its own request.
 - **Production monitoring is not built.** The design carries it; the code does
   not.
