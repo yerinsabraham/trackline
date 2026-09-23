@@ -84,6 +84,10 @@ jobs:
             (cd "$d" && npm publish --provenance --access public)
           done
         env:
+          # Empty once trusted publishing is configured, which is the goal: npm
+          # falls back to OIDC when no token is present, so the same workflow
+          # serves both the first release and every one after it. See
+          # RELEASING.md.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After the platform packages, so its optional dependencies resolve the
