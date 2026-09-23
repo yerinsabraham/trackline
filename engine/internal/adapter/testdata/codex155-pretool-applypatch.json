@@ -1,0 +1,14 @@
+{
+  "session_id": "01a0cf22-599b-7861-a0fb-cc9ddf2ed94f",
+  "turn_id": "01a0cf22-5d2b-7821-bbdf-09d768e32754",
+  "transcript_path": "/home/user/.codex/sessions/rollout.jsonl",
+  "cwd": "/work/lab",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: /work/lab/src/greet.js\n@@\n function greet(name) {\n-  return \"Hello \" + name;\n+  const capitalisedName = name.charAt(0).toUpperCase() + name.slice(1);\n+  return \"Hello \" + capitalisedName;\n }\n*** Update File: /work/lab/test/greet.test.js\n@@\n test(\"greets\", () => {\n   assert.strictEqual(greet(\"Ada\"), \"Hello Ada\");\n });\n+\n+test(\"capitalises the first letter of the name\", () => {\n+  assert.strictEqual(greet(\"ada\"), \"Hello Ada\");\n+});\n*** End Patch\n"
+  },
+  "tool_use_id": "call_CTzM6cte0YcxGCE3lmonddmt"
+}

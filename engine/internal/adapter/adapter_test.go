@@ -252,3 +252,28 @@ func TestRecognisedShellCommandsGivePaths(t *testing.T) {
 		})
 	}
 }
+
+// codex-cli 0.155, captured in the Phase 4 evaluation. It names its shell tool
+// "Bash", where the Phase 0 capture had "shell", and exact matching turned all
+// 147 commands in 20 sessions into actions nobody could read.
+func TestCodex155ShellToolIsRecognised(t *testing.T) {
+	ev, err := codex.Parse(load(t, "codex155-pretool-bash.json"), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Action.Type != event.ActionRunCommand || ev.Action.Command == "" {
+		t.Errorf("action = %q command = %q; Bash is Codex's shell", ev.Action.Type, ev.Action.Command)
+	}
+}
+
+func TestCodex155PatchWithAbsolutePaths(t *testing.T) {
+	ev, err := codex.Parse(load(t, "codex155-pretool-applypatch.json"), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The captured patch updates the code and its test in one go.
+	if ev.Action.Type != event.ActionEditFile || len(ev.Action.Paths) != 2 ||
+		ev.Action.Paths[0] != "/work/lab/src/greet.js" || ev.Action.Paths[1] != "/work/lab/test/greet.test.js" {
+		t.Errorf("action = %q paths = %v", ev.Action.Type, ev.Action.Paths)
+	}
+}

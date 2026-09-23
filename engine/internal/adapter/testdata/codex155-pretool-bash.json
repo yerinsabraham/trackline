@@ -1,0 +1,14 @@
+{
+  "session_id": "01a0cf22-599b-7861-a0fb-cc9ddf2ed94f",
+  "turn_id": "01a0cf22-5d2b-7821-bbdf-09d768e32754",
+  "transcript_path": "/home/user/.codex/sessions/rollout.jsonl",
+  "cwd": "/work/lab",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status --short"
+  },
+  "tool_use_id": "call_lqssMwogLkTpfasHCHWXpuRy"
+}

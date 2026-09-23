@@ -117,6 +117,34 @@ type codexLine struct {
 	TurnID  string `json:"turn_id"`
 	Message string `json:"message"`
 	Role    string `json:"role"`
+	// Item is the newer shape. codex-cli 0.155 in exec mode writes no
+	// user_message event at all; the request arrives as an item_completed
+	// whose item is a UserMessage. Only the interactive sessions captured in
+	// Phase 0 used user_message, so headless Codex read as silent again.
+	Item struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"item"`
+}
+
+func (c codexLine) request() (string, bool) {
+	switch {
+	case c.Type == "user_message":
+		return strings.TrimSpace(c.Message), strings.TrimSpace(c.Message) != ""
+	case c.Type == "item_completed" && c.Item.Type == "UserMessage":
+		var parts []string
+		for _, p := range c.Item.Content {
+			if p.Type == "text" && strings.TrimSpace(p.Text) != "" {
+				parts = append(parts, strings.TrimSpace(p.Text))
+			}
+		}
+		s := strings.Join(parts, "\n")
+		return s, s != ""
+	}
+	return "", false
 }
 
 func (e claudeEntry) codex() (codexLine, bool) {
@@ -253,9 +281,18 @@ func (r *Reader) Read(in *Intent) error {
 			switch {
 			case e.Type == "event_msg" && c.Type == "task_started":
 				r.codexTurn = c.TurnID
-			case e.Type == "event_msg" && c.Type == "user_message" && strings.TrimSpace(c.Message) != "":
+			case e.Type == "event_msg" && (c.Type == "user_message" || c.Type == "item_completed"):
+				req, ok := c.request()
+				if !ok {
+					break
+				}
+				// A version that writes both shapes would otherwise record
+				// the same request twice.
+				if last, has := in.Latest(); has && last.ID == r.codexTurn && last.Text == req {
+					break
+				}
 				at, _ := time.Parse(time.RFC3339, e.Timestamp)
-				in.Add(r.codexTurn, at, strings.TrimSpace(c.Message))
+				in.Add(r.codexTurn, at, req)
 			case e.Type == "response_item" && c.Type == "message" && c.Role == "assistant":
 				r.sawAssistant++
 			}

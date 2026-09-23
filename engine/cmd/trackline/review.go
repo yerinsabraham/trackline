@@ -70,11 +70,17 @@ func cmdReview(args []string) error {
 		return fmt.Errorf("no recorded session here: %w", err)
 	}
 	if len(events) == 0 {
+		if asJSON {
+			return json.NewEncoder(os.Stdout).Encode(map[string]any{"skipped": 0, "why": "nothing has been recorded yet"})
+		}
 		fmt.Println("nothing has been recorded yet.")
 		return nil
 	}
 
 	turns, skipped := group(events, f.root)
+	if len(turns) == 0 && asJSON {
+		return reviewJSON(p, nil, skipped)
+	}
 	if len(turns) == 0 {
 		fmt.Println("no turns could be reconstructed from the recording.")
 		if skipped > 0 {

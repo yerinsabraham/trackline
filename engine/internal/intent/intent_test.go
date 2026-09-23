@@ -330,3 +330,20 @@ func TestAnUnknownFormatIsNeverReadAsSilence(t *testing.T) {
 		t.Error("a transcript full of lines in an unknown shape must be reported as unrecognised")
 	}
 }
+
+// codex-cli 0.155 in exec mode writes no user_message event. The request is an
+// item_completed UserMessage, beside role-user items that are Codex's own
+// injected context. Captured shape, scrubbed.
+func TestCodex155HeadlessTranscriptYieldsTheRequest(t *testing.T) {
+	r := &intent.Reader{Path: filepath.Join("testdata", "codex155-transcript.jsonl")}
+	var in intent.Intent
+	if err := r.Read(&in); err != nil {
+		t.Fatal(err)
+	}
+	if len(in.Turns) != 1 {
+		t.Fatalf("got %d turns, want the one request and none of the injected context: %+v", len(in.Turns), in.Turns)
+	}
+	if in.Turns[0].Text != "Make the greeting capitalise the first letter of the name." || in.Turns[0].ID != "turn-1" {
+		t.Errorf("turn = %+v", in.Turns[0])
+	}
+}

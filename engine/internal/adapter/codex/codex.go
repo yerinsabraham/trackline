@@ -12,6 +12,7 @@ package codex
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
@@ -80,7 +81,10 @@ func action(p payload) event.Action {
 		}
 	}
 
-	switch p.ToolName {
+	// Lowercased: codex-cli 0.155 names its shell tool "Bash", where the
+	// Phase 0 capture had "shell". Matching case exactly turned every command
+	// in a session into an action nobody could read.
+	switch strings.ToLower(p.ToolName) {
 	case "apply_patch":
 		// The patch is both the instruction and the content, so it is the body.
 		a.SetBody(in.Command)
@@ -122,7 +126,7 @@ func action(p payload) event.Action {
 		a.PathsUnknown = !eff.Understood
 		return a
 
-	case "read_file", "Read":
+	case "read_file", "read":
 		a.Type = event.ActionReadFile
 	default:
 		a.Type = event.ActionOther
