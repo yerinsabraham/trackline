@@ -7,6 +7,7 @@
 //	trackline init [--host claude|codex|cursor] [--root DIR]
 //	trackline status [--root DIR]
 //	trackline doctor
+//	trackline mcp [--root DIR]
 package main
 
 import (
@@ -19,8 +20,12 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
+	"github.com/yerinsabraham/trackline/engine/internal/mcp"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 )
+
+// version is stamped at release by scripts/build-binaries.sh.
+var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -46,6 +51,14 @@ func main() {
 		err = cmdAllowed(os.Args[2:])
 	case "revoke":
 		err = cmdRevoke(os.Args[2:])
+	case "mcp":
+		f := parse(os.Args[2:])
+		// stdout is the protocol, so warnings go to stderr, which clients log.
+		if mcp.UnlikelyRoot(f.root) {
+			fmt.Fprintf(os.Stderr, "trackline mcp: checking against %s, which is not a project. "+
+				"Pass --root /path/to/project in the client's server config.\n", f.root)
+		}
+		err = (&mcp.Server{Root: f.root, Version: version}).Serve(os.Stdin, os.Stdout)
 	case "help", "-h", "--help":
 		usage()
 		return
@@ -72,6 +85,8 @@ func usage() {
   allow    approve something a check objected to
   allowed  list what has been approved
   revoke   withdraw an approval
+  mcp      serve check_action and get_rules to any MCP client (the agent
+           must choose to ask; a hook does not give it the choice)
 
 Flags: --host claude|codex|cursor   --root DIR
 `)

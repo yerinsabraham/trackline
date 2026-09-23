@@ -48,6 +48,10 @@ type Decision struct {
 	// Message is what to hand back to the agent when blocking.
 	Message string
 
+	// Ask is true when the block is a request for a human decision rather
+	// than a refusal.
+	Ask bool
+
 	// Report is everything the checks concluded, for the findings log.
 	Report engine.Report
 
@@ -122,16 +126,6 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		return Decision{}, fmt.Errorf("could not read the %s payload: %w", host, err)
 	}
 
-	root := opts.Root
-	if root == "" {
-		root = ev.CWD
-	}
-
-	// A configuration that cannot be read is worth saying out loud, but it must
-	// never stop the user working. Defaults carry on.
-	cfg, cfgErr := config.Load(root)
-	rules, _ := config.LoadRules(root, cfg)
-
 	var in intent.Intent
 	var intentUnavailable string
 	if ev.TranscriptPath != "" {
@@ -150,6 +144,30 @@ func Run(raw []byte, opts Options) (Decision, error) {
 		intentUnavailable = "this host did not say where the session transcript is, " +
 			"so what the user asked for is unknown"
 	}
+
+	return decide(ev, in, intentUnavailable, opts, true), nil
+}
+
+// Check judges an action that has not happened and may never happen.
+//
+// It is what the MCP server calls when an agent asks "may I?". The answer is
+// the one the hook would give, through the same checks, config and approvals.
+// Nothing is recorded: a question is not an action, and counting it would
+// have repetition and diff-size judge the agent for asking.
+func Check(ev event.Event, in intent.Intent, intentUnavailable string, opts Options) Decision {
+	return decide(ev, in, intentUnavailable, opts, false)
+}
+
+func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Options, record bool) Decision {
+	root := opts.Root
+	if root == "" {
+		root = ev.CWD
+	}
+
+	// A configuration that cannot be read is worth saying out loud, but it must
+	// never stop the user working. Defaults carry on.
+	cfg, cfgErr := config.Load(root)
+	rules, _ := config.LoadRules(root, cfg)
 
 	// Two separate stores, on purpose. The recording is the full session, for
 	// replay and inspection, and nothing on the hot path reads it. The turn
@@ -174,7 +192,7 @@ func Run(raw []byte, opts Options) (Decision, error) {
 
 	// Recorded after the checks run, so a check counting earlier writes does
 	// not count the action it is currently judging twice.
-	if root != "" {
+	if record && root != "" {
 		_ = session.Recorder{Path: recording}.Append(ev)
 		_ = turnState.Append(ev)
 	}
@@ -203,10 +221,11 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	case config.ModeAsk:
 		if len(rep.Findings()) > 0 {
 			d.Block = true
+			d.Ask = true
 			d.Message = askMessage(rep)
 		}
 	}
-	return d, nil
+	return d
 }
 
 // fillPriorBody reads what a file currently holds, for a write that replaces it

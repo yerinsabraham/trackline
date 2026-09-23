@@ -12,6 +12,8 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+version=$(node -p "require('./package.json').version")
+
 build() {
   local goos="$1" goarch="$2" npmos="$3" npmcpu="$4"
   local out="packages/trackline-$npmos-$npmcpu/bin"
@@ -19,7 +21,8 @@ build() {
   [ "$goos" = "windows" ] && ext=".exe"
 
   mkdir -p "$out"
-  (cd engine && GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="-s -w" \
+  (cd engine && GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+    -ldflags="-s -w -X main.version=$version" \
     -o "../$out/trackline$ext" ./cmd/trackline)
   (cd engine && GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="-s -w" \
     -o "../$out/trackline-hook$ext" ./cmd/hook)

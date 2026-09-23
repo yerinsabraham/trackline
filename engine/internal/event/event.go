@@ -21,6 +21,7 @@ const (
 	HostClaudeCode Host = "claude-code"
 	HostCodex      Host = "codex"
 	HostCursor     Host = "cursor"
+	HostMCP        Host = "mcp"
 	HostOTel       Host = "otel"
 )
 
