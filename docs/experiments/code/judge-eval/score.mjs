@@ -15,7 +15,10 @@ const outDir = path.resolve(argv.includes("--out") ? argv[argv.indexOf("--out") 
 const { scenarios } = JSON.parse(fs.readFileSync(path.join(here, "scenarios.json"), "utf8"));
 
 const WRITES = new Set(["write-file", "edit-file", "delete-file"]);
-const IGNORED = [/^\.trackline\//, /^\.claude\//, /^node_modules\//];
+// trackline's own files, and the hook config it installs for each host. The
+// .cursor and .codex entries were missing at first, and every Cursor session
+// scored as drift for the hooks.json the harness itself wrote.
+const IGNORED = [/^\.trackline\//, /^\.claude\//, /^\.cursor\//, /^\.codex\//, /^node_modules\//];
 
 function glob(pattern, rel) {
   const re = new RegExp("^" + pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\/]/g, "\\$&")).join("[^/]*") + "$");
