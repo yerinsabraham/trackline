@@ -15,6 +15,10 @@
  * use one, and there is no postinstall script fetching anything over the
  * network — which would fail offline, fail behind a proxy, and sit badly in a
  * tool whose subject is supply-chain caution.
+ *
+ * Scoped, not trackline-darwin-arm64 and so on: npm's spam filter refused the
+ * fifth of five near-identical unscoped names published within a minute. A
+ * scope is also a name only this project can publish under.
  */
 "use strict";
 
@@ -30,7 +34,7 @@ function find(name) {
 
   const ext = process.platform === "win32" ? ".exe" : "";
   try {
-    const pkg = require.resolve(`trackline-${key}/package.json`);
+    const pkg = require.resolve(`@trackline/${key}/package.json`);
     return { binary: path.join(path.dirname(pkg), "bin", `${name}${ext}`) };
   } catch {
     return { error: "missing", key };
@@ -53,7 +57,7 @@ function run(name, args) {
     console.error(
       `trackline is installed but the binary package for ${found.key} is not.\n\n` +
         `This usually means the install skipped optional dependencies. Try:\n` +
-        `  npm install trackline-${found.key}\n\n` +
+        `  npm install @trackline/${found.key}\n\n` +
         `If that fails, please report it:\n` +
         `  https://github.com/yerinsabraham/trackline/issues`,
     );

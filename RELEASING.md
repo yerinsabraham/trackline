@@ -5,7 +5,8 @@ succeeds, looks identical, and silently produces **no provenance** — the signe
 attestation tying a published tarball to the commit that built it. Nothing warns
 you, and the first published version is the one that sets expectations.
 
-Six packages ship together: `trackline`, plus one per platform.
+Six packages ship together: `trackline`, plus one per platform under the
+`@trackline` scope.
 
 ---
 
@@ -24,6 +25,15 @@ every other.
 Enable two-factor authentication — publishing without it is a bad habit for
 anything other people will install.
 
+Then create the **`trackline` organization** (free for public packages) at
+[npmjs.com/org/create](https://www.npmjs.com/org/create). The platform packages
+publish under it.
+
+They were unscoped at first, `trackline-darwin-arm64` and so on. npm's spam
+filter published four of them and refused the fifth: five near-identical names
+from a new account in under a minute. The scope removes that, and it reserves
+every `@trackline/*` name for this project.
+
 ### 2. A token, scoped as narrowly as it goes
 
 [npmjs.com/settings/~/tokens](https://www.npmjs.com/settings/~/tokens) →
@@ -33,6 +43,7 @@ anything other people will install.
 |---|---|
 | Expiration | 7 days — it is needed once |
 | Packages and scopes | Read and write |
+| Bypass two-factor authentication | **Ticked.** Without it, CI fails with `EOTP`: npm asks for a code from your phone, and a workflow has no phone. It cannot be changed after the token is created. |
 | Select packages | *All packages* (the six do not exist yet, so they cannot be named) |
 | Organizations | No access |
 
@@ -62,8 +73,9 @@ git push origin v0.1.0
 ```
 
 The tag triggers the real run. Platform packages publish first so the main
-package's optional dependencies resolve the moment it is installable, and the
-workflow afterwards installs from the registry to confirm `LICENSE`, `NOTICE`
+package's optional dependencies resolve the moment it is installable. Anything
+already on npm is skipped, so a run that fails partway can simply be re-run.
+The workflow afterwards installs from the registry to confirm `LICENSE`, `NOTICE`
 and `README` are in what npm actually served.
 
 ---
@@ -89,11 +101,11 @@ The packages:
 
 ```
 trackline
-trackline-darwin-arm64
-trackline-darwin-x64
-trackline-linux-arm64
-trackline-linux-x64
-trackline-win32-x64
+@trackline/darwin-arm64
+@trackline/darwin-x64
+@trackline/linux-arm64
+@trackline/linux-x64
+@trackline/win32-x64
 ```
 
 Then **delete the token** at
