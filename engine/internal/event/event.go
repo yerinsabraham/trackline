@@ -184,6 +184,12 @@ type Event struct {
 	// it on every event, and it is how intent is recovered.
 	TranscriptPath string `json:"transcriptPath,omitempty"`
 
+	// Request is the latest thing the user said when this action happened,
+	// read from the transcript at the time. Recorded so a later review can
+	// pair actions with what they served on hosts whose transcripts carry no
+	// turn ids, which Cursor's do not.
+	Request string `json:"request,omitempty"`
+
 	Action Action `json:"action"`
 
 	// Raw is the untouched host payload, kept so a wrong normalisation can be

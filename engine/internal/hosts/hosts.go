@@ -66,7 +66,6 @@ var all = map[string]Capabilities{
 		Evidence:           "captured from the Cursor CLI; one live run where the agent was blocked once and did not retry",
 		Limits: []string{
 			"it only sees the agent once the agent is inside this project; start the agent here",
-			"review cannot match Cursor's actions to the request they served, so it skips Cursor turns",
 			"captured from the Cursor CLI; the desktop app is expected to match but has not been checked",
 		},
 	},

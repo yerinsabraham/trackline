@@ -183,3 +183,26 @@ func TestCursorPayloadIsJudgedLikeAnyOther(t *testing.T) {
 		t.Errorf("block message must name the file:\n%s", d.Message)
 	}
 }
+
+// Cursor's transcript has no turn ids, so review could not pair an action with
+// its request. The request is now recorded with the action as the hook read it.
+func TestRecordedActionCarriesItsRequest(t *testing.T) {
+	root := t.TempDir()
+	transcript := filepath.Join(root, "t.jsonl")
+	os.WriteFile(transcript, []byte(
+		`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nRename tmp to total\n</user_query>"}]}}`+"\n"), 0o600)
+	raw := []byte(`{"hook_event_name":"preToolUse","conversation_id":"c","generation_id":"g",
+		"tool_name":"Write","cursor_version":"3.21.18","workspace_roots":["` + root + `"],
+		"transcript_path":"` + transcript + `",
+		"tool_input":{"file_path":"` + filepath.Join(root, "src", "sum.js") + `","content":"x"}}`)
+	if _, err := runner.Run(raw, runner.Options{Now: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(root, ".trackline", "events.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"request":"Rename tmp to total"`) {
+		t.Errorf("the recorded event must carry the request it was made under:\n%s", b)
+	}
+}

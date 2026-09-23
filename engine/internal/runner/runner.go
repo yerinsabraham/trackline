@@ -190,6 +190,13 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	e := engine.New(build(cfg, root, turnState)...)
 	rep := e.Run(ev, in, rules, intentUnavailable)
 
+	if t, ok := in.Latest(); ok {
+		ev.Request = t.Text
+		if len(ev.Request) > requestLimit {
+			ev.Request = ev.Request[:requestLimit]
+		}
+	}
+
 	// Recorded after the checks run, so a check counting earlier writes does
 	// not count the action it is currently judging twice.
 	if record && root != "" {
@@ -227,6 +234,10 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	}
 	return d
 }
+
+// requestLimit bounds the request copied into each recorded event. Every
+// action carries one, and a pasted log should not multiply through the file.
+const requestLimit = 4000
 
 // fillPriorBody reads what a file currently holds, for a write that replaces it
 // whole.

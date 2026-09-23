@@ -238,6 +238,15 @@ func group(events []event.Event, root string) ([]groupedTurn, int) {
 		request := ""
 		if turn, ok := in.TurnByID(id); ok {
 			request = turn.Text
+		} else {
+			// The request as the hook read it when the action happened. The
+			// only way to pair them on a host whose transcript has no ids.
+			for _, ev := range evs {
+				if ev.Request != "" {
+					request = ev.Request
+					break
+				}
+			}
 		}
 		// A turn whose request was never recorded cannot be judged: there is
 		// nothing to compare the work against. Counted rather than dropped, so
