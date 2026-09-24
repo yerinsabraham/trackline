@@ -8,7 +8,9 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const p = page((await params).slug);
-  return p ? { title: p.title, description: p.description } : {};
+  return p
+    ? { title: p.title, description: p.description, alternates: { canonical: `/docs/${p.slug}` } }
+    : {};
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {

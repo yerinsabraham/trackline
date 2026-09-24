@@ -230,8 +230,9 @@ The top four issues:
 
 ## The site's address
 
-The product site is at **https://trackline-iota.vercel.app** until there is a
-domain. The address is written in exactly one place in code:
+The product site is at **https://trackline.dev** (since 2026-09-24; before that
+https://trackline-iota.vercel.app, which still resolves). The address is written
+in exactly one place in code:
 
 ```
 site/lib/site.ts    export const SITE = "..."
@@ -241,7 +242,8 @@ Everything that shows it reads that constant: the "copy prompt for your agent"
 text, and the `/install.md` instructions agents fetch. Do not hard-code the
 address anywhere else.
 
-**When the domain arrives**, do all of these, and nothing is done until all are:
+**If the address ever changes again**, do all of these, and nothing is done until
+all are. (Done for trackline.dev on 2026-09-24.)
 
 1. Change `SITE` in `site/lib/site.ts`.
 2. Update the address line in `site/README.md`.

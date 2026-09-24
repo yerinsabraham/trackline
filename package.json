@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Watches whether an AI coding agent is still doing what you asked. Runs beside Claude Code or Codex and says when the work stops matching the request.",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
-  "homepage": "https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts",
+  "homepage": "https://trackline.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yerinsabraham/trackline.git"

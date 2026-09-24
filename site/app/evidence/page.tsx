@@ -1,6 +1,6 @@
 import { EXPERIMENTS, evidence } from "@/lib/site";
 
-export const metadata = { title: "Evidence" };
+export const metadata = { title: "Evidence", alternates: { canonical: "/evidence" } };
 
 export default function Evidence() {
   return (

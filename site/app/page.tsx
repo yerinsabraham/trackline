@@ -6,7 +6,7 @@ import { ClaudeLogo, CursorLogo, OpenAILogo, TraceBars, TracklineTile } from "@/
 import InstallTabs from "@/components/InstallTabs";
 import TypedChat from "@/components/TypedChat";
 import WatchGate from "@/components/WatchGate";
-import { EXPERIMENTS } from "@/lib/site";
+import { EXPERIMENTS, SITE } from "@/lib/site";
 
 const hosts = [
   { name: <>Claude<br />Code</>, logo: <ClaudeLogo />, via: "Hook", state: "Blocks", cls: "" },
@@ -47,6 +47,24 @@ function Plus() {
 export default function Home() {
   return (
     <>
+      {/* Tells search engines this is a developer tool, not an article. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "trackline",
+            applicationCategory: "DeveloperApplication",
+            operatingSystem: "macOS, Linux, Windows",
+            description:
+              "Watches what coding agents and production agents do, checks it against the task, the rules and the evidence they were given, and tells you or the agent when they part ways.",
+            url: SITE,
+            downloadUrl: "https://www.npmjs.com/package/trackline",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+          }),
+        }}
+      />
       <section className="hero wrap">
         <Link className="badge" href="/docs/production">
           <b>New</b> · Production traces <i>›</i>

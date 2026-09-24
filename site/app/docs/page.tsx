@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { pages } from "@/lib/guide";
 
-export const metadata = { title: "Docs" };
+export const metadata = { title: "Docs", alternates: { canonical: "/docs" } };
 
 export default function DocsIndex() {
   return (
