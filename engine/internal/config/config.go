@@ -60,7 +60,26 @@ type Config struct {
 	// Judge configures the one check that asks a model whether work served the
 	// request. Off unless configured, and never on the hook's path.
 	Judge JudgeConfig `json:"judge,omitempty"`
+
+	// Tools is the policy for a production agent's tool calls. A deployed
+	// agent does not write files, it calls tools, and the rule people state
+	// about it is of this shape: never do X, or never do X unless Y happened
+	// first. Empty means no policy, which the check reports as such.
+	Tools ToolPolicy `json:"tools,omitempty"`
 }
+
+// ToolPolicy is what a production agent may and may not call.
+type ToolPolicy struct {
+	// Never lists tools that must not be called at all.
+	Never []string `json:"never,omitempty"`
+	// RequireApproval maps a tool to the tool that must have run earlier in
+	// the same conversation for it to be allowed, e.g.
+	// {"fintech_change_limit": "request_human_approval"}.
+	RequireApproval map[string]string `json:"requireApproval,omitempty"`
+}
+
+// Empty reports whether any policy was configured.
+func (p ToolPolicy) Empty() bool { return len(p.Never) == 0 && len(p.RequireApproval) == 0 }
 
 // JudgeConfig says how to reach a model, if at all.
 //
@@ -179,6 +198,9 @@ func (c Config) merge(f Config) Config {
 	// protecting one more path should not lose protection on their keys.
 	c.OffLimits = append(c.OffLimits, f.OffLimits...)
 	c.Disabled = append(c.Disabled, f.Disabled...)
+	if !f.Tools.Empty() {
+		c.Tools = f.Tools
+	}
 	return c
 }
 

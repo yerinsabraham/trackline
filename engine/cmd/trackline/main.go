@@ -66,6 +66,8 @@ func main() {
 		err = cmdAllowed(os.Args[2:])
 	case "revoke":
 		err = cmdRevoke(os.Args[2:])
+	case "traces":
+		err = cmdTraces(os.Args[2:])
 	case "mcp":
 		f := parse(os.Args[2:])
 		// stdout is the protocol, so warnings go to stderr, which clients log.
@@ -100,6 +102,7 @@ func usage() {
   allow    approve something a check objected to
   allowed  list what has been approved
   revoke   withdraw an approval
+  traces   check exported production traces (OTLP, protobuf or JSON)
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
 
@@ -145,6 +148,15 @@ List what has been approved.
 	"revoke": `trackline revoke <check> [target] [--root DIR]
 
 Withdraw an approval.
+`,
+	"traces": `trackline traces [--root DIR] [--json] FILE|DIR...
+
+Check exported production traces: OTLP export requests, protobuf or .json.
+Tool calls are checked against the tool policy in .trackline.json, and the
+stream is watched for outages, loops and latency or token drift.
+
+A trace with no message content cannot show which tool was called; that is
+reported as not checkable, never as clean.
 `,
 	"mcp": `trackline mcp [--root DIR]
 
