@@ -50,6 +50,17 @@ type Span struct {
 	TraceID    string            `json:"traceId,omitempty"`
 	SpanID     string            `json:"spanId,omitempty"`
 	Attributes map[string]string `json:"attributes"`
+
+	// The rest is what production monitoring needs beyond one span's content:
+	// how spans nest into a conversation, how long each took, and whether it
+	// failed. None of it was in Phase 0's capture, which was a single call.
+	ParentSpanID  string    `json:"parentSpanId,omitempty"`
+	Start         time.Time `json:"start,omitempty"`
+	End           time.Time `json:"end,omitempty"`
+	Status        string    `json:"status,omitempty"` // "", "ok" or "error"
+	StatusMessage string    `json:"statusMessage,omitempty"`
+	Service       string    `json:"service,omitempty"`
+	Scope         string    `json:"scope,omitempty"`
 }
 
 // Parsed is everything one span yields.
