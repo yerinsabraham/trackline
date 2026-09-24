@@ -84,11 +84,11 @@ trackline mcp             # let any MCP agent ask before it acts (advisory)
 
 ### What it can do in each agent
 
-| | Claude Code | Codex | Cursor | Any MCP client |
-|---|---|---|---|---|
-| Stops an action before it happens | yes | yes | yes | **no, advises only** |
-| Tells the agent why | yes | yes | yes | yes |
-| Knows what you asked | transcript | transcript | transcript | what the agent says |
+| | Claude Code | Codex | Cursor | Any MCP client | Production traces |
+|---|---|---|---|---|---|
+| Stops an action before it happens | yes | yes | yes | **no, advises only** | **no, alerts after** |
+| Tells the agent why | yes | yes | yes | yes | no |
+| Knows what you asked | transcript | transcript | transcript | what the agent says | the trace, if content capture is on |
 
 Each has limits of its own, and `trackline doctor --host <name>` prints them. The
 biggest: through MCP **the agent chooses whether to ask**, so an agent that does

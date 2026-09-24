@@ -69,6 +69,18 @@ var all = map[string]Capabilities{
 			"captured from the Cursor CLI; the desktop app is expected to match but has not been checked",
 		},
 	},
+	"production": {
+		Name:               "production traces",
+		Blocks:             false,
+		ReasonReachesAgent: false,
+		Intent:             "the user message in the trace, when message content capture is on",
+		Evidence:           "the official OTel OpenAI instrumentation and OTLP exporter, captured and replayed; 45 pre-registered conversations",
+		Limits: []string{
+			"a trace is a record of what already happened, so trackline alerts and never stops anything",
+			"without message content capture, which is opt-in, a trace does not say which tool was called; checks report that rather than pass it",
+			"a permitted tool used for something nobody asked for is only caught with --judge",
+		},
+	},
 	"mcp": {
 		Name:               "any MCP client",
 		Blocks:             false,
@@ -92,7 +104,7 @@ func For(host string) (Capabilities, bool) {
 }
 
 // Names lists the known hosts in a stable order.
-func Names() []string { return []string{"claude", "codex", "cursor", "mcp"} }
+func Names() []string { return []string{"claude", "codex", "cursor", "mcp", "production"} }
 
 // Describe renders a host's capabilities for a person.
 func (c Capabilities) Describe() string {
