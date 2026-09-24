@@ -598,8 +598,8 @@ a.host { color: inherit; display: block; }
   list-style: none; margin: 40px auto 0; padding: 0; max-width: 860px; text-align: left;
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
 }
-.steps-strip li { display: flex; flex-direction: column; gap: 4px; padding: 18px 18px 20px; border-radius: 14px; background: var(--slab); border: 1px solid var(--night-line); font-size: 14px; color: var(--night-muted); }
+.steps-strip li { display: block; padding: 18px 18px 20px; border-radius: 14px; background: var(--slab); border: 1px solid var(--night-line); font-size: 14px; color: var(--night-muted); }
 .steps-strip span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--signal); color: #fff; font: 600 12px var(--mono); margin-bottom: 8px; }
-.steps-strip b { color: var(--night-text); font-weight: 500; font-size: 15px; }
+.steps-strip b { display: block; margin-bottom: 4px; color: var(--night-text); font-weight: 500; font-size: 15px; }
 .steps-strip code { color: var(--night-text); font-size: 13px; }
 @media (max-width: 760px) { .steps-strip { grid-template-columns: 1fr; } }
