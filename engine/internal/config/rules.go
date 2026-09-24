@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,8 +35,15 @@ const maxRuleLine = 400
 //
 // A missing file is normal and silent. Rules are returned in file order so a
 // verdict citing one can be traced back by eye.
+//
+// A file that exists but cannot be read is not silent. Every caller dropped
+// this error once, so a CLAUDE.md with the wrong permissions read exactly like
+// a project with no rules at all. The files that did read are still returned,
+// and the error names each one that did not: one bad file must not hide the
+// rest.
 func LoadRules(root string, cfg Config) ([]signal.Rule, error) {
 	var out []signal.Rule
+	var failed []error
 
 	for _, name := range cfg.RuleFiles {
 		path := filepath.Join(root, name)
@@ -44,16 +52,18 @@ func LoadRules(root string, cfg Config) ([]signal.Rule, error) {
 			continue
 		}
 		if err != nil {
-			return out, err
+			failed = append(failed, fmt.Errorf("%s: %w", name, err))
+			continue
 		}
 		rules, err := parseRules(f, name)
 		f.Close()
 		if err != nil {
-			return out, err
+			failed = append(failed, fmt.Errorf("%s: %w", name, err))
+			continue
 		}
 		out = append(out, rules...)
 	}
-	return out, nil
+	return out, errors.Join(failed...)
 }
 
 func parseRules(r interface{ Read([]byte) (int, error) }, source string) ([]signal.Rule, error) {

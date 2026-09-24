@@ -167,7 +167,7 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	// A configuration that cannot be read is worth saying out loud, but it must
 	// never stop the user working. Defaults carry on.
 	cfg, cfgErr := config.Load(root)
-	rules, _ := config.LoadRules(root, cfg)
+	rules, rulesErr := config.LoadRules(root, cfg)
 
 	// Two separate stores, on purpose. The recording is the full session, for
 	// replay and inspection, and nothing on the hot path reads it. The turn
@@ -214,6 +214,10 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	if cfgErr != nil {
 		d.Report.Results = append(d.Report.Results,
 			verdict.CannotMeasure("config", cfgErr.Error()))
+	}
+	if rulesErr != nil {
+		d.Report.Results = append(d.Report.Results,
+			verdict.CannotMeasure("rules", "a rules file could not be read, so its rules were not applied: "+rulesErr.Error()))
 	}
 
 	// Acting needs two things: grounds, and permission. They are separate on

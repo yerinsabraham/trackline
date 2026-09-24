@@ -346,7 +346,7 @@ func render(d runner.Decision, root string) map[string]any {
 
 func (s *Server) getRules() map[string]any {
 	cfg, cfgErr := config.Load(s.Root)
-	rules, _ := config.LoadRules(s.Root, cfg)
+	rules, rulesErr := config.LoadRules(s.Root, cfg)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Project: %s\n", s.Root)
@@ -357,6 +357,9 @@ func (s *Server) getRules() map[string]any {
 	fmt.Fprintf(&b, "\nNever write to: %s\n", strings.Join(cfg.OffLimits, ", "))
 	if cfgErr != nil {
 		fmt.Fprintf(&b, "\nThe trackline config could not be read (%v); defaults apply.\n", cfgErr)
+	}
+	if rulesErr != nil {
+		fmt.Fprintf(&b, "\nSome rules files could not be read, and their rules are missing below: %v\n", rulesErr)
 	}
 	if len(rules) == 0 {
 		fmt.Fprintf(&b, "\nNo rules files found (looked for %s).\n", strings.Join(cfg.RuleFiles, ", "))

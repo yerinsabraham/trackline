@@ -123,3 +123,22 @@ func TestMissingRuleFilesAreSilent(t *testing.T) {
 		t.Errorf("got %d rules from an empty directory", len(rules))
 	}
 }
+
+// A rules file that exists but cannot be read must say so, and must not hide
+// the files after it. Every caller once dropped this error, so an unreadable
+// AGENTS.md looked exactly like a project with no rules.
+func TestUnreadableRulesFileIsReportedAndDoesNotHideTheRest(t *testing.T) {
+	root := t.TempDir()
+	// A directory where a file is expected fails to read for every user,
+	// including root, which a permissions trick would not.
+	os.Mkdir(filepath.Join(root, "AGENTS.md"), 0o755)
+	os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("- Never touch the billing code.\n"), 0o600)
+
+	rules, err := config.LoadRules(root, config.Default())
+	if err == nil || !strings.Contains(err.Error(), "AGENTS.md") {
+		t.Errorf("err = %v; an unreadable rules file must be named", err)
+	}
+	if len(rules) == 0 {
+		t.Error("CLAUDE.md read fine and its rules must still be returned")
+	}
+}

@@ -206,8 +206,11 @@ func cmdDoctor(args []string) error {
 	fmt.Printf("mode:        %s\n", cfg.Mode)
 	fmt.Printf("protected:   %d patterns\n", len(cfg.OffLimits))
 
-	rules, _ := config.LoadRules(f.root, cfg)
+	rules, rulesErr := config.LoadRules(f.root, cfg)
 	fmt.Printf("rules found: %d, from %v\n", len(rules), cfg.RuleFiles)
+	if rulesErr != nil {
+		fmt.Printf("rules:       UNREADABLE — %v\n", rulesErr)
+	}
 
 	path, err := install.Plan(install.Host(f.host), f.root)
 	if err != nil {

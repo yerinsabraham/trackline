@@ -206,3 +206,26 @@ func TestRecordedActionCarriesItsRequest(t *testing.T) {
 		t.Errorf("the recorded event must carry the request it was made under:\n%s", b)
 	}
 }
+
+// Surfaced as cannot-measure on every action, never as a block: a broken
+// rules file is worth saying out loud and never worth stopping work over.
+func TestUnreadableRulesAreCannotMeasure(t *testing.T) {
+	root := t.TempDir()
+	os.Mkdir(filepath.Join(root, "AGENTS.md"), 0o755)
+	d, err := runner.Run(payload(root, "src/app.ts"), runner.Options{Root: root, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range d.Report.Results {
+		if r.Signal == "rules" && r.Outcome == verdict.OutcomeCannotMeasure && strings.Contains(r.Reason, "AGENTS.md") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("results = %+v; an unreadable rules file must be reported", d.Report.Results)
+	}
+	if d.Block {
+		t.Error("an unreadable rules file must never block")
+	}
+}
