@@ -58,9 +58,8 @@ func cmdConnect(args []string) error {
 		}
 	}
 
-	// One line each, but the first still says what goes and what never does.
 	name := filepath.Base(root)
-	if !ask(fmt.Sprintf("Show %s's findings on your dashboard? (file paths and check results, never your code)", name), true) {
+	if !ask(fmt.Sprintf("Show %s's findings on your dashboard?", name), true) {
 		fmt.Println("Nothing connected.")
 		return nil
 	}
