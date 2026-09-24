@@ -27,7 +27,7 @@ const table = {
 
 const stats = [
   { big: "11/11", small: "times a blocked agent corrected itself when told why", n: "01", file: "01-do-agents-self-correct.md" },
-  { big: "~14ms", small: "the cost of every check, before every action", n: "02", file: "02-hook-latency.md" },
+  { big: "14 ms", small: "the cost of every check, before every action", n: "02", file: "02-hook-latency.md" },
   { big: "60/60", small: "held-out drifts caught by the judge, against 2 for the rules alone", n: "06", file: "06-the-judge-measured.md" },
   { big: "0 lines", small: "changed in the core engine to add production", n: "07", file: "07-production-traces.md" },
 ];
@@ -197,7 +197,9 @@ export default function Home() {
         <div className="stats">
           {stats.map((s) => (
             <a key={s.n} className="stat" href={`${EXPERIMENTS}/${s.file}`}>
-              <DotText text={s.big} max={60} pitch={1 / 11} color="#111112" align="left" introOnView />
+              {/* Plain text: a number is read at a glance, and in dots the
+                  tilde of "~14ms" read as a minus sign. */}
+              <b className="stat-num">{s.big}</b>
               <p>{s.small}</p>
               <span className="src-link"><span>Experiment {s.n}</span><span>→</span></span>
             </a>

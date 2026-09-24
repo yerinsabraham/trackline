@@ -342,8 +342,7 @@ code, pre { font-family: var(--mono); }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
 .stat { background: var(--card); padding: 28px 24px 24px; display: flex; flex-direction: column; min-height: 240px; transition: background 0.15s; }
 .stat:hover { background: #fbfbf9; }
-.stat .dotwrap { min-height: 56px; }
-.stat .dot-fallback { font-size: 44px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; }
+.stat .stat-num { display: block; font-size: 44px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; color: var(--ink, #111112); font-variant-numeric: tabular-nums; }
 .stat p { margin: 14px 0 0; font-size: 15px; color: var(--ink-2); line-height: 1.45; }
 .stat .src-link { margin-top: auto; padding-top: 18px; font: 12px var(--mono); color: var(--ink-3); display: flex; justify-content: space-between; }
 .stat:hover .src-link { color: var(--signal); }
