@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { marked } from "marked";
+import { frontMatter, render, type Heading } from "./markdown";
 import { SITE } from "./site";
 
 // The guide is written once, in docs/guide/ at the repository root, and read
@@ -14,19 +14,12 @@ export type Page = {
   description: string;
   order: number;
   html: string;
+  toc: Heading[];
+  /** The page as Markdown, links made absolute, for agents and "Copy page". */
   markdown: string;
+  /** The source Markdown with site links, for search sections. */
+  source: string;
 };
-
-function frontMatter(raw: string): { meta: Record<string, string>; body: string } {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n/);
-  if (!m) return { meta: {}, body: raw };
-  const meta: Record<string, string> = {};
-  for (const line of m[1].split("\n")) {
-    const i = line.indexOf(":");
-    if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-  }
-  return { meta, body: raw.slice(m[0].length) };
-}
 
 const REPO = "https://github.com/yerinsabraham/trackline/blob/main/docs";
 
@@ -50,13 +43,16 @@ export function pages(): Page[] {
       const { meta, body } = frontMatter(fs.readFileSync(path.join(DIR, f), "utf8"));
       // The page's own H1 is dropped: the layout renders the title.
       const content = body.trimStart().replace(/^# .*\n+/, "");
+      const r = render(rewriteLinks(content));
       return {
         slug: f.replace(/\.md$/, ""),
         title: meta.title ?? f,
         description: meta.description ?? "",
         order: Number(meta.order ?? 99),
         markdown: rewriteLinks(content).replace(/\]\(\/docs\//g, `](${SITE}/docs/`),
-        html: marked.parse(rewriteLinks(content), { async: false }) as string,
+        html: r.html,
+        toc: r.toc,
+        source: rewriteLinks(content),
       };
     })
     .sort((a, b) => a.order - b.order);

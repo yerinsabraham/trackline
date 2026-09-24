@@ -6,14 +6,14 @@ import { ClaudeLogo, CursorLogo, OpenAILogo, TraceBars, TracklineTile } from "@/
 import InstallTabs from "@/components/InstallTabs";
 import TypedChat from "@/components/TypedChat";
 import WatchGate from "@/components/WatchGate";
-import { EXPERIMENTS, SITE } from "@/lib/site";
+import { SITE } from "@/lib/site";
 
 const hosts = [
-  { name: <>Claude<br />Code</>, logo: <ClaudeLogo />, via: "Hook", state: "Blocks", cls: "" },
-  { name: "Codex", logo: <OpenAILogo />, via: "Hook", state: "Blocks", cls: "" },
-  { name: "Your agent", logo: <TracklineTile />, via: "Any MCP client", state: "Advises", cls: "adv", center: true },
-  { name: "Cursor", logo: <CursorLogo />, via: "Hook", state: "Blocks", cls: "" },
-  { name: <>Production<br />traces</>, logo: <TraceBars />, via: "OTLP", state: "Alerts", cls: "alert" },
+  { name: <>Claude<br />Code</>, logo: <ClaudeLogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/claude-code" },
+  { name: "Codex", logo: <OpenAILogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/codex" },
+  { name: "Your agent", logo: <TracklineTile />, via: "Any MCP client", state: "Advises", cls: "adv", center: true, href: "/agents/mcp" },
+  { name: "Cursor", logo: <CursorLogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/cursor" },
+  { name: <>Production<br />traces</>, logo: <TraceBars />, via: "OTLP", state: "Alerts", cls: "alert", href: "/agents/production" },
 ];
 
 const table = {
@@ -26,10 +26,10 @@ const table = {
 };
 
 const stats = [
-  { big: "11/11", small: "times a blocked agent corrected itself when told why", n: "01", file: "01-do-agents-self-correct.md" },
-  { big: "14 ms", small: "the cost of every check, before every action", n: "02", file: "02-hook-latency.md" },
-  { big: "60/60", small: "held-out drifts caught by the judge, against 2 for the rules alone", n: "06", file: "06-the-judge-measured.md" },
-  { big: "0 lines", small: "changed in the core engine to add production", n: "07", file: "07-production-traces.md" },
+  { big: "11/11", small: "times a blocked agent corrected itself when told why", n: "01", slug: "do-agents-self-correct", when: "22 Sep 2026" },
+  { big: "14 ms", small: "the cost of every check, before every action", n: "02", slug: "hook-latency", when: "22 Sep 2026" },
+  { big: "60/60", small: "held-out drifts caught by the judge, against 2 for the rules alone", n: "06", slug: "the-judge-measured", when: "23 Sep 2026" },
+  { big: "0 lines", small: "changed in the core engine to add production", n: "07", slug: "production-traces", when: "24 Sep 2026" },
 ];
 
 const limits: [string, string][] = [
@@ -84,14 +84,14 @@ export default function Home() {
         <div className="host-scroll">
           <div className="host-row">
             {hosts.map((h, i) => (
-              <article key={i} className={h.center ? "host center" : "host"}>
+              <Link key={i} href={h.href} className={h.center ? "host center" : "host"}>
                 <div className="thumb"><div className="tile">{h.logo}</div></div>
                 <h3>{h.name}</h3>
                 <div className="host-meta">
                   <span className="chip">{h.via}</span>
                   <span className={`state ${h.cls}`}><i />{h.state}</span>
                 </div>
-              </article>
+              </Link>
             ))}
           </div>
           <div className="track" aria-hidden="true">
@@ -181,7 +181,11 @@ export default function Home() {
             <p className="eyebrow">Where it works</p>
             <h2 id="where-h">One set of rules for every agent you use.</h2>
           </div>
-          <p>A vendor can govern its own agent. Only something that belongs to none of them can govern all of them the same way.</p>
+          <p>
+            A vendor can govern its own agent. Only something that belongs to none of them can govern all of them the
+            same way. trackline is neutral by construction, not by promise: open source, on your machine, with no
+            vendor&apos;s model in the path.
+          </p>
         </div>
         <div className="table-card">
           <table>
@@ -201,7 +205,10 @@ export default function Home() {
             </tbody>
           </table>
         </div>
-        <p className="foot-note"><code>trackline doctor --host &lt;name&gt;</code> prints the full list of what it can and cannot see in each.</p>
+        <p className="foot-note">
+          <code>trackline doctor --host &lt;name&gt;</code> prints the full list of what it can and cannot see in each.{" "}
+          <Link className="text-link" href="/agents">See each agent</Link>
+        </p>
       </section>
 
       <section className="section wrap" aria-labelledby="ev-h">
@@ -214,13 +221,13 @@ export default function Home() {
         </div>
         <div className="stats">
           {stats.map((s) => (
-            <a key={s.n} className="stat" href={`${EXPERIMENTS}/${s.file}`}>
+            <Link key={s.n} className="stat" href={`/evidence/${s.slug}`}>
               {/* Plain text: a number is read at a glance, and in dots the
                   tilde of "~14ms" read as a minus sign. */}
               <b className="stat-num">{s.big}</b>
               <p>{s.small}</p>
-              <span className="src-link"><span>Experiment {s.n}</span><span>→</span></span>
-            </a>
+              <span className="src-link"><span>Experiment {s.n} · {s.when}</span><span>→</span></span>
+            </Link>
           ))}
         </div>
         <p className="more"><Link href="/evidence">See all seven experiments</Link></p>
@@ -245,6 +252,11 @@ export default function Home() {
             Install with
             <DotText text="one paste" max={80} pitch={1 / 15} color="#e4e4e6" board="#1b1b1e" interactive drift introOnView />
           </h2>
+          <ol className="steps-strip">
+            <li><span>1</span><b>Copy the prompt</b>The button above, or the tab below.</li>
+            <li><span>2</span><b>Paste it into your agent</b>It installs trackline and runs <code>init</code> for itself.</li>
+            <li><span>3</span><b>Check it fired</b>After the next edit, <code>trackline status</code> shows the hook has run.</li>
+          </ol>
           <InstallTabs />
           <p className="after">
             Paste the prompt into your agent, or run the commands yourself. It starts in warn mode: it notices

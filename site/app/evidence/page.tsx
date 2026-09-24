@@ -1,6 +1,14 @@
-import { EXPERIMENTS, evidence } from "@/lib/site";
+import Link from "next/link";
+import { experiments } from "@/lib/experiments";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata = { title: "Evidence", alternates: { canonical: "/evidence" } };
+export const metadata = pageMeta({
+  path: "/evidence",
+  title: "Evidence",
+  description: "Seven experiments behind trackline's design, each measured before it was built on, with the method and the limits.",
+});
+
+const day = (d: string) => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 export default function Evidence() {
   return (
@@ -14,15 +22,16 @@ export default function Evidence() {
         </p>
       </header>
       <div className="evidence">
-        {evidence.map((e) => (
+        {experiments().map((e) => (
           <article key={e.n} className="ev">
             <div className="num">{String(e.n).padStart(2, "0")}</div>
             <div>
               <h3>{e.question}</h3>
               <p className="ans">{e.answer}</p>
               <p className="method">{e.method}</p>
+              <p className="dated">Published {day(e.published)}</p>
             </div>
-            <a className="read" href={`${EXPERIMENTS}/${e.file}`}>Read the write-up →</a>
+            <Link className="read" href={`/evidence/${e.slug}`}>Read the write-up →</Link>
           </article>
         ))}
       </div>

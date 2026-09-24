@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import CodeCopy from "@/components/CodeCopy";
+import DocTools from "@/components/DocTools";
+import Toc from "@/components/Toc";
 import { page, pages } from "@/lib/guide";
+import { pageMeta } from "@/lib/seo";
+
+export const dynamicParams = false;
 
 export function generateStaticParams() {
   return pages().map((p) => ({ slug: p.slug }));
@@ -8,9 +14,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const p = page((await params).slug);
-  return p
-    ? { title: p.title, description: p.description, alternates: { canonical: `/docs/${p.slug}` } }
-    : {};
+  return p ? pageMeta({ path: `/docs/${p.slug}`, title: p.title, description: p.description }) : {};
 }
 
 export default async function DocPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -23,7 +27,7 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
   const next = all[i + 1];
 
   return (
-    <div className="wrap docs">
+    <div className="wrap docs has-toc">
       <nav className="docs-nav" aria-label="Docs">
         <p className="eyebrow">Docs</p>
         {all.map((x) => (
@@ -35,7 +39,9 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
       <article className="prose">
         <h1>{p.title}</h1>
         {p.description && <p className="desc">{p.description}</p>}
+        <DocTools md={`/docs/${p.slug}.md`} title={p.title} />
         <div dangerouslySetInnerHTML={{ __html: p.html }} />
+        <CodeCopy />
         <div className="pager">
           {prev && (
             <Link href={`/docs/${prev.slug}`}>
@@ -49,6 +55,7 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
           )}
         </div>
       </article>
+      <Toc toc={p.toc} />
     </div>
   );
 }

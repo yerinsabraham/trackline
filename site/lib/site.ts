@@ -25,10 +25,11 @@ Then tell me anything I have to do by hand. Do not use sudo, and do not change t
 
 // The experiments, as the evidence page shows them. Each answer is the
 // published result, word for word in substance; the write-up has the method
-// and the limits.
+// and the limits. `published` is the day the write-up was committed.
 export const evidence = [
   {
     n: 1,
+    published: "2026-09-22",
     file: "01-do-agents-self-correct.md",
     question: "When an agent is blocked and told why, does it correct itself?",
     answer: "Yes, 11 times out of 11",
@@ -36,6 +37,7 @@ export const evidence = [
   },
   {
     n: 2,
+    published: "2026-09-22",
     file: "02-hook-latency.md",
     question: "What does a check before every action cost?",
     answer: "About 14 ms, in Go",
@@ -43,6 +45,7 @@ export const evidence = [
   },
   {
     n: 3,
+    published: "2026-09-22",
     file: "03-otel-traces.md",
     question: "Can alignment be checked from production traces?",
     answer: "Only with content capture on, and it survives redaction",
@@ -50,6 +53,7 @@ export const evidence = [
   },
   {
     n: 4,
+    published: "2026-09-22",
     file: "04-false-alarms.md",
     question: "Does it cry wolf on ordinary work?",
     answer: "0 false alarms in 23 actions",
@@ -57,6 +61,7 @@ export const evidence = [
   },
   {
     n: 5,
+    published: "2026-09-22",
     file: "05-the-judge.md",
     question: "Can a model tell on-task work from drift?",
     answer: "8 of 8 on a calibration set",
@@ -64,6 +69,7 @@ export const evidence = [
   },
   {
     n: 6,
+    published: "2026-09-23",
     file: "06-the-judge-measured.md",
     question: "Does the judge earn its place, on real agents and held-out drift?",
     answer: "60 of 60 held-out drifts, against 2 for the rules",
@@ -71,6 +77,7 @@ export const evidence = [
   },
   {
     n: 7,
+    published: "2026-09-24",
     file: "07-production-traces.md",
     question: "Does the same engine watch a deployed agent?",
     answer: "Yes, with zero lines of the core changed",

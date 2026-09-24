@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { pages } from "@/lib/guide";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata = { title: "Docs", alternates: { canonical: "/docs" } };
+export const metadata = pageMeta({
+  path: "/docs",
+  title: "Docs",
+  description: "Everything trackline does, one page per task: install, the checks, modes, production traces, tool policy, the judge, MCP and configuration.",
+});
 
 export default function DocsIndex() {
   return (

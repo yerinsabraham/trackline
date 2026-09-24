@@ -231,16 +231,18 @@ The top four issues:
 ## The site's address
 
 The product site is at **https://trackline.dev** (since 2026-09-24; before that
-https://trackline-iota.vercel.app, which still resolves). The address is written
-in exactly one place in code:
+https://trackline-iota.vercel.app, which now redirects here, path kept). The
+address is written in exactly one place in code:
 
 ```
 site/lib/site.ts    export const SITE = "..."
 ```
 
 Everything that shows it reads that constant: the "copy prompt for your agent"
-text, and the `/install.md` instructions agents fetch. Do not hard-code the
-address anywhere else.
+text, the `/install.md` instructions agents fetch, `/llms.txt`, the Markdown
+copies of each page, and the share cards. Do not hard-code the address anywhere
+else. The one exception is `site/vercel.json`, which cannot read code: its
+redirect sends the old vercel.app host to the current address.
 
 **If the address ever changes again**, do all of these, and nothing is done until
 all are. (Done for trackline.dev on 2026-09-24.)
@@ -254,11 +256,12 @@ all are. (Done for trackline.dev on 2026-09-24.)
    from the next release.
 5. Set the GitHub repo's website field to the new site. Deliberately left empty
    until there is a domain.
-6. Search for anything missed:
+6. Update the redirect's destination in `site/vercel.json`.
+7. Search for anything missed:
    `git grep -n "vercel.app\|trackline-iota"`
 
-Prompts already pasted into agents keep working: the vercel.app address stays
-live after a custom domain is added.
+Prompts already pasted into agents keep working: the vercel.app address
+redirects with the path kept, so `/install.md` still arrives.
 
 ---
 

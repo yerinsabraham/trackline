@@ -1,8 +1,10 @@
-export const metadata = {
+import { pageMeta } from "@/lib/seo";
+
+export const metadata = pageMeta({
+  path: "/privacy",
   title: "Privacy",
   description: "What trackline collects, what it never collects, and how to delete it.",
-  alternates: { canonical: "/privacy" },
-};
+});
 
 // Written from what the product actually does. If behaviour changes, this page
 // changes in the same commit.

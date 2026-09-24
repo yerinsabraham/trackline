@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import Mark from "@/components/Mark";
+import Search from "@/components/Search";
 import { GITHUB, SITE } from "@/lib/site";
 import "./globals.css";
 
@@ -44,8 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               trackline
             </Link>
             <nav className="nav-links" aria-label="Main">
-              <Link href="/#how" className="wide">How it works</Link>
+              <Link href="/agents" className="wide">Agents</Link>
               <Link href="/docs">Docs</Link>
+              <Link href="/changelog" className="wide">Changelog</Link>
+              <Search />
             </nav>
             <div className="nav-cta">
               <span className="frame">
@@ -69,7 +72,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span>Open source under Apache-2.0</span>
             <nav aria-label="Footer">
               <Link href="/docs">Docs</Link>
+              <Link href="/agents">Agents</Link>
               <Link href="/evidence">Evidence</Link>
+              <Link href="/changelog">Changelog</Link>
+              <Link href="/about">About</Link>
               <a href={GITHUB}>GitHub</a>
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>

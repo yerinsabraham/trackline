@@ -1,8 +1,10 @@
-export const metadata = {
+import { pageMeta } from "@/lib/seo";
+
+export const metadata = pageMeta({
+  path: "/terms",
   title: "Terms",
   description: "The terms for using trackline and its optional account.",
-  alternates: { canonical: "/terms" },
-};
+});
 
 export default function Terms() {
   return (

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "trackline-iota.vercel.app" }],
+      "destination": "https://trackline.dev/:path*",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    { "source": "/docs/:slug.md", "destination": "/md/docs/:slug.md" },
+    { "source": "/evidence/:slug.md", "destination": "/md/evidence/:slug.md" },
+    {
+      "source": "/docs/:slug",
+      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
+      "destination": "/md/docs/:slug.md"
+    },
+    {
+      "source": "/evidence/:slug",
+      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
+      "destination": "/md/evidence/:slug.md"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
+      "destination": "/llms.txt"
+    }
+  ]
+}
