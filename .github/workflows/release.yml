@@ -116,10 +116,22 @@ jobs:
       - name: Confirm attribution actually shipped
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
-          sleep 20
+          # A new version takes minutes to become installable: 0.2.0 took about
+          # six for all six packages. A fixed 20 seconds failed a release that
+          # had published correctly. Wait for every package, up to ten minutes.
+          v=$(node -p "require('./package.json').version")
+          for i in $(seq 1 40); do
+            missing=0
+            for p in trackline $(node -p "Object.keys(require('./package.json').optionalDependencies).join(' ')"); do
+              [ "$(npm view "$p@$v" version 2>/dev/null)" = "$v" ] || missing=$((missing+1))
+            done
+            [ "$missing" = 0 ] && break
+            echo "waiting for $missing package(s) to appear on the registry"
+            sleep 15
+          done
           mkdir -p /tmp/verify && cd /tmp/verify
           npm init -y >/dev/null
-          npm install trackline@$(node -p "require('/home/runner/work/trackline/trackline/package.json').version")
+          npm install "trackline@$v"
           for f in LICENSE NOTICE README.md; do
             test -f node_modules/trackline/$f || { echo "::error::$f missing from the published package"; exit 1; }
           done
