@@ -1,30 +1,28 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "redirects": [
+  "routes": [
     {
-      "source": "/:path*",
+      "src": "/(.*)",
       "has": [{ "type": "host", "value": "trackline-iota.vercel.app" }],
-      "destination": "https://trackline.dev/:path*",
-      "permanent": true
-    }
-  ],
-  "rewrites": [
-    { "source": "/docs/:slug.md", "destination": "/md/docs/:slug.md" },
-    { "source": "/evidence/:slug.md", "destination": "/md/evidence/:slug.md" },
+      "status": 308,
+      "headers": { "Location": "https://trackline.dev/$1" }
+    },
+    { "src": "/docs/([\\w-]+)\\.md", "dest": "/md/docs/$1.md" },
+    { "src": "/evidence/([\\w-]+)\\.md", "dest": "/md/evidence/$1.md" },
     {
-      "source": "/docs/:slug",
-      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
-      "destination": "/md/docs/:slug.md"
+      "src": "/docs/([\\w-]+)",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "dest": "/md/docs/$1.md"
     },
     {
-      "source": "/evidence/:slug",
-      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
-      "destination": "/md/evidence/:slug.md"
+      "src": "/evidence/([\\w-]+)",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "dest": "/md/evidence/$1.md"
     },
     {
-      "source": "/",
-      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
-      "destination": "/llms.txt"
+      "src": "/",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "dest": "/llms.txt"
     }
   ]
 }

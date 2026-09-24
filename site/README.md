@@ -25,7 +25,7 @@ cd ../engine && go test ./internal/hosts -update-site
 
 Generated at build time, for agents and link previews: `/llms.txt`, a Markdown
 copy of every docs page and experiment (`/docs/<slug>.md`, served from `/md/`
-by a rewrite in `vercel.json`), `/search.json` for the ⌘K search, and a share
+by a route in `vercel.json`, which also answers `Accept: text/markdown`), `/search.json` for the ⌘K search, and a share
 card per page under `/og/`.
 
 ## Deploy
@@ -39,7 +39,8 @@ vercel deploy --prebuilt --prod
 ```
 
 At https://trackline.dev. The old https://trackline-iota.vercel.app address
-redirects there with the path kept (`vercel.json`), so prompts pasted before the
+redirects there with the path kept (`vercel.json`; it uses `routes`, not
+`rewrites`, because rewrites run only after a static file fails to match), so prompts pasted before the
 domain existed keep working.
 If the address changes, change `SITE` in `lib/site.ts`: the agent prompt and
 `/install.md` both read it. The full checklist is in `AGENTS.md`.
