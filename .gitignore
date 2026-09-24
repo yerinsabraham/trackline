@@ -23,3 +23,7 @@ packages/*/bin/
 *token*.txt
 *.token
 .npmrc
+# OAuth credentials handed over for setup, and Google's downloaded client file.
+*oauth*.txt
+*secret*.txt
+client_secret*.json
