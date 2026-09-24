@@ -1,6 +1,6 @@
 {
   "name": "trackline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Watches whether an AI coding agent is still doing what you asked. Runs beside Claude Code or Codex and says when the work stops matching the request.",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
   "homepage": "https://yerinsabraham.com/engineering/nothing-notices-when-an-agent-drifts",
@@ -67,10 +67,10 @@
     "typescript": "^5.7.2"
   },
   "optionalDependencies": {
-    "@trackline/darwin-arm64": "0.1.0",
-    "@trackline/darwin-x64": "0.1.0",
-    "@trackline/linux-x64": "0.1.0",
-    "@trackline/linux-arm64": "0.1.0",
-    "@trackline/win32-x64": "0.1.0"
+    "@trackline/darwin-arm64": "0.2.0",
+    "@trackline/darwin-x64": "0.2.0",
+    "@trackline/linux-x64": "0.2.0",
+    "@trackline/linux-arm64": "0.2.0",
+    "@trackline/win32-x64": "0.2.0"
   }
 }

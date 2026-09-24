@@ -1,6 +1,6 @@
 {
   "name": "@trackline/linux-x64",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "trackline binaries for linux x64. Installed automatically by the trackline package.",
   "license": "Apache-2.0",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
