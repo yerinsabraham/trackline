@@ -68,6 +68,8 @@ func main() {
 		err = cmdRevoke(os.Args[2:])
 	case "traces":
 		err = cmdTraces(os.Args[2:])
+	case "serve":
+		err = cmdServe(os.Args[2:])
 	case "mcp":
 		f := parse(os.Args[2:])
 		// stdout is the protocol, so warnings go to stderr, which clients log.
@@ -103,6 +105,7 @@ func usage() {
   allowed  list what has been approved
   revoke   withdraw an approval
   traces   check exported production traces (OTLP, protobuf or JSON)
+  serve    receive traces from a running agent and check them live
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
 
@@ -149,7 +152,7 @@ List what has been approved.
 
 Withdraw an approval.
 `,
-	"traces": `trackline traces [--root DIR] [--json] FILE|DIR...
+	"traces": `trackline traces [--root DIR] [--json] [--judge codex|claude|cursor-agent] FILE|DIR...
 
 Check exported production traces: OTLP export requests, protobuf or .json.
 Tool calls are checked against the tool policy in .trackline.json, and the
@@ -157,6 +160,22 @@ stream is watched for outages, loops and latency or token drift.
 
 A trace with no message content cannot show which tool was called; that is
 reported as not checkable, never as clean.
+
+--judge asks a model whether each run's tools served its request, which is the
+only thing that catches a permitted tool used off-task. It is sent the request
+and the tool names, never the arguments.
+`,
+	"serve": `trackline serve [--addr 127.0.0.1:4318] [--root DIR] [--sample 1] [--alert URL] [--out FILE]
+
+Receive traces from a running agent: point an OTLP/HTTP exporter, protobuf or
+JSON, at http://ADDR/v1/traces. Each conversation is checked when it completes.
+
+--sample keeps a fraction of conversations, each one whole.
+--alert posts findings and incidents to a webhook as {"text": ...}, which
+Slack and most chat tools accept directly.
+--out appends every result as a JSON line.
+
+Listens on localhost unless told otherwise: traces carry customer messages.
 `,
 	"mcp": `trackline mcp [--root DIR]
 

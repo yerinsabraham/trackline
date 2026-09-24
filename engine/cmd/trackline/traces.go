@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/otel"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
+	"github.com/yerinsabraham/trackline/engine/internal/judge"
 	"github.com/yerinsabraham/trackline/engine/internal/otlp"
 	"github.com/yerinsabraham/trackline/engine/internal/production"
 )
@@ -24,6 +26,7 @@ import (
 func cmdTraces(args []string) error {
 	root, _ := os.Getwd()
 	asJSON := false
+	judgeBin := ""
 	var inputs []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -34,6 +37,11 @@ func cmdTraces(args []string) error {
 			}
 		case "--json":
 			asJSON = true
+		case "--judge":
+			if i+1 < len(args) {
+				i++
+				judgeBin = args[i]
+			}
 		default:
 			inputs = append(inputs, args[i])
 		}
@@ -88,24 +96,67 @@ func cmdTraces(args []string) error {
 	}
 	results := production.Process(production.Assemble(spans), cfg, production.NewMonitor())
 
+	var verdicts map[string]judge.Answer
+	if judgeBin != "" {
+		p, err := provider(config.JudgeConfig{Provider: "cli", Binary: judgeBin})
+		if err != nil {
+			return err
+		}
+		verdicts = judgeConversations(p, results)
+	}
+
 	if asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		for _, r := range results {
-			if err := enc.Encode(r); err != nil {
+			line := map[string]any{"result": r}
+			if a, ok := verdicts[r.Conversation.TraceID]; ok {
+				line["judge"] = a
+			}
+			if err := enc.Encode(line); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	printTraceResults(results, cfg)
+	printTraceResults(results, cfg, verdicts, judgeBin != "")
 	return nil
 }
 
-func printTraceResults(results []production.Result, cfg config.Config) {
-	flagged, incidents, unmeasured := 0, 0, 0
+// judgeConversations asks whether each run's tool calls served its request.
+//
+// The judge sees the request and the names of the tools called, never their
+// arguments. Arguments carry customer data, account numbers and amounts, and
+// the question does not need them: whether send_marketing_email serves "what
+// is my balance" is answered by the name. The same line the coding judge draws
+// by never sending file contents.
+func judgeConversations(p judge.Provider, results []production.Result) map[string]judge.Answer {
+	j := judge.New(p)
+	out := map[string]judge.Answer{}
+	for _, r := range results {
+		c := r.Conversation
+		if !c.ContentAvailable || len(c.Requests) == 0 {
+			continue
+		}
+		var actions []string
+		for _, a := range c.Actions {
+			actions = append(actions, "called tool "+a.Action.ToolName)
+		}
+		a, err := j.Ask(context.Background(), judge.Turn{Request: strings.Join(c.Requests, "\n"), Actions: actions})
+		if err != nil {
+			a = judge.Answer{Verdict: "error", Reason: err.Error()}
+		}
+		out[c.TraceID] = a
+	}
+	return out
+}
+
+func printTraceResults(results []production.Result, cfg config.Config, verdicts map[string]judge.Answer, judged bool) {
+	flagged, incidents, unmeasured, unrelated := 0, 0, 0, 0
 	for _, r := range results {
 		fs := r.Findings()
-		if len(fs) == 0 && len(r.Incidents) == 0 && len(r.Unmeasured) == 0 {
+		a, hasVerdict := verdicts[r.Conversation.TraceID]
+		offTask := hasVerdict && (a.Verdict == judge.Unrelated || a.Verdict == "error")
+		if len(fs) == 0 && len(r.Incidents) == 0 && len(r.Unmeasured) == 0 && !offTask {
 			continue
 		}
 		fmt.Printf("%s\n", r.Conversation.ID)
@@ -124,14 +175,27 @@ func printTraceResults(results []production.Result, cfg config.Config) {
 			unmeasured++
 			fmt.Printf("  UNCHECKED %s\n", u.Reason)
 		}
+		if offTask {
+			if a.Verdict == judge.Unrelated {
+				unrelated++
+			}
+			fmt.Printf("  JUDGE     %s: %s\n", a.Verdict, a.Reason)
+		}
 		fmt.Println()
 	}
-	fmt.Printf("%d conversations, %d policy findings, %d incidents, %d not checkable\n",
+	fmt.Printf("%d conversations, %d policy findings, %d incidents, %d not checkable",
 		len(results), flagged, incidents, unmeasured)
+	if judged {
+		fmt.Printf(", %d judged off-task", unrelated)
+	}
+	fmt.Println()
 	if cfg.Tools.Empty() {
 		fmt.Println("\nno tool policy is configured, so tool calls were not checked against one.\n" +
 			`add one to .trackline.json: {"tools": {"never": [...], "requireApproval": {"tool": "approval_tool"}}}`)
 	}
-	fmt.Println("\nA permitted tool used for something the user did not ask for is not caught here;")
-	fmt.Println("that needs a judge reading the request, which trace review does not run yet.")
+	if !judged {
+		fmt.Println("\nA permitted tool used for something the user did not ask for is not caught by")
+		fmt.Println("policy or monitors. --judge codex (or claude, cursor-agent) asks a model, sending")
+		fmt.Println("it each request and the names of the tools called, never their arguments.")
+	}
 }
