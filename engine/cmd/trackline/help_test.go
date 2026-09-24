@@ -6,7 +6,7 @@ import "testing"
 // run instead of explaining itself, which is how mcp --help came to start a
 // server.
 func TestEveryCommandHasHelp(t *testing.T) {
-	for _, c := range []string{"init", "status", "doctor", "show", "review", "allow", "allowed", "revoke", "traces", "serve", "connect", "account", "disconnect", "mcp"} {
+	for _, c := range []string{"init", "status", "doctor", "show", "review", "allow", "allowed", "revoke", "traces", "serve", "connect", "account", "disconnect", "sync", "mcp"} {
 		if commandHelp[c] == "" {
 			t.Errorf("%s has no --help text", c)
 		}

@@ -1,5 +1,10 @@
-// Package account links a machine to a trackline account, and remembers which
-// projects it uploads for.
+// Package account is what a machine remembers about its trackline account:
+// the credential, and which projects upload. Files only; talking to the
+// account is package remote.
+//
+// No network code on purpose. The hook reads this on every tool call, and
+// merely linking net/http into it added 3.4ms to every start (measured,
+// docs/experiments/08).
 //
 // Everything is kept in the user's config directory, never inside a project:
 // a credential written into a repository is one `git add .` from being
@@ -7,32 +12,14 @@
 package account
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
-
-// DefaultAPI is where accounts live unless TRACKLINE_API says otherwise.
-const DefaultAPI = "https://api.creovine.com/trackline/v1"
-
-// API returns the API base: the flag if given, then TRACKLINE_API, then the default.
-func API(flag string) string {
-	for _, v := range []string{flag, os.Getenv("TRACKLINE_API"), DefaultAPI} {
-		if v != "" {
-			return strings.TrimRight(v, "/")
-		}
-	}
-	return DefaultAPI
-}
 
 // Dir is where trackline keeps account state for this user.
 func Dir() (string, error) {
@@ -111,14 +98,20 @@ func SaveCredentials(c Credentials) error {
 	return write(filepath.Join(d, "credentials.json"), c)
 }
 
-// Forget removes the credentials and the project list.
+// Forget removes the credentials, the project list, and anything still
+// waiting to upload: a disconnected machine has nowhere to send it.
 func Forget() error {
 	d, err := Dir()
 	if err != nil {
 		return err
 	}
-	for _, f := range []string{"credentials.json", "projects.json"} {
+	for _, f := range []string{"credentials.json", "projects.json", "sync.backoff"} {
 		if err := os.Remove(filepath.Join(d, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	for _, sub := range []string{"outbox", "rejected"} {
+		if err := os.RemoveAll(filepath.Join(d, sub)); err != nil {
 			return err
 		}
 	}
@@ -158,109 +151,20 @@ func ConnectProject(root string, shareRequests bool) (Project, error) {
 	return p, write(filepath.Join(d, "projects.json"), ps)
 }
 
-// ── the API ─────────────────────────────────────────────────────────────────
-
-// Client talks to the trackline API.
-type Client struct {
-	Base  string
-	Token string
-	HTTP  *http.Client
-}
-
-// Error is an API refusal, with the message the API gave.
-type Error struct {
-	Status  int
-	Message string
-}
-
-func (e *Error) Error() string { return e.Message }
-
-func (c Client) do(method, path string, body, out any) error {
-	var r io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		r = bytes.NewReader(b)
-	}
-	req, err := http.NewRequest(method, c.Base+path, r)
+// ProjectFor finds the connected project a directory belongs to: the project
+// itself or any folder inside it. Agents often run from a subfolder, and its
+// actions still belong to the project that was connected. The deepest match
+// wins, so a connected folder inside another connected one is its own project.
+func ProjectFor(dir string) (root string, p Project, ok bool) {
+	ps, err := Projects()
 	if err != nil {
-		return err
+		return "", Project{}, false
 	}
-	if body != nil {
-		req.Header.Set("content-type", "application/json")
-	}
-	if c.Token != "" {
-		req.Header.Set("authorization", "Bearer "+c.Token)
-	}
-	h := c.HTTP
-	if h == nil {
-		h = &http.Client{Timeout: 20 * time.Second}
-	}
-	res, err := h.Do(req)
-	if err != nil {
-		return fmt.Errorf("could not reach %s: %w", c.Base, err)
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode >= 400 {
-		var e struct {
-			Error string `json:"error"`
+	dir = filepath.Clean(dir)
+	for r, candidate := range ps {
+		if (dir == r || strings.HasPrefix(dir, r+string(filepath.Separator))) && len(r) > len(root) {
+			root, p, ok = r, candidate, true
 		}
-		json.Unmarshal(b, &e)
-		if e.Error == "" {
-			e.Error = res.Status
-		}
-		return &Error{Status: res.StatusCode, Message: e.Error}
 	}
-	if out != nil {
-		return json.Unmarshal(b, out)
-	}
-	return nil
+	return root, p, ok
 }
-
-// Code is what the API returns when a connect starts.
-type Code struct {
-	DeviceCode              string `json:"deviceCode"`
-	UserCode                string `json:"userCode"`
-	VerificationURIComplete string `json:"verificationUriComplete"`
-	ExpiresIn               int    `json:"expiresIn"`
-	Interval                int    `json:"interval"`
-}
-
-// Poll is one answer to "has it been approved yet".
-type Poll struct {
-	Status string `json:"status"`
-	Token  string `json:"token"`
-	Device struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"device"`
-}
-
-// Me is who a device is connected as.
-type Me struct {
-	Device struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"device"`
-	User struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
-	} `json:"user"`
-}
-
-func (c Client) StartConnect(name string) (Code, error) {
-	var out Code
-	return out, c.do("POST", "/devices/code", map[string]string{"name": name}, &out)
-}
-
-func (c Client) Poll(deviceCode string) (Poll, error) {
-	var out Poll
-	return out, c.do("POST", "/devices/token", map[string]string{"deviceCode": deviceCode}, &out)
-}
-
-func (c Client) Me() (Me, error) {
-	var out Me
-	return out, c.do("GET", "/devices/me", nil, &out)
-}
-
-func (c Client) Disconnect() error { return c.do("DELETE", "/devices/me", nil, nil) }

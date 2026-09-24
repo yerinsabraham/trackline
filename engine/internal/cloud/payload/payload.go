@@ -142,7 +142,7 @@ func Build(ev event.Event, results []verdict.Result, o Options) (Event, error) {
 
 	out := Event{
 		ID:      cut(o.ID, maxID),
-		At:      cut(ev.At.UTC().Format(time.RFC3339), maxAt),
+		At:      cut(ev.At.UTC().Format(time.RFC3339Nano), maxAt),
 		Project: Project{ID: cut(o.ProjectID, maxProjectID), Name: cut(filepath.Base(c.root), maxProjectName)},
 		Host:    host,
 		Session: cut(ev.SessionID, maxSession),

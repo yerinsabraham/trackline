@@ -1,9 +1,6 @@
 package account_test
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,57 +71,42 @@ func TestForgetRemovesEverything(t *testing.T) {
 	}
 }
 
-func TestAPIPrecedence(t *testing.T) {
-	t.Setenv("TRACKLINE_API", "")
-	if account.API("") != account.DefaultAPI {
-		t.Error("default")
-	}
-	t.Setenv("TRACKLINE_API", "http://localhost:4100/trackline/v1/")
-	if account.API("") != "http://localhost:4100/trackline/v1" {
-		t.Error("env, trailing slash trimmed")
-	}
-	if account.API("http://flag") != "http://flag" {
-		t.Error("the flag wins")
-	}
-}
+// Agents run from subfolders. Their actions belong to the connected project,
+// and a folder that merely shares a prefix with it does not.
+func TestProjectForFindsTheEnclosingProject(t *testing.T) {
+	isolate(t)
+	base := t.TempDir()
+	app := filepath.Join(base, "app")
+	inner := filepath.Join(app, "packages", "web")
+	account.ConnectProject(app, true)
+	account.ConnectProject(inner, false)
 
-// The client sends the device credential as a bearer token, and surfaces the
-// API's own error message.
-func TestClientAgainstAStandIn(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/devices/code":
-			json.NewEncoder(w).Encode(map[string]any{"deviceCode": "poll", "userCode": "BCDF-GHJK", "verificationUriComplete": "http://site/connect?code=BCDF-GHJK", "expiresIn": 600, "interval": 5})
-		case "/devices/me":
-			if r.Header.Get("authorization") != "Bearer tl_dev_good" {
-				w.WriteHeader(401)
-				json.NewEncoder(w).Encode(map[string]string{"error": "This machine was disconnected."})
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{"device": map[string]string{"id": "d1", "name": "mac"}, "user": map[string]string{"email": "ada@example.com"}})
+	cases := map[string]string{
+		app:                             app,
+		filepath.Join(app, "src"):       app,
+		inner:                           inner,
+		filepath.Join(inner, "src"):     inner,
+		filepath.Join(base, "app-copy"): "",
+		base:                            "",
+	}
+	for dir, want := range cases {
+		root, _, ok := account.ProjectFor(dir)
+		if root != want || ok != (want != "") {
+			t.Errorf("ProjectFor(%s) = %q %v, want %q", dir, root, ok, want)
 		}
-	}))
-	defer srv.Close()
-
-	code, err := (account.Client{Base: srv.URL}).StartConnect("mac")
-	if err != nil || code.UserCode != "BCDF-GHJK" {
-		t.Fatalf("start: %+v %v", code, err)
-	}
-	me, err := (account.Client{Base: srv.URL, Token: "tl_dev_good"}).Me()
-	if err != nil || me.User.Email != "ada@example.com" {
-		t.Fatalf("me: %+v %v", me, err)
-	}
-	_, err = (account.Client{Base: srv.URL, Token: "tl_dev_bad"}).Me()
-	var apiErr *account.Error
-	if err == nil || !strings.Contains(err.Error(), "disconnected") || !asErr(err, &apiErr) || apiErr.Status != 401 {
-		t.Errorf("err = %v", err)
 	}
 }
 
-func asErr(err error, target **account.Error) bool {
-	e, ok := err.(*account.Error)
-	if ok {
-		*target = e
+// Disconnecting leaves nothing behind to upload later.
+func TestForgetClearsTheOutbox(t *testing.T) {
+	d := isolate(t)
+	account.SaveCredentials(account.Credentials{API: "http://x", Token: "t"})
+	os.MkdirAll(filepath.Join(d, "outbox"), 0o700)
+	os.WriteFile(filepath.Join(d, "outbox", "1-a.json"), []byte("{}"), 0o600)
+	if err := account.Forget(); err != nil {
+		t.Fatal(err)
 	}
-	return ok
+	if _, err := os.Stat(filepath.Join(d, "outbox")); !os.IsNotExist(err) {
+		t.Error("the outbox survived disconnecting")
+	}
 }

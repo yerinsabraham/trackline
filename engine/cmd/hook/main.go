@@ -26,9 +26,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
@@ -76,6 +81,7 @@ func main() {
 	}
 
 	record(*logPath, *root, d)
+	queue(*root, d)
 
 	if d.Block {
 		block(resolved, d.Message)
@@ -171,4 +177,67 @@ func record(logPath, root string, d runner.Decision) {
 	}
 	defer f.Close()
 	f.Write(append(b, '\n'))
+}
+
+// queue hands the event to the outbox when this project is connected to an
+// account, and starts a sender if none is running.
+//
+// Nothing here touches the network. A machine that was never connected pays
+// for one failed stat; a connected one for two small reads, one small write
+// and, now and then, starting a process it does not wait for. The hook's
+// latency is measured with and without this in docs/experiments.
+func queue(root string, d runner.Decision) {
+	if root == "" {
+		root = d.Report.Event.CWD
+	}
+	dir, err := account.Dir()
+	if err != nil || root == "" {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(dir, "credentials.json")); err != nil {
+		return
+	}
+	projectRoot, p, ok := account.ProjectFor(root)
+	if !ok {
+		return
+	}
+	ev, err := payload.Build(d.Report.Event, d.Report.Results, payload.Options{
+		Root:         projectRoot,
+		ProjectID:    p.ID,
+		ShareRequest: p.ShareRequests,
+		Mode:         string(d.Mode),
+		Blocked:      d.Block,
+		ID:           outbox.NewID(),
+	})
+	if err != nil {
+		return
+	}
+	box := outbox.Box{Dir: dir}
+	if box.Put(ev) != nil || !box.NeedsSender(time.Now()) {
+		return
+	}
+	startSync()
+}
+
+// startSync runs `trackline sync` from beside this binary, detached. Its
+// output goes nowhere: a host waits for the hook's stdout and stderr to close,
+// and a child holding them open would make the hook as slow as the network.
+func startSync() {
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	name := "trackline"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	bin := filepath.Join(filepath.Dir(self), name)
+	if _, err := os.Stat(bin); err != nil {
+		return
+	}
+	cmd := exec.Command(bin, "sync", "--quiet")
+	detach(cmd)
+	if cmd.Start() == nil {
+		cmd.Process.Release()
+	}
 }

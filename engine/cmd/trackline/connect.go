@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 )
 
 // cmdConnect asks about the project first, then links this machine to an
@@ -47,13 +49,13 @@ func cmdConnect(args []string) error {
 		root, _ = os.Getwd()
 	}
 	root, _ = filepath.Abs(root)
-	api := account.API(apiFlag)
+	api := remote.Base(apiFlag)
 	ask := prompter(yes)
 
 	var who string
 	creds, err := account.LoadCredentials()
 	if err == nil && creds.API == api {
-		if me, err := (account.Client{Base: api, Token: creds.Token}).Me(); err == nil {
+		if me, err := (remote.Client{Base: api, Token: creds.Token}).Me(); err == nil {
 			who = display(me.User.Name, me.User.Email)
 		}
 	}
@@ -85,7 +87,7 @@ func cmdConnect(args []string) error {
 // It returns who the machine is now connected as.
 func linkMachine(api string, noBrowser bool) (string, error) {
 	host, _ := os.Hostname()
-	c := account.Client{Base: api}
+	c := remote.Client{Base: api}
 	code, err := c.StartConnect(host)
 	if err != nil {
 		return "", err
@@ -102,7 +104,7 @@ func linkMachine(api string, noBrowser bool) (string, error) {
 	}
 	expired := errors.New("the code expired before it was approved. Run trackline connect again")
 	deadline := time.Now().Add(time.Duration(code.ExpiresIn) * time.Second)
-	var got account.Poll
+	var got remote.Poll
 	for {
 		if time.Now().After(deadline) {
 			fmt.Println()
@@ -131,7 +133,7 @@ func linkMachine(api string, noBrowser bool) (string, error) {
 
 	creds := account.Credentials{API: api, Token: got.Token, DeviceID: got.Device.ID, DeviceName: got.Device.Name}
 	who := "your account"
-	if me, err := (account.Client{Base: api, Token: got.Token}).Me(); err == nil {
+	if me, err := (remote.Client{Base: api, Token: got.Token}).Me(); err == nil {
 		creds.Email = me.User.Email
 		who = display(me.User.Name, me.User.Email)
 	}
@@ -151,8 +153,8 @@ func cmdDisconnect(args []string) error {
 		return err
 	}
 	revoked := true
-	if err := (account.Client{Base: creds.API, Token: creds.Token}).Disconnect(); err != nil {
-		var apiErr *account.Error
+	if err := (remote.Client{Base: creds.API, Token: creds.Token}).Disconnect(); err != nil {
+		var apiErr *remote.Error
 		// Already revoked from the site is not a failure: the goal is reached.
 		if !errors.As(err, &apiErr) || apiErr.Status != 401 {
 			revoked = false
@@ -170,6 +172,58 @@ func cmdDisconnect(args []string) error {
 	return nil
 }
 
+// cmdSync sends what the outbox holds. Started by the hook with --quiet, so it
+// says nothing unless asked by a person.
+func cmdSync(args []string) error {
+	quiet := false
+	for _, a := range args {
+		if a == "--quiet" || a == "-q" {
+			quiet = true
+		}
+	}
+	say := func(format string, a ...any) {
+		if !quiet {
+			fmt.Printf(format, a...)
+		}
+	}
+	creds, err := account.LoadCredentials()
+	if errors.Is(err, os.ErrNotExist) {
+		say("This machine is not connected.\n")
+		return nil
+	} else if err != nil {
+		return err
+	}
+	dir, err := account.Dir()
+	if err != nil {
+		return err
+	}
+	// Started by a hook, an agent is mid-task and more calls are coming. A
+	// moment's wait sends them as one batch instead of a request per call.
+	var wait time.Duration
+	if quiet {
+		wait = 2 * time.Second
+	}
+	res, err := outbox.Box{Dir: dir}.DrainAfter(remote.Client{Base: creds.API, Token: creds.Token}, wait)
+	if res.Revoked {
+		// The account no longer knows this machine. Keeping its credential
+		// would only queue more for nobody.
+		account.Forget()
+		say("This machine was disconnected from the account. Run trackline connect to link it again.\n")
+		return nil
+	}
+	if res.Rejected > 0 {
+		say("%d refused by the server and set aside in %s.\n", res.Rejected, filepath.Join(dir, "rejected"))
+	}
+	if err != nil {
+		if quiet {
+			return nil
+		}
+		return fmt.Errorf("sent %d, the rest wait and will be retried: %w", res.Sent, err)
+	}
+	say("Sent %d.\n", res.Sent)
+	return nil
+}
+
 // cmdAccount says who this machine is connected as, and which projects upload.
 func cmdAccount(args []string) error {
 	creds, err := account.LoadCredentials()
@@ -179,9 +233,9 @@ func cmdAccount(args []string) error {
 	} else if err != nil {
 		return err
 	}
-	me, err := (account.Client{Base: creds.API, Token: creds.Token}).Me()
+	me, err := (remote.Client{Base: creds.API, Token: creds.Token}).Me()
 	if err != nil {
-		var apiErr *account.Error
+		var apiErr *remote.Error
 		if errors.As(err, &apiErr) && apiErr.Status == 401 {
 			fmt.Println("This machine was disconnected from the account. Run trackline connect to link it again.")
 			return nil
@@ -189,6 +243,20 @@ func cmdAccount(args []string) error {
 		return err
 	}
 	fmt.Printf("Connected as %s, as %q.\n", display(me.User.Name, me.User.Email), me.Device.Name)
+	if dir, err := account.Dir(); err == nil {
+		box := outbox.Box{Dir: dir}
+		pending, rejected := box.Counts()
+		if pending > 0 {
+			line := fmt.Sprintf("%d waiting to send", pending)
+			if until, ok := box.WaitingUntil(); ok {
+				line += fmt.Sprintf(", next try at %s", until.Local().Format("15:04"))
+			}
+			fmt.Println(line + ".")
+		}
+		if rejected > 0 {
+			fmt.Printf("%d refused by the server, kept in %s.\n", rejected, filepath.Join(dir, "rejected"))
+		}
+	}
 	ps, _ := account.Projects()
 	if len(ps) == 0 {
 		fmt.Println("No projects connected. Run trackline connect inside one.")

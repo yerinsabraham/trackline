@@ -195,6 +195,9 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 		if len(ev.Request) > requestLimit {
 			ev.Request = ev.Request[:requestLimit]
 		}
+		// The report is what the hook uploads from, and it was built before
+		// the request was known.
+		rep.Event.Request = ev.Request
 	}
 
 	// Recorded after the checks run, so a check counting earlier writes does

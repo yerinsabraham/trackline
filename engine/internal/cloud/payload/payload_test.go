@@ -384,3 +384,23 @@ func jsonFields(v any) string {
 	sort.Strings(k)
 	return strings.Join(k, ",")
 }
+
+// An agent makes several calls a second. Times cut to the second came back
+// from the database in reverse, so the order of a session was lost.
+func TestTimesKeepTheOrderWithinASecond(t *testing.T) {
+	first := at("2026-09-24T10:00:00Z").Add(120 * time.Millisecond)
+	var got []string
+	for _, when := range []time.Time{first, first.Add(time.Millisecond)} {
+		ev := event.Event{Host: event.HostClaudeCode, SessionID: "s", At: when}
+		out, err := payload.Build(ev, nil, payload.Options{Root: root, Home: home, ProjectID: "p", Mode: "warn", ID: "1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, out.At)
+	}
+	a, _ := time.Parse(time.RFC3339Nano, got[0])
+	b, _ := time.Parse(time.RFC3339Nano, got[1])
+	if !a.Before(b) || !a.Equal(first) {
+		t.Errorf("times %v lost their order or precision", got)
+	}
+}

@@ -76,6 +76,8 @@ func main() {
 		err = cmdDisconnect(os.Args[2:])
 	case "account":
 		err = cmdAccount(os.Args[2:])
+	case "sync":
+		err = cmdSync(os.Args[2:])
 	case "mcp":
 		f := parse(os.Args[2:])
 		// stdout is the protocol, so warnings go to stderr, which clients log.
@@ -115,6 +117,7 @@ func usage() {
   connect  connect this project to a trackline account (optional)
   account  who this machine is connected as
   disconnect  unlink this machine
+  sync     send what is waiting to the account (the hook runs this for you)
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
 
@@ -201,6 +204,12 @@ never inside a project. File contents and command text are never sent.
 	"account": `trackline account
 
 Who this machine is connected as, and which projects upload.
+`,
+	"sync": `trackline sync [--quiet]
+
+Send what connected projects noticed and have not sent yet. The hook starts
+this in the background after it queues something, so it rarely needs running
+by hand. Offline, events wait on this machine and go in order later.
 `,
 	"disconnect": `trackline disconnect
 
