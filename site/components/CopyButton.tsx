@@ -6,7 +6,7 @@ export default function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
-      className="copy"
+      className="copy-btn"
       type="button"
       onClick={async () => {
         try {

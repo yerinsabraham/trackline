@@ -23,6 +23,7 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
   return (
     <div className="wrap docs">
       <nav className="docs-nav" aria-label="Docs">
+        <p className="eyebrow">Docs</p>
         {all.map((x) => (
           <Link key={x.slug} href={`/docs/${x.slug}`} className={x.slug === slug ? "active" : undefined}>
             {x.title}
@@ -34,8 +35,16 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
         {p.description && <p className="desc">{p.description}</p>}
         <div dangerouslySetInnerHTML={{ __html: p.html }} />
         <div className="pager">
-          <span>{prev && <Link href={`/docs/${prev.slug}`}>← {prev.title}</Link>}</span>
-          <span>{next && <Link href={`/docs/${next.slug}`}>{next.title} →</Link>}</span>
+          {prev && (
+            <Link href={`/docs/${prev.slug}`}>
+              <small>Previous</small>← {prev.title}
+            </Link>
+          )}
+          {next && (
+            <Link href={`/docs/${next.slug}`} className="next">
+              <small>Next</small>{next.title} →
+            </Link>
+          )}
         </div>
       </article>
     </div>

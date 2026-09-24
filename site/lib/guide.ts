@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
+import { SITE } from "./site";
 
 // The guide is written once, in docs/guide/ at the repository root, and read
 // here at build time. GitHub renders the same files, so the site and the repo
@@ -13,6 +14,7 @@ export type Page = {
   description: string;
   order: number;
   html: string;
+  markdown: string;
 };
 
 function frontMatter(raw: string): { meta: Record<string, string>; body: string } {
@@ -53,6 +55,7 @@ export function pages(): Page[] {
         title: meta.title ?? f,
         description: meta.description ?? "",
         order: Number(meta.order ?? 99),
+        markdown: rewriteLinks(content).replace(/\]\(\/docs\//g, `](${SITE}/docs/`),
         html: marked.parse(rewriteLinks(content), { async: false }) as string,
       };
     })

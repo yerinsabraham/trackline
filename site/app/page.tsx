@@ -1,210 +1,240 @@
 import Link from "next/link";
-import CopyButton from "@/components/CopyButton";
+import CheckTiles from "@/components/CheckTiles";
+import DotText from "@/components/DotText";
+import HeroActions from "@/components/HeroActions";
+import { ClaudeLogo, CursorLogo, OpenAILogo, TraceBars, TracklineTile } from "@/components/HostLogos";
+import InstallTabs from "@/components/InstallTabs";
+import TypedChat from "@/components/TypedChat";
+import WatchGate from "@/components/WatchGate";
 import { EXPERIMENTS } from "@/lib/site";
 
-const INSTALL = "npm install -g trackline";
-
-const checks: [string, string][] = [
-  ["Off-limits", "Writes to .env, keys, credentials, whatever you protect."],
-  ["New dependency", "A package appearing that nobody asked for."],
-  ["Scope", "Edits outside the files or area your request named."],
-  ["Diff size", "A change far bigger than the ask."],
-  ["Loops", "The same action repeated over and over."],
-  ["Tool policy", "In production: a tool that must never be called, or one called without its approval step first."],
-  ["The judge", "Optional. Work that does not serve the request, when no rule could say so."],
+const hosts = [
+  { name: <>Claude<br />Code</>, logo: <ClaudeLogo />, via: "Hook", state: "Blocks", cls: "" },
+  { name: "Codex", logo: <OpenAILogo />, via: "Hook", state: "Blocks", cls: "" },
+  { name: "Your agent", logo: <TracklineTile />, via: "Any MCP client", state: "Advises", cls: "adv", center: true },
+  { name: "Cursor", logo: <CursorLogo />, via: "Hook", state: "Blocks", cls: "" },
+  { name: <>Production<br />traces</>, logo: <TraceBars />, via: "OTLP", state: "Alerts", cls: "alert" },
 ];
 
-const hosts = ["Claude Code", "Codex", "Cursor", "Any MCP client", "Production traces"];
-const rows: { label: string; cells: string[] }[] = [
-  { label: "Stops an action before it happens", cells: ["yes", "yes", "yes", "no, advises only", "no, alerts after"] },
-  { label: "Tells the agent why", cells: ["yes", "yes", "yes", "yes", "no"] },
-  { label: "Knows what you asked", cells: ["yes", "yes", "yes", "if the agent says", "if content capture is on"] },
-];
+const table = {
+  hosts: ["Claude Code", "Codex", "Cursor", "Any MCP client", "Production traces"],
+  rows: [
+    { label: "Stops an action before it happens", cells: ["yes", "yes", "yes", "no, advises only", "no, alerts after"] },
+    { label: "Tells the agent why", cells: ["yes", "yes", "yes", "yes", "no"] },
+    { label: "Knows what you asked", cells: ["yes", "yes", "yes", "if the agent says", "if content capture is on"] },
+  ],
+};
 
 const stats = [
-  { big: "11 of 11", small: "times a blocked agent corrected itself when told why", file: "01-do-agents-self-correct.md" },
-  { big: "~14 ms", small: "the cost of every check, before every action", file: "02-hook-latency.md" },
-  { big: "60 of 60", small: "held-out drifts caught by the judge, against 2 for the rules alone", file: "06-the-judge-measured.md" },
-  { big: "0 lines", small: "changed in the core engine to add production", file: "07-production-traces.md" },
+  { big: "11/11", small: "times a blocked agent corrected itself when told why", n: "01", file: "01-do-agents-self-correct.md" },
+  { big: "~14ms", small: "the cost of every check, before every action", n: "02", file: "02-hook-latency.md" },
+  { big: "60/60", small: "held-out drifts caught by the judge, against 2 for the rules alone", n: "06", file: "06-the-judge-measured.md" },
+  { big: "0 lines", small: "changed in the core engine to add production", n: "07", file: "07-production-traces.md" },
 ];
+
+const limits: [string, string][] = [
+  ["In production it alerts, it cannot stop.", "A trace is a record of what already happened."],
+  ["Production needs content capture on.", "Without it, a trace does not say which tool was called, and trackline reports that rather than guessing."],
+  ["Scope stays quiet when your request names no file.", "It will not invent a scope you did not state."],
+  ["Through MCP, the agent chooses whether to ask.", "An agent that does not ask is not watched."],
+  ["Production has not yet met real traffic.", "It was tested on a stream sent by the real OpenTelemetry libraries, with scripted conversations."],
+];
+
+function Plus() {
+  return <span className="plus">+</span>;
+}
 
 export default function Home() {
   return (
     <>
-      <section className="hero">
-        <div className="wrap hero-grid">
-          <div>
-            <h1>Know when your AI agent stops doing what you asked.</h1>
-            <p className="sub">
-              trackline watches what coding agents and production agents actually do, checks it against the
-              task, the rules and the evidence they were given, and tells you, or the agent, the moment they
-              part ways.
-            </p>
-            <div className="install">
-              <code>
-                <span className="prompt">$ </span>
-                {INSTALL}
-              </code>
-              <CopyButton text={INSTALL} />
-            </div>
-            <div className="hero-actions">
-              <Link href="/evidence">Read the evidence →</Link>
-            </div>
-            <p className="hero-meta">Works with Claude Code, Codex, Cursor and any MCP client</p>
-          </div>
-
-          <div>
-            <div className="term" role="img" aria-label="An agent is blocked from writing .env, is told why, and tells the user to make the change by hand.">
-              <div className="term-bar"><span /><span /><span /></div>
-              <p><span className="who">you    </span>Add API_KEY=test123 to .env, and a comment to greet.js.</p>
-              <p><span className="who">agent  </span>write .env</p>
-              <p>
-                <span className="stop">trackline  BLOCKED</span>
-                {"\n"}
-                <span className="dim">writing to a protected path: .env</span>
-                {"\n"}
-                <span className="dim">do this instead: leave this file alone; if the change is genuinely needed, make it by hand</span>
-              </p>
-              <p><span className="who">agent  </span>edit greet.js <span className="ok">✓</span></p>
-              <p>
-                <span className="who">agent  </span>I couldn&apos;t add API_KEY to .env. That path is protected, so you&apos;ll
-                need to create or edit it yourself.
-              </p>
-            </div>
-            <p className="term-caption">A real Cursor session, shortened.</p>
-          </div>
-        </div>
+      <section className="hero wrap">
+        <Link className="badge" href="/docs/production">
+          <b>New</b> · Production traces <i>›</i>
+        </Link>
+        <h1>
+          <span className="solid">Know when your agent</span>
+          <DotText text="goes off track" max={92} pitch={1 / 16} color="#1c1c1e" interactive drift />
+        </h1>
+        <p className="sub">
+          trackline watches what coding agents and production agents actually do, and tells you, or the agent, the
+          moment it stops matching what you asked.
+        </p>
+        <HeroActions />
       </section>
 
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">The problem</p>
-          <h2>An agent that goes off task does not crash.</h2>
-          <p className="lede">
-            It edits files you never mentioned. It installs a package nobody asked for. It ignores the rules file
-            it read an hour ago. A support agent changes a credit limit it was told never to touch. And the build
-            stays green, because tests check that code does what it was written to do, not whether it is the code
-            you asked for.
-          </p>
-          <p className="lede" style={{ marginBottom: 0 }}>Nothing in the toolchain is watching for that. trackline is.</p>
-        </div>
-      </section>
-
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">How it works</p>
-          <h2>One engine, two places.</h2>
-          <div className="steps">
-            <div className="card">
-              <div className="step-n">01</div>
-              <h3>It watches</h3>
-              <p>Beside a coding agent, a hook sees every action before it runs. In production, it reads the traces your agent already sends.</p>
-            </div>
-            <div className="card">
-              <div className="step-n">02</div>
-              <h3>It compares</h3>
-              <p>Each action is checked against what you asked for, your rules files and a tool policy. Most checks are plain rules, not a model.</p>
-            </div>
-            <div className="card">
-              <div className="step-n">03</div>
-              <h3>It tells you, or the agent</h3>
-              <p>By default it only writes things down. You choose, check by check, whether it should also stop the agent and explain why, so the agent can correct itself.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">What it catches</p>
-          <h2>Six checks, and one question only a model can answer.</h2>
-          <div className="table-scroll">
-            <table>
-              <tbody>
-                {checks.map(([name, what]) => (
-                  <tr key={name}>
-                    <td><strong>{name}</strong></td>
-                    <td>{what}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="note">The checks are arithmetic and never guess. The judge is a model, measured before it was trusted, and off until you turn it on.</p>
-        </div>
-      </section>
-
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">Where it works</p>
-          <h2>One set of rules for every agent you use.</h2>
-          <p className="lede">A vendor can govern its own agent. Only something that belongs to none of them can govern all of them the same way.</p>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th />
-                  {hosts.map((h) => <th key={h}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.label}>
-                    <td>{r.label}</td>
-                    {r.cells.map((c, i) => (
-                      <td key={i} className={c.startsWith("no") ? "no" : undefined}>{c}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="note"><code>trackline doctor --host &lt;name&gt;</code> prints the full list of what it can and cannot see in each.</p>
-        </div>
-      </section>
-
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">What it cannot do</p>
-          <h2>Where it sees less.</h2>
-          <p className="lede">Named plainly, because a tool that looks complete stops getting better.</p>
-          <ul className="limits">
-            <li><strong>In production it alerts, it cannot stop.</strong> A trace is a record of what already happened.</li>
-            <li><strong>Production needs content capture on.</strong> Without it, a trace does not say which tool was called, and trackline reports that rather than guessing.</li>
-            <li><strong>Scope stays quiet when your request names no file.</strong> It will not invent a scope you did not state.</li>
-            <li><strong>Through MCP, the agent chooses whether to ask.</strong> An agent that does not ask is not watched.</li>
-            <li><strong>Production has not yet met real traffic.</strong> It was tested on a stream sent by the real OpenTelemetry libraries, with scripted conversations.</li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="block">
-        <div className="wrap">
-          <p className="eyebrow">The evidence</p>
-          <h2>Every claim here was measured first.</h2>
-          <div className="stats">
-            {stats.map((s) => (
-              <a key={s.big} className="stat" href={`${EXPERIMENTS}/${s.file}`}>
-                <b>{s.big}</b>
-                {s.small}
-              </a>
+      <section className="hosts wrap" aria-label="Where it works">
+        <div className="host-scroll">
+          <div className="host-row">
+            {hosts.map((h, i) => (
+              <article key={i} className={h.center ? "host center" : "host"}>
+                <div className="thumb"><div className="tile">{h.logo}</div></div>
+                <h3>{h.name}</h3>
+                <div className="host-meta">
+                  <span className="chip">{h.via}</span>
+                  <span className={`state ${h.cls}`}><i />{h.state}</span>
+                </div>
+              </article>
             ))}
           </div>
-          <p className="note"><Link href="/evidence">See all seven experiments →</Link></p>
+          <div className="track" aria-hidden="true">
+            <span className="pulse" />
+            {hosts.map((_, i) => <span key={i} className="node" />)}
+          </div>
+        </div>
+        <p className="track-cap">One set of rules for every agent you use</p>
+      </section>
+
+      <section className="problem wrap">
+        <div className="problem-grid">
+          <div>
+            <p className="eyebrow">The problem</p>
+            <h2>An agent that goes off task does not crash.</h2>
+          </div>
+          <div>
+            <p>
+              It edits files you never mentioned. It installs a package nobody asked for. It ignores the rules file
+              it read an hour ago. A support agent changes a credit limit it was told never to touch. And the build
+              stays green, because tests check that code does what it was written to do, not whether it is the code
+              you asked for.
+            </p>
+            <p className="kicker">Nothing in the toolchain is watching for that. <span>trackline is.</span></p>
+          </div>
         </div>
       </section>
 
-      <section className="block">
+      <section className="dark how" id="how">
         <div className="wrap">
-          <p className="eyebrow">Install</p>
-          <h2>Two commands.</h2>
-          <pre className="block-code"><code>{`npm install -g trackline
-trackline init              # Claude Code; --host codex or --host cursor`}</code></pre>
-          <p className="lede">
-            It starts in warn mode: it notices things and writes them down, and never interrupts you. Run{" "}
+          <div className="how-head">
+            <h2>One engine, two places.</h2>
+            <p>Beside a coding agent while it works, and over the traces of an agent in production.</p>
+            <div className="actions">
+              <span className="frame"><Link className="btn btn-quiet" href="/docs"><Plus />Read the docs</Link></span>
+              <span className="frame"><Link className="btn btn-signal" href="#install"><Plus />Install</Link></span>
+            </div>
+          </div>
+
+          <div className="bento">
+            <article className="slab s-watch">
+              <div className="copy">
+                <b>It watches.</b>Beside a coding agent, a hook sees every action before it runs. In production, it
+                reads the traces your agent already sends.
+              </div>
+              <WatchGate />
+            </article>
+
+            <article className="slab s-compare">
+              <div className="sources">
+                <div className="src" style={{ "--i": 3 } as React.CSSProperties}><span className="tick" />What you asked for<small>request</small></div>
+                <div className="src" style={{ "--i": 2 } as React.CSSProperties}><span className="tick" />AGENTS.md<small>rules file</small></div>
+                <div className="src" style={{ "--i": 1 } as React.CSSProperties}><span className="tick" />Tool policy<small>production</small></div>
+                <div className="src hot" style={{ "--i": 0 } as React.CSSProperties}>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                    <rect x="3" y="7" width="10" height="7.5" rx="1.5" />
+                    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+                  </svg>
+                  .env<small>protected path</small>
+                </div>
+              </div>
+              <div className="copy bottom">
+                <b>It compares.</b>Each action is checked against what you asked for, your rules files and a tool
+                policy. Most checks are plain rules, not a model.
+              </div>
+            </article>
+
+            <article className="slab s-tell">
+              <TypedChat />
+              <div className="copy bottom">
+                <b>It tells you, or the agent.</b>By default it only writes things down. You choose, check by check,
+                whether it should also stop the agent and explain why, so the agent can correct itself.
+              </div>
+            </article>
+
+            <article className="slab s-catch">
+              <div className="copy inline"><b>What it catches.</b> Six checks, and one question only a model can answer.</div>
+              <CheckTiles />
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="section wrap" aria-labelledby="where-h">
+        <div className="sec-head">
+          <div>
+            <p className="eyebrow">Where it works</p>
+            <h2 id="where-h">One set of rules for every agent you use.</h2>
+          </div>
+          <p>A vendor can govern its own agent. Only something that belongs to none of them can govern all of them the same way.</p>
+        </div>
+        <div className="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th />
+                {table.hosts.map((h) => <th key={h}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((r) => (
+                <tr key={r.label}>
+                  <td>{r.label}</td>
+                  {r.cells.map((c, i) => <td key={i} className={c === "yes" ? "yes" : "no"}>{c}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="foot-note"><code>trackline doctor --host &lt;name&gt;</code> prints the full list of what it can and cannot see in each.</p>
+      </section>
+
+      <section className="section wrap" aria-labelledby="ev-h">
+        <div className="sec-head">
+          <div>
+            <p className="eyebrow">The evidence</p>
+            <h2 id="ev-h">Every claim here was measured first.</h2>
+          </div>
+          <p>Each was measured before it was built on. Where a result has limits, the write-up names them next to the number.</p>
+        </div>
+        <div className="stats">
+          {stats.map((s) => (
+            <a key={s.n} className="stat" href={`${EXPERIMENTS}/${s.file}`}>
+              <DotText text={s.big} max={60} pitch={1 / 11} color="#111112" align="left" introOnView />
+              <p>{s.small}</p>
+              <span className="src-link"><span>Experiment {s.n}</span><span>→</span></span>
+            </a>
+          ))}
+        </div>
+        <p className="more"><Link href="/evidence">See all seven experiments</Link></p>
+      </section>
+
+      <section className="section wrap" aria-labelledby="lim-h">
+        <div className="sec-head">
+          <div>
+            <p className="eyebrow">What it cannot do</p>
+            <h2 id="lim-h">Where it sees less.</h2>
+          </div>
+          <p>Named plainly, because a tool that looks complete stops getting better.</p>
+        </div>
+        <ul className="limits">
+          {limits.map(([b, s]) => <li key={b}><b>{b}</b><span>{s}</span></li>)}
+        </ul>
+      </section>
+
+      <section className="dark install" id="install" aria-labelledby="inst-h">
+        <div className="wrap">
+          <h2 id="inst-h">
+            Install with
+            <DotText text="one paste" max={80} pitch={1 / 15} color="#e4e4e6" board="#1b1b1e" interactive drift introOnView />
+          </h2>
+          <InstallTabs />
+          <p className="after">
+            Paste the prompt into your agent, or run the commands yourself. It starts in warn mode: it notices
+            things and writes them down, and never interrupts you. Run{" "}
             <code>trackline status</code> after your agent&apos;s next edit to see that it fired.
           </p>
-          <Link href="/docs/install">Full install guide →</Link>
+          <div className="actions">
+            <span className="frame"><Link className="btn btn-quiet" href="/evidence"><Plus />Read the evidence</Link></span>
+            <span className="frame"><Link className="btn btn-signal" href="/docs/install"><Plus />Full install guide</Link></span>
+          </div>
         </div>
       </section>
     </>

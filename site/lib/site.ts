@@ -1,6 +1,28 @@
 export const GITHUB = "https://github.com/yerinsabraham/trackline";
 export const EXPERIMENTS = `${GITHUB}/blob/main/docs/experiments`;
 
+// The one place the site's address lives. The agent prompt points here, so when
+// the domain changes, change it here and redeploy; the vercel.app address keeps
+// resolving for prompts already pasted.
+export const SITE = "https://trackline-iota.vercel.app";
+
+// What "Copy prompt for your agent" puts on the clipboard. It carries the
+// essential steps itself, because not every agent can fetch a URL (Codex runs
+// without network by default), and points at /install.md for the rest.
+export const AGENT_PROMPT = `Install trackline in this project for me.
+
+Instructions written for coding agents: ${SITE}/install.md
+Read them first if you can fetch URLs. If you cannot:
+
+1. Run: npm install -g trackline   (needs Node 20 or newer)
+2. From the project root, run trackline init with the flag for the agent you are:
+   Claude Code: trackline init
+   Codex:       trackline init --host codex
+   Cursor:      trackline init --host cursor
+3. Run trackline doctor --host <claude|codex|cursor> and show me what it reports.
+
+Then tell me anything I have to do by hand. Do not use sudo, and do not change trackline's settings unless I ask.`;
+
 // The experiments, as the evidence page shows them. Each answer is the
 // published result, word for word in substance; the write-up has the method
 // and the limits.

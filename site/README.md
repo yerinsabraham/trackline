@@ -20,4 +20,6 @@ vercel build --prod
 vercel deploy --prebuilt --prod
 ```
 
-Currently at https://trackline-iota.vercel.app, until there is a domain.
+Currently at https://trackline-iota.vercel.app, until there is a domain. When
+the domain changes, change `SITE` in `lib/site.ts`: the agent prompt and
+`/install.md` both read it.
