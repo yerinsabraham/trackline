@@ -78,8 +78,8 @@ export default function Account() {
                 ))}
               </ul>
             )}
-            <p className="account-sub account-note">The live dashboard is coming next.</p>
             <div className="account-actions">
+              <a className="btn btn-signal" href="/app">Dashboard</a>
               <button className="btn btn-quiet" onClick={signOut}>Sign out</button>
               <button
                 className="btn btn-quiet"

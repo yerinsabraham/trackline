@@ -1,0 +1,69 @@
+/* The dashboard. Phone first: one column, big tap targets, the light first. */
+.dash { max-width: 680px; padding-block: 32px 96px; }
+.dash-head h1 { margin: 8px 0 20px; font-size: 32px; letter-spacing: -0.03em; line-height: 1.1; }
+.dash-head { margin-bottom: 12px; }
+.dash-muted { color: var(--ink-3); margin: 0; }
+.dash-muted.small, .small { font-size: 13px; }
+.dash-back { display: inline-block; color: var(--ink-2); font-size: 14px; margin-bottom: 18px; }
+.dash-back:hover { color: var(--ink); }
+.dash-empty { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.dash-empty p { margin: 0 0 6px; }
+
+.light-on-track { --light: #22a355; }
+.light-drifting { --light: var(--amber); }
+.light-needs-you { --light: #e5341b; }
+.light-quiet { --light: #b4b4b8; }
+.dash-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--light); flex: none; }
+
+.dash-project { margin-top: 28px; }
+.dash-project h2 { font-size: 15px; font-family: var(--mono); font-weight: 500; margin: 0 0 10px; color: var(--ink-2); }
+.dash-sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.dash-session {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--light);
+  border-radius: 14px; padding: 14px 16px;
+}
+.dash-session:hover { border-color: #cfcfca; border-left-color: var(--light); }
+.dash-session .dash-dot { margin-top: 7px; }
+.dash-session-main { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.dash-session-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-session-top span { color: var(--ink-3); font-size: 13px; }
+.dash-request { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-score { color: var(--ink-3); font-size: 13px; }
+
+.dash-status { background: var(--card); border: 1px solid var(--line); box-shadow: inset 0 5px 0 var(--light); border-radius: 16px; padding: 22px 20px 18px; }
+.dash-status-top { display: flex; align-items: center; gap: 10px; }
+.dash-status-top .dash-dot { width: 14px; height: 14px; }
+.dash-status-top strong { font-size: 26px; letter-spacing: -0.02em; }
+.dash-status-score { margin: 10px 0 4px; font-size: 16px; }
+.dash-live { margin-left: auto; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: #22a355; }
+.dash-live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: dash-pulse 2s infinite; }
+.dash-live.off { color: var(--ink-3); }
+.dash-live.off::before { animation: none; }
+@keyframes dash-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .dash-live::before { animation: none; } }
+
+.dash-asked { margin: 18px 0 8px; }
+.dash-asked p:last-child { margin: 6px 0 0; font-size: 17px; line-height: 1.45; overflow-wrap: anywhere; }
+
+.dash-feed { list-style: none; margin: 18px 0 0; padding: 0; }
+.dash-feed-request { margin: 18px 0 6px; color: var(--ink-3); font-size: 13px; overflow-wrap: anywhere; }
+.dash-item { border-bottom: 1px solid var(--line); }
+.dash-item-row {
+  width: 100%; display: flex; align-items: center; gap: 12px; min-height: 48px;
+  padding: 10px 2px; background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer;
+}
+.dash-item-row:disabled { cursor: default; color: var(--ink); }
+.dash-item-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.dash-item-text em { color: var(--ink-3); font-style: normal; font-size: 13px; }
+.dash-item-time { color: var(--ink-3); font: 12px/1 var(--mono); flex: none; }
+.dash-why { padding: 2px 2px 14px 24px; display: grid; gap: 10px; }
+.dash-finding p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.dash-finding .eyebrow { margin-bottom: 6px; color: var(--light); }
+.dash-item.light-needs-you .dash-item-text, .dash-item.light-drifting .dash-item-text { font-weight: 500; }
+
+@media (max-width: 560px) {
+  .dash { padding-inline: 16px; padding-top: 20px; }
+  .dash-head h1 { font-size: 26px; }
+  .dash-status-top strong { font-size: 22px; }
+}
