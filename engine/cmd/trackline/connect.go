@@ -54,6 +54,12 @@ func cmdConnect(args []string) error {
 
 	var who string
 	creds, err := account.LoadCredentials()
+	// A machine already connected stays with the account it is connected to,
+	// unless told otherwise. Falling back to the default instead sent a second
+	// project's connect to a different server.
+	if err == nil && apiFlag == "" && os.Getenv("TRACKLINE_API") == "" {
+		api = creds.API
+	}
 	if err == nil && creds.API == api {
 		if me, err := (remote.Client{Base: api, Token: creds.Token}).Me(); err == nil {
 			who = display(me.User.Name, me.User.Email)
