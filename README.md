@@ -80,6 +80,8 @@ trackline allow / revoke  # approve something, or take it back
 trackline doctor          # check the install without changing anything
 trackline review          # ask a model whether the work served the request
 trackline mcp             # let any MCP agent ask before it acts (advisory)
+trackline traces DIR      # check exported production traces (OTLP)
+trackline serve           # receive a deployed agent's traces live
 ```
 
 ### What it can do in each agent
@@ -133,8 +135,12 @@ Named plainly, because a tool that looks complete stops getting better.
   that searches your home directory first does so unwatched. Start it in the
   project.
 - **No multi-turn reasoning.** Each turn is judged against its own request.
-- **Production monitoring is not built.** The design carries it; the code does
-  not.
+- **Production monitoring has not met real traffic.** `trackline traces` and
+  `trackline serve` check OTLP traces against a tool policy, watch for outages,
+  loops and drift, and can judge each conversation
+  ([experiment 7](docs/experiments/07-production-traces.md)). The stream they
+  were tested on was sent by the real OpenTelemetry libraries, but its
+  conversations were scripted.
 
 ## Why it is built this way
 

@@ -25,8 +25,11 @@ Working, and published as the `trackline` npm package.
   review` asks a model whether each turn's work served its request. Measured in
   [experiment 6](../docs/experiments/06-the-judge-measured.md).
 
-Production traces (the OpenTelemetry adapter) are parsed but not yet watched;
-that is Phase 5.
+- **Production traces** through `trackline traces` and `trackline serve`:
+  OTLP in either encoding, a tool policy, and a monitor beside the engine for
+  outages, loops and drift. Added without changing the engine, the event model,
+  intent or verdicts, which was the test Phase 5 set
+  ([experiment 7](../docs/experiments/07-production-traces.md)).
 
 ```bash
 go test ./... -race
@@ -139,6 +142,8 @@ internal/judge/         the model check, off by default, never in the hook
 internal/hosts/         what each host can and cannot do, with evidence
 internal/mcp/           the MCP server (advisory)
 internal/install/       wiring the hook into each host, and proving it fires
+internal/otlp/          OTLP trace exports, protobuf and JSON, decoded by hand
+internal/production/    traces into conversations, the monitor, the live receiver
 internal/walkthrough/   turns a recorded session into a readable story (trackline show)
 internal/e2e/           a raw payload through record, replay and judgement, end to end
 ```

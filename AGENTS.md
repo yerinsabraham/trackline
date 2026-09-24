@@ -66,11 +66,13 @@ the Go engine) runs beside Claude Code, Codex and Cursor through hooks, and any
 MCP client through `trackline mcp`; v0.1.0 is on npm. The CI eval gate
 (`trackline-gate`, the TypeScript in `src/`) scores retrieval, tool selection
 and groundedness against committed golden datasets and exits non-zero on a
-regression. Production monitoring over traces is not built yet: that is Phase 5,
-and `documents/BUILD-PLAN.md` holds the phases.
+regression. Production traces are checked by `trackline traces` and
+`trackline serve` (Phase 5), tested on a realistic stream but not yet on real
+traffic. `documents/BUILD-PLAN.md` holds the phases.
 
-Describe what works as working and what does not as not: production is roadmap,
-the judge is measured but off by default, MCP advises and cannot block.
+Describe what works as working and what does not as not: production alerts and
+cannot block, and has not met real traffic; the judge is measured but off by
+default; MCP advises and cannot block.
 `internal/hosts` and the README's per-agent table are the source of truth for
 what each host can do.
 
@@ -131,6 +133,8 @@ engine/                   Go: the alignment engine and the hook binary.
   internal/adapter/       per-host normalisation + the cross-host test
   internal/hosts/         what each host can and cannot do, with evidence
   internal/mcp/           the MCP server: check_action, get_rules (advisory)
+  internal/otlp/          OTLP trace decoding, protobuf and JSON
+  internal/production/    production traces: assembly, tool policy, monitor, receiver
   README.md               read this before touching the engine
 
 src/                      TypeScript: the CI eval gate.

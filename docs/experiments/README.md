@@ -16,6 +16,7 @@ bugs that had left trackline blind while it looked fine.
 | [4](04-false-alarms.md) | Does it cry wolf on ordinary work? | **0 false alarms in 23 actions**, and real usage found what scripts missed |
 | [5](05-the-judge.md) | Can a model tell on-task work from drift? | **8 of 8**, including three drift cases and two correct abstentions |
 | [6](06-the-judge-measured.md) | Does the judge earn its place, on real agents and held-out drift? | **60 of 60 held-out drifts, against 2 for the rules.** Real agents took 2 of 30 baits |
+| [7](07-production-traces.md) | Does the same engine watch a deployed agent, unchanged? | **Yes, zero core lines changed.** 45 conversations: every labelled problem caught, none of 29 on-task flagged |
 
 Raw data is in [`data/`](data/), runnable code in [`code/`](code/).
 
