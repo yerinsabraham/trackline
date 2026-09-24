@@ -58,24 +58,15 @@ func cmdConnect(args []string) error {
 		}
 	}
 
-	// Stated plainly before asking: paths are sent and they can say more than
-	// they seem to.
+	// One line each, but the first still says what goes and what never does.
 	name := filepath.Base(root)
-	fmt.Printf("Connect %s to your trackline account.\n\n", name)
-	fmt.Println("While your agent works, trackline will send what it notices: which files were")
-	fmt.Println("touched (their paths in this project), what each check found, and packages")
-	fmt.Println("installed. Never file contents, never command text.")
-	fmt.Println()
-	if !ask("Connect this project?", true) {
-		fmt.Println("Nothing connected. Run trackline connect here again whenever you like.")
+	if !ask(fmt.Sprintf("Show %s's findings on your dashboard? (file paths and check results, never your code)", name), true) {
+		fmt.Println("Nothing connected.")
 		return nil
 	}
 	share := false
 	if !noRequests {
-		fmt.Println()
-		fmt.Println("Your requests are the messages you type to your agent. Sent along, the")
-		fmt.Println("dashboard can show each finding next to the request it came from.")
-		share = ask("Send your requests too?", true)
+		share = ask("Include the messages you send your agent?", true)
 	}
 
 	if who == "" {
@@ -88,12 +79,6 @@ func cmdConnect(args []string) error {
 	}
 
 	fmt.Printf("\n%s is connected to %s.\n", name, who)
-	if share {
-		fmt.Println("Your requests will be sent. To stop: trackline connect --no-requests")
-	} else {
-		fmt.Println("Your requests will not be sent.")
-	}
-	fmt.Println("\nUploading starts in a later release; nothing is sent yet.")
 	return nil
 }
 
@@ -106,7 +91,7 @@ func linkMachine(api string, noBrowser bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("\nLast step: sign in and approve this computer at\n\n    %s\n\nThe page will show the code  %s\n\n", code.VerificationURIComplete, code.UserCode)
+	fmt.Printf("\nApprove this computer in your browser (code %s):\n  %s\n", code.UserCode, code.VerificationURIComplete)
 	if !noBrowser {
 		openBrowser(code.VerificationURIComplete)
 	}
