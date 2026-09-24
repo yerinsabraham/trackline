@@ -15,8 +15,9 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 )
 
-// cmdConnect links this machine to a trackline account, then asks about the
-// project it was run in.
+// cmdConnect asks about the project first, then links this machine to an
+// account if it is not linked yet. The questions come before the browser so
+// that approving there is the last step, not the first of two.
 //
 //	trackline connect [--api URL] [--root DIR] [--no-requests] [--yes] [--no-browser]
 func cmdConnect(args []string) error {
@@ -49,96 +50,111 @@ func cmdConnect(args []string) error {
 	api := account.API(apiFlag)
 	ask := prompter(yes)
 
+	var who string
 	creds, err := account.LoadCredentials()
-	connected := false
 	if err == nil && creds.API == api {
 		if me, err := (account.Client{Base: api, Token: creds.Token}).Me(); err == nil {
-			fmt.Printf("This machine is connected as %s (%s).\n", display(me.User.Name, me.User.Email), me.Device.Name)
-			connected = true
+			who = display(me.User.Name, me.User.Email)
 		}
 	}
 
-	if !connected {
-		host, _ := os.Hostname()
-		c := account.Client{Base: api}
-		code, err := c.StartConnect(host)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("\nTo connect this machine, open\n\n    %s\n\nand check the code on the page is  %s\n\n", code.VerificationURIComplete, code.UserCode)
-		if !noBrowser {
-			openBrowser(code.VerificationURIComplete)
-		}
-		fmt.Print("Waiting for you to approve it")
-
-		interval := time.Duration(code.Interval) * time.Second
-		if interval < time.Second {
-			interval = 5 * time.Second
-		}
-		deadline := time.Now().Add(time.Duration(code.ExpiresIn) * time.Second)
-		var got account.Poll
-		for {
-			if time.Now().After(deadline) {
-				fmt.Println()
-				return errors.New("the code expired before it was approved. Run trackline connect again")
-			}
-			time.Sleep(interval)
-			fmt.Print(".")
-			got, err = c.Poll(code.DeviceCode)
-			if err != nil {
-				fmt.Println()
-				return err
-			}
-			if got.Status == "approved" {
-				break
-			}
-			if got.Status == "denied" {
-				fmt.Println()
-				return errors.New("the connection was declined on the site")
-			}
-			if got.Status == "expired" {
-				fmt.Println()
-				return errors.New("the code expired before it was approved. Run trackline connect again")
-			}
-		}
-		fmt.Println(" approved.")
-
-		creds = account.Credentials{API: api, Token: got.Token, DeviceID: got.Device.ID, DeviceName: got.Device.Name}
-		if me, err := (account.Client{Base: api, Token: got.Token}).Me(); err == nil {
-			creds.Email = me.User.Email
-			fmt.Printf("Connected as %s.\n", display(me.User.Name, me.User.Email))
-		}
-		if err := account.SaveCredentials(creds); err != nil {
-			return fmt.Errorf("connected, but the credential could not be saved: %w", err)
-		}
-	}
-
-	// The project. Stated plainly before asking: paths are sent and they can
-	// say more than they seem to.
+	// Stated plainly before asking: paths are sent and they can say more than
+	// they seem to.
 	name := filepath.Base(root)
-	fmt.Printf("\nProject: %s\n", name)
-	fmt.Println("If you connect it, trackline sends what it notices as your agent works: which")
-	fmt.Println("files were touched (their paths in this project), what each check found, and")
-	fmt.Println("packages installed. Never file contents, never command text.")
+	fmt.Printf("Connect %s to your trackline account.\n\n", name)
+	fmt.Println("While your agent works, trackline will send what it notices: which files were")
+	fmt.Println("touched (their paths in this project), what each check found, and packages")
+	fmt.Println("installed. Never file contents, never command text.")
+	fmt.Println()
 	if !ask("Connect this project?", true) {
-		fmt.Println("Not connected. Run trackline connect here again whenever you like.")
+		fmt.Println("Nothing connected. Run trackline connect here again whenever you like.")
 		return nil
 	}
 	share := false
 	if !noRequests {
-		share = ask("Share what you ask your agent, so the dashboard can show it?", true)
+		fmt.Println()
+		fmt.Println("Your requests are the messages you type to your agent. Sent along, the")
+		fmt.Println("dashboard can show each finding next to the request it came from.")
+		share = ask("Send your requests too?", true)
+	}
+
+	if who == "" {
+		if who, err = linkMachine(api, noBrowser); err != nil {
+			return err
+		}
 	}
 	if _, err := account.ConnectProject(root, share); err != nil {
 		return err
 	}
+
+	fmt.Printf("\n%s is connected to %s.\n", name, who)
 	if share {
-		fmt.Printf("%s is connected, and what you ask your agent will be shared.\n", name)
-		fmt.Println("To stop sharing it: trackline connect --no-requests")
+		fmt.Println("Your requests will be sent. To stop: trackline connect --no-requests")
 	} else {
-		fmt.Printf("%s is connected. What you ask your agent will not be shared.\n", name)
+		fmt.Println("Your requests will not be sent.")
 	}
 	fmt.Println("\nUploading starts in a later release; nothing is sent yet.")
 	return nil
+}
+
+// linkMachine runs the browser approval and saves the machine's credential.
+// It returns who the machine is now connected as.
+func linkMachine(api string, noBrowser bool) (string, error) {
+	host, _ := os.Hostname()
+	c := account.Client{Base: api}
+	code, err := c.StartConnect(host)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\nLast step: sign in and approve this computer at\n\n    %s\n\nThe page will show the code  %s\n\n", code.VerificationURIComplete, code.UserCode)
+	if !noBrowser {
+		openBrowser(code.VerificationURIComplete)
+	}
+	fmt.Print("Waiting for approval")
+
+	interval := time.Duration(code.Interval) * time.Second
+	if interval < time.Second {
+		interval = 5 * time.Second
+	}
+	expired := errors.New("the code expired before it was approved. Run trackline connect again")
+	deadline := time.Now().Add(time.Duration(code.ExpiresIn) * time.Second)
+	var got account.Poll
+	for {
+		if time.Now().After(deadline) {
+			fmt.Println()
+			return "", expired
+		}
+		time.Sleep(interval)
+		fmt.Print(".")
+		got, err = c.Poll(code.DeviceCode)
+		if err != nil {
+			fmt.Println()
+			return "", err
+		}
+		if got.Status == "approved" {
+			break
+		}
+		if got.Status == "denied" {
+			fmt.Println()
+			return "", errors.New("the connection was declined on the site")
+		}
+		if got.Status == "expired" {
+			fmt.Println()
+			return "", expired
+		}
+	}
+	fmt.Println(" approved.")
+
+	creds := account.Credentials{API: api, Token: got.Token, DeviceID: got.Device.ID, DeviceName: got.Device.Name}
+	who := "your account"
+	if me, err := (account.Client{Base: api, Token: got.Token}).Me(); err == nil {
+		creds.Email = me.User.Email
+		who = display(me.User.Name, me.User.Email)
+	}
+	if err := account.SaveCredentials(creds); err != nil {
+		return "", fmt.Errorf("approved, but the credential could not be saved: %w", err)
+	}
+	return who, nil
 }
 
 // cmdDisconnect revokes this machine on the account and forgets it locally.

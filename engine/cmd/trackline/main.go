@@ -112,7 +112,7 @@ func usage() {
   revoke   withdraw an approval
   traces   check exported production traces (OTLP, protobuf or JSON)
   serve    receive traces from a running agent and check them live
-  connect  link this machine to a trackline account (optional)
+  connect  connect this project to a trackline account (optional)
   account  who this machine is connected as
   disconnect  unlink this machine
   mcp      serve check_action and get_rules to any MCP client (the agent
@@ -188,13 +188,15 @@ Listens on localhost unless told otherwise: traces carry customer messages.
 `,
 	"connect": `trackline connect [--no-requests] [--root DIR] [--yes] [--no-browser] [--api URL]
 
-Link this machine to a trackline account, then choose whether this project
-uploads. Optional: trackline works fully without an account.
+Connect this project to a trackline account. Optional: trackline works fully
+without an account.
 
-Shows a code and a link; approve it on the site while signed in. The
-credential is kept in your user config directory, readable only by you, never
-inside a project. You are asked whether to share what you ask your agent;
---no-requests says no. File contents and command text are never sent.
+Asks first: whether this project uploads, and whether your requests (the
+messages you type to your agent) go with it; --no-requests says no to the
+second. Then, only if this computer is not linked yet, opens the site to sign
+in and approve it. That happens once per computer; later projects skip it.
+The credential is kept in your user config directory, readable only by you,
+never inside a project. File contents and command text are never sent.
 `,
 	"account": `trackline account
 
