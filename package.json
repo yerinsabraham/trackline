@@ -55,7 +55,8 @@
     "prepack": "npm run build",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build:binaries": "./scripts/build-binaries.sh"
+    "build:binaries": "./scripts/build-binaries.sh",
+    "smoke": "./scripts/smoke-install.sh"
   },
   "dependencies": {
     "openai": "^6.25.0"

@@ -59,6 +59,12 @@ Paste when prompted. It never touches a file.
 
 ### 4. Rehearse
 
+Locally first: `npm run smoke` rebuilds every binary, packs, installs into an
+empty directory and runs the result. The binaries under `packages/*/bin` are
+gitignored build output, so testing without rebuilding can run a stale one.
+
+Then in CI:
+
 Actions → **Release** → **Run workflow**, leaving *dry run* ticked.
 
 It runs the full suite, builds all five platforms, checks every package version
