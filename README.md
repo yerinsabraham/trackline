@@ -63,7 +63,8 @@ That is enforced in the type system, not by convention.
 - **ask** — stops the agent and tells it to ask you. If you approve,
   `trackline allow <check> <target>` and it continues.
 - **auto** — blocks and hands the reason back to the agent, which then corrects
-  itself. Measured at 11 out of 11 across Claude Code and Codex. In Cursor,
+  itself. Only for findings that are certain, which today means off-limits; the
+  heuristic checks never block on their own, so use ask for those. Measured at 11 out of 11 across Claude Code and Codex. In Cursor,
   one live run so far: blocked once, did not retry, told the user to make the
   change by hand.
 
