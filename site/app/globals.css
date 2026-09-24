@@ -478,3 +478,27 @@ footer a:hover { color: var(--night-text); }
 .tabs button:hover { color: var(--night-text); }
 .tabs button[aria-selected="true"] { color: var(--night-text); background: var(--slab-2); }
 .term pre.prompt { white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; color: #c8c8cb; }
+
+/* Account pages: sign in, GitHub callback, account. */
+.account-page { display: flex; justify-content: center; padding-block: 72px 96px; }
+.account-card { width: 100%; max-width: 440px; background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 36px 32px; }
+.account-card h1 { margin: 10px 0 8px; font-size: 32px; letter-spacing: -0.03em; line-height: 1.1; }
+.account-sub { color: var(--ink-2); margin: 0 0 14px; line-height: 1.5; }
+.account-actions { display: flex; flex-direction: column; gap: 12px; align-items: stretch; margin: 24px 0 8px; }
+.account-actions .btn { justify-content: center; }
+.btn-dark { background: var(--ink); color: #fff; gap: 10px; }
+.btn-dark:hover { background: #2a2a2d; }
+.btn[disabled] { opacity: 0.6; cursor: default; }
+.google-slot { display: flex; justify-content: center; min-height: 44px; }
+.account-error { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; border-radius: 10px; padding: 10px 12px; margin: 14px 0; }
+.account-fine { color: var(--ink-3); font-size: 13.5px; margin: 18px 0 0; }
+.account-fine a { color: var(--ink-2); text-decoration: underline; }
+.account-who { display: flex; gap: 16px; align-items: center; }
+.account-who img { border-radius: 50%; }
+.account-danger { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 18px; color: var(--ink-2); font-size: 14.5px; }
+.link-danger, .link-quiet { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
+.link-danger { color: #b42318; }
+.link-quiet { color: var(--ink-2); }
+.btn-danger { background: #b42318; color: #fff; }
+.btn-danger:hover { background: #912018; }
+@media (max-width: 520px) { .account-card { padding: 28px 20px; border-radius: 16px; } }
