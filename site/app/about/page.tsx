@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { experiments } from "@/lib/experiments";
 import { pageMeta } from "@/lib/seo";
 
 export const metadata = pageMeta({
@@ -46,7 +47,7 @@ export default function About() {
           <h2>How it is built</h2>
           <p>
             Every claim on this site was measured before it was built on, and the{" "}
-            <Link className="text-link" href="/evidence">seven experiments</Link> are published with their method and
+            <Link className="text-link" href="/evidence">{experiments().length} experiments</Link> are published with their method and
             limits. The part that runs before every action is written in Go, because it runs on every tool call:
             starting Node cost 88 ms a call against 6.5 ms for Go, and the whole check runs in 11 to 14 ms.
           </p>

@@ -5,7 +5,7 @@ import { pageMeta } from "@/lib/seo";
 export const metadata = pageMeta({
   path: "/evidence",
   title: "Evidence",
-  description: "Seven experiments behind trackline's design, each measured before it was built on, with the method and the limits.",
+  description: `${experiments().length} experiments behind trackline's design, each measured before it was built on, with the method and the limits.`,
 });
 
 const day = (d: string) => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });

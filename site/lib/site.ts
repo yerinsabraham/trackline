@@ -83,4 +83,12 @@ export const evidence = [
     answer: "Yes, with zero lines of the core changed",
     method: "45 pre-registered conversations sent by the real OpenTelemetry libraries: every labelled problem caught, none of 29 on-task flagged.",
   },
+  {
+    n: 8,
+    published: "2026-09-24",
+    file: "08-uploading-without-slowing-the-hook.md",
+    question: "Can the hook upload to an account without getting slower?",
+    answer: "Unchanged when not connected, about 1 ms when connected",
+    method: "Three hooks fed the same tool call, interleaved over 200 rounds. The hook never touches the network: a separate process sends.",
+  },
 ];

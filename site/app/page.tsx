@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { experiments } from "@/lib/experiments";
 import CheckTiles from "@/components/CheckTiles";
 import DotText from "@/components/DotText";
 import HeroActions from "@/components/HeroActions";
@@ -230,7 +231,7 @@ export default function Home() {
             </Link>
           ))}
         </div>
-        <p className="more"><Link href="/evidence">See all seven experiments</Link></p>
+        <p className="more"><Link href="/evidence">See all {experiments().length} experiments</Link></p>
       </section>
 
       <section className="section wrap" aria-labelledby="lim-h">
