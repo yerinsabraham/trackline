@@ -77,6 +77,14 @@ jobs:
           ./node_modules/.bin/trackline --help 2>&1 | grep -q "alignment layer" \
             || { echo "::error::the installed CLI did not run"; exit 1; }
 
+      # Trusted publishing (OIDC, no token) needs npm 11.5.1 or newer, and
+      # Node 22 ships npm 10. With npm 10 and no token the v0.2.0 release failed
+      # with ENEEDAUTH; nothing was published. The token is gone for good, so
+      # this is the only way to publish.
+      - name: npm that can publish without a token
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: npm install -g npm@^11.5.1 && npm --version
+
       - name: Publish platform packages
         if: github.event_name == 'push' || inputs.dry_run == false
         # Skips what is already there, so a release that fails partway can be
@@ -92,12 +100,6 @@ jobs:
             fi
             (cd "$d" && npm publish --provenance --access public)
           done
-        env:
-          # Empty once trusted publishing is configured, which is the goal: npm
-          # falls back to OIDC when no token is present, so the same workflow
-          # serves both the first release and every one after it. See
-          # RELEASING.md.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # After the platform packages, so its optional dependencies resolve the
       # moment it is installable.
@@ -110,8 +112,6 @@ jobs:
           else
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Confirm attribution actually shipped
         if: github.event_name == 'push' || inputs.dry_run == false

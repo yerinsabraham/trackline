@@ -133,8 +133,11 @@ Then delete the token in both places: `npm token list` and
 `npm token revoke <id>`, and
 `gh secret delete NPM_TOKEN --repo yerinsabraham/trackline`.
 
-No workflow change is needed. `permissions: id-token: write` is already there,
-and npm uses OIDC automatically when no token is present.
+The workflow needs `permissions: id-token: write` (it has it) and **npm 11.5.1
+or newer**, which is what uses trusted publishing. Node 22 ships npm 10, which
+does not: with npm 10 and no token, publishing fails with `ENEEDAUTH`. That is
+how the first v0.2.0 run failed, publishing nothing. The workflow now upgrades
+npm before it publishes.
 
 ### Confirming it worked
 
