@@ -4,7 +4,7 @@ export const EXPERIMENTS = `${GITHUB}/blob/main/docs/experiments`;
 // The one place the site's address lives. The agent prompt points here, so when
 // the domain changes, change it here and redeploy; the vercel.app address keeps
 // resolving for prompts already pasted.
-export const SITE = "https://trackline-iota.vercel.app";
+export const SITE = "https://trackline.dev";
 
 // What "Copy prompt for your agent" puts on the clipboard. It carries the
 // essential steps itself, because not every agent can fetch a URL (Codex runs
