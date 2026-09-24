@@ -34,6 +34,20 @@ func main() {
 		os.Exit(2)
 	}
 
+	// Checked before dispatch, so no command starts working when it was only
+	// asked to explain itself. `trackline mcp --help` used to start a server
+	// waiting on stdin, and `review --help` went looking for a judge.
+	for _, a := range os.Args[2:] {
+		// Not the bare word "help": it is a legal target for allow and
+		// revoke, and a directory can be called that.
+		if a == "-h" || a == "--help" {
+			if text, ok := commandHelp[os.Args[1]]; ok {
+				fmt.Print(text)
+				return
+			}
+		}
+	}
+
 	var err error
 	switch os.Args[1] {
 	case "init":
@@ -91,6 +105,55 @@ func usage() {
 
 Flags: --host claude|codex|cursor   --root DIR
 `)
+}
+
+var commandHelp = map[string]string{
+	"init": `trackline init [--host claude|codex|cursor] [--root DIR]
+
+Wire the hook into an agent's configuration, merging with what is there.
+Starts in warn mode: it records, and never interrupts.
+`,
+	"status": `trackline status [--root DIR]
+
+Whether the hook has ever run here, and what each check has seen.
+`,
+	"doctor": `trackline doctor [--host claude|codex|cursor] [--root DIR]
+
+Check the install without changing anything: the binary, its behaviour, the
+config, the rules files, the wiring, and what trackline can and cannot do in
+that agent.
+`,
+	"show": `trackline show [--root DIR] [--task TEXT] [--json FILE]
+
+Replay a recorded session as a readable story.
+`,
+	"review": `trackline review [--provider cli|http] [--binary claude|codex|cursor-agent] [--json] [--root DIR]
+
+Ask a model whether each turn's work served its request. Off unless configured,
+and never on the hook's path. Use a different model family from the agent that
+did the work. --json prints one line per turn.
+`,
+	"allow": `trackline allow <check> <target> [--project] [--reason TEXT] [--root DIR]
+
+Approve something a check objected to. For the current request only, unless
+--project.
+`,
+	"allowed": `trackline allowed [--root DIR]
+
+List what has been approved.
+`,
+	"revoke": `trackline revoke <check> [target] [--root DIR]
+
+Withdraw an approval.
+`,
+	"mcp": `trackline mcp [--root DIR]
+
+Serve check_action and get_rules to any MCP client over stdio.
+
+Advisory: the agent chooses whether to ask, so an agent that does not ask is
+not watched. Pass --root in the client's server config; some clients start
+servers far from the project.
+`,
 }
 
 type flags struct {
