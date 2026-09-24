@@ -1,0 +1,64 @@
+[
+  {
+    "key": "claude",
+    "name": "Claude Code",
+    "blocks": true,
+    "reasonReachesAgent": true,
+    "intent": "read from the session transcript",
+    "evidence": "live sessions; the agent corrected itself 11 times out of 11 when blocked",
+    "limits": [
+      "ask mode cannot prompt you directly: the agent is stopped and told to ask you"
+    ]
+  },
+  {
+    "key": "codex",
+    "name": "Codex",
+    "blocks": true,
+    "reasonReachesAgent": true,
+    "intent": "read from the session transcript",
+    "evidence": "live sessions and captured payloads",
+    "limits": [
+      "Codex runs a project hook only after you trust it with /hooks; until then it silently never runs",
+      "if the hook crashes or times out, Codex lets the action through",
+      "ask mode cannot prompt you directly: the agent is stopped and told to ask you"
+    ]
+  },
+  {
+    "key": "cursor",
+    "name": "Cursor",
+    "blocks": true,
+    "reasonReachesAgent": true,
+    "intent": "read from the session transcript",
+    "evidence": "captured from the Cursor CLI; one live run where the agent was blocked once and did not retry",
+    "limits": [
+      "it only sees the agent once the agent is inside this project; start the agent here",
+      "captured from the Cursor CLI; the desktop app is expected to match but has not been checked"
+    ]
+  },
+  {
+    "key": "mcp",
+    "name": "any MCP client",
+    "blocks": false,
+    "reasonReachesAgent": true,
+    "intent": "whatever the agent says it was asked, which it may get wrong",
+    "evidence": "tested with the official MCP Inspector",
+    "limits": [
+      "the agent chooses whether to ask; an agent that does not ask is not watched",
+      "approvals given for a single request do not apply; only project-wide ones do",
+      "some clients start the server outside the project; pass --root in the client's config"
+    ]
+  },
+  {
+    "key": "production",
+    "name": "production traces",
+    "blocks": false,
+    "reasonReachesAgent": false,
+    "intent": "the user message in the trace, when message content capture is on",
+    "evidence": "the official OTel OpenAI instrumentation and OTLP exporter, captured and replayed; 45 pre-registered conversations",
+    "limits": [
+      "a trace is a record of what already happened, so trackline alerts and never stops anything",
+      "without message content capture, which is opt-in, a trace does not say which tool was called; checks report that rather than pass it",
+      "a permitted tool used for something nobody asked for is only caught with --judge"
+    ]
+  }
+]
