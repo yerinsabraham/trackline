@@ -13,12 +13,23 @@ seconds and runs once per merge.
 
 ## Status
 
-**Foundation only.** There are no real checks yet. What exists is the shape
-everything else plugs into, and a scaffolding check that proves events and
-intent reach a signal and a verdict comes back with evidence attached.
+Working, and published as the `trackline` npm package.
+
+- **Five checks** on every action, all arithmetic, none a model: `off-limits`,
+  `dependency-added`, `scope`, `diff-size`, `repetition`. Warn mode by default;
+  each can be set to ask or auto.
+- **Three hosts through hooks** (Claude Code, Codex, Cursor) and **any MCP
+  client** through `trackline mcp`, which advises and cannot block.
+  `internal/hosts` says what each can and cannot do, with the evidence.
+- **One judge**, off by default and never on the hook's path: `trackline
+  review` asks a model whether each turn's work served its request. Measured in
+  [experiment 6](../docs/experiments/06-the-judge-measured.md).
+
+Production traces (the OpenTelemetry adapter) are parsed but not yet watched;
+that is Phase 5.
 
 ```bash
-go test ./...
+go test ./... -race
 go run ./cmd/inspect -rec session.jsonl
 ```
 
@@ -38,6 +49,8 @@ the hosts do not agree on how to say it:
 |---|---|---|
 | Claude Code | `Write` | structured `tool_input.file_path` |
 | Codex | `apply_patch` | a patch string that has to be parsed |
+| Cursor | `Write` | structured, but a one-line edit arrives as the whole file |
+| any host | a shell tool | a command line, read by `internal/shell` where it can be |
 
 `Action.PathsUnknown` is the other half, and it matters more than it looks. A
 shell command, an unrecognised tool, or a payload that would not parse may touch
@@ -88,7 +101,7 @@ Two rules are enforced here rather than trusted to each check:
 3. Extract file paths into `Action.Paths`, resolved against `CWD`. If you cannot
    extract them reliably, set `PathsUnknown` rather than guessing.
 4. Map the host's turn grouping onto `TurnID`. Claude calls it `prompt_id`,
-   Codex calls it `turn_id`.
+   Codex `turn_id`, Cursor `generation_id`.
 5. Keep the untouched payload in `Raw` so a wrong normalisation can be diagnosed
    from a replay.
 6. **Return an error rather than a half-filled event.** A hook that guesses on
@@ -99,17 +112,35 @@ Then add your host to `TestHostsAgreeOnTheSameFact` in
 same normalised event; that test is what keeps the rest of the engine
 host-agnostic.
 
+Build from a captured payload, never from the host's documentation. Cursor's
+docs were wrong in three places, and Codex renamed its shell tool between
+versions. Teach `internal/intent` the host's transcript, or intent-dependent
+checks go blind without saying so, which happened to Codex for three phases.
+And give the host an entry in `internal/hosts`: a test fails without one.
+
 ## Layout
 
 ```
+cmd/hook/               the binary an agent runs before every tool call
+cmd/trackline/          the CLI a person runs: init, status, doctor, review, mcp...
 cmd/inspect/            replay a recording and print what the engine saw
 internal/event/         the normalised event
-internal/intent/        human turns, and reading them from a transcript
+internal/intent/        human turns, and reading them from each host's transcript
 internal/verdict/       outcomes, findings, evidence
-internal/signal/        the one interface every check implements
+internal/signal/        the one interface every check implements, and the checks
 internal/engine/        runs signals, contains no judgement of its own
+internal/runner/        one pass: parse, read intent, check, apply approvals, decide
 internal/session/       record and replay
 internal/adapter/       per-host normalisation, and the cross-host test
+internal/shell/         what a shell command touches, or that it cannot tell
+internal/config/        .trackline.json and the project's rules files
+internal/override/      approvals: once, or project-wide
+internal/judge/         the model check, off by default, never in the hook
+internal/hosts/         what each host can and cannot do, with evidence
+internal/mcp/           the MCP server (advisory)
+internal/install/       wiring the hook into each host, and proving it fires
+internal/walkthrough/   turns a recorded session into a readable story (trackline show)
+internal/e2e/           a raw payload through record, replay and judgement, end to end
 ```
 
 ## Rules for anything added here

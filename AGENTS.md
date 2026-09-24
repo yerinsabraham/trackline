@@ -61,15 +61,18 @@ against intent, produce an evidence-backed verdict. Neutral is the point: it
 governs every agent a team uses from one place, which no single vendor can do
 for a competitor's agent. Do not add anything that ties the engine to one host.
 
-**What exists today is the CI eval gate**, which is what this codebase currently
-is: a CLI that scores retrieval, tool selection and groundedness against
-committed golden datasets, compares the numbers to a committed baseline, and
-exits non-zero on a regression. It folds into the wider engine as the CI-side
-entry point. Everything else is roadmap, and `documents/BUILD-PLAN.md` holds the
-phases.
+**What exists today is two tools in one package.** The watcher (`trackline`,
+the Go engine) runs beside Claude Code, Codex and Cursor through hooks, and any
+MCP client through `trackline mcp`; v0.1.0 is on npm. The CI eval gate
+(`trackline-gate`, the TypeScript in `src/`) scores retrieval, tool selection
+and groundedness against committed golden datasets and exits non-zero on a
+regression. Production monitoring over traces is not built yet: that is Phase 5,
+and `documents/BUILD-PLAN.md` holds the phases.
 
-Do not describe the project as only an eval gate. Do not describe the watcher as
-though it works. The README gets this split right; follow it.
+Describe what works as working and what does not as not: production is roadmap,
+the judge is measured but off by default, MCP advises and cannot block.
+`internal/hosts` and the README's per-agent table are the source of truth for
+what each host can do.
 
 Extracted from the eval harness for Lira Intelligence, a production AI support
 agent with retrieval over customer knowledge bases and risk-tiered tool calling.
@@ -165,8 +168,9 @@ npm run doctor           # validate datasets, fixtures, baseline before scoring
 npm run build            # tsc -> dist/, which is what `bin: trackline` points at
 ```
 
-CLI equivalents: `trackline run|record|baseline|doctor|init`. `run` is the
-default command. Flags: `--live`, `--suite=`, `--report=terminal|json|markdown|github`,
+CLI equivalents for the gate: `trackline-gate run|record|baseline|doctor|init`.
+`run` is the default command. The watcher's CLI is `trackline`; see
+`engine/README.md`. Flags: `--live`, `--suite=`, `--report=terminal|json|markdown|github`,
 `--root=`, and the three opt-in strict flags `--fail-on-case-failure`,
 `--fail-on-skipped-suite`, `--strict-baseline`.
 
