@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trackline.dev/contract/ingest-v1.schema.json",
+  "title": "trackline upload, version 1",
+  "description": "Everything a connected machine may send, and nothing else. Every object is closed: a field not listed here is refused by the CLI's builder and by the backend. File contents, diffs, command text, tool arguments and evidence values have no field, on purpose.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "events"],
+  "properties": {
+    "v": { "const": 1 },
+    "events": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at", "project", "host", "session", "action", "results", "mode", "blocked"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "description": "Unique per event, so a retried batch is never counted twice." },
+        "at": { "type": "string", "maxLength": 40, "description": "RFC 3339 time the action was seen." },
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name"],
+          "properties": {
+            "id": { "type": "string", "maxLength": 64, "description": "Random, chosen at connect time. Not derived from the path." },
+            "name": { "type": "string", "maxLength": 100, "description": "The project folder's name only, never its full path." }
+          }
+        },
+        "host": { "enum": ["claude-code", "codex", "cursor"] },
+        "session": { "type": "string", "maxLength": 128 },
+        "turn": { "type": "string", "maxLength": 128 },
+        "request": { "type": "string", "maxLength": 2000, "description": "What the user asked. Absent unless they agreed to share it. Token shapes are replaced with [redacted]." },
+        "action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["write-file", "edit-file", "delete-file", "read-file", "run-command", "call-tool", "other"] },
+            "tool": { "type": "string", "maxLength": 64, "description": "The host's tool name, e.g. Write or Bash. Never its input." },
+            "paths": {
+              "type": "array",
+              "maxItems": 50,
+              "items": { "type": "string", "maxLength": 512 },
+              "description": "Relative to the project. Paths outside it are dropped, never sent."
+            },
+            "pathsUnknown": { "type": "boolean" },
+            "installs": { "type": "array", "maxItems": 50, "items": { "type": "string", "maxLength": 214 } },
+            "commandUnderstood": { "type": "boolean", "description": "For a command: whether trackline could read what it touches. The command text itself is never sent." }
+          }
+        },
+        "results": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/result" }
+        },
+        "mode": { "enum": ["warn", "ask", "auto"] },
+        "blocked": { "type": "boolean" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "outcome"],
+      "properties": {
+        "check": { "enum": ["off-limits", "dependency-added", "scope", "diff-size", "repetition", "tool-policy", "config", "rules"] },
+        "outcome": { "enum": ["clean", "finding", "not-applicable", "cannot-measure"] },
+        "reason": { "type": "string", "maxLength": 300 },
+        "findings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["severity", "summary"],
+            "properties": {
+              "severity": { "enum": ["info", "warn", "block"] },
+              "summary": { "type": "string", "maxLength": 300 },
+              "target": { "type": "string", "maxLength": 512 },
+              "suggestion": { "type": "string", "maxLength": 300 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

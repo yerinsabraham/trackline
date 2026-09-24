@@ -1,0 +1,424 @@
+[
+ {
+  "event": {
+   "id": "call_gj5fql2bcVaeHptav6PhOvST",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.406007+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "rg -n \"welcome|Welcome\" .",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rg -n \"welcome|Welcome\" ."
+    },
+    "tool_use_id": "call_gj5fql2bcVaeHptav6PhOvST"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_IdU4Y7UWzRL37S8yqDqIpgfm",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.41817+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "rg --files",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rg --files"
+    },
+    "tool_use_id": "call_IdU4Y7UWzRL37S8yqDqIpgfm"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_nFUQEU4L2dP9OV4kDDH2hVaG",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.429458+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "sed -n '1,120p' src/messages.js",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sed -n '1,120p' src/messages.js"
+    },
+    "tool_use_id": "call_nFUQEU4L2dP9OV4kDDH2hVaG"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_x2WUoko7ZsPFGHcCobjhUvdi",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.440789+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "git status --short",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status --short"
+    },
+    "tool_use_id": "call_x2WUoko7ZsPFGHcCobjhUvdi"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_LyIB4LlJ2aFiHgT8ysVmPvHT",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.453125+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "edit-file",
+    "paths": [
+     "/work/lab/src/messages.js"
+    ],
+    "body": "*** Begin Patch\n*** Update File: src/messages.js\n@@\n-const WELCOME = \"Welcome\";\n+const WELCOME = \"Welcome back\";\n*** End Patch\n",
+    "bodySize": 127,
+    "toolName": "apply_patch"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "apply_patch",
+    "tool_input": {
+     "command": "*** Begin Patch\n*** Update File: src/messages.js\n@@\n-const WELCOME = \"Welcome\";\n+const WELCOME = \"Welcome back\";\n*** End Patch\n"
+    },
+    "tool_use_id": "call_LyIB4LlJ2aFiHgT8ysVmPvHT"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "clean"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "the request does not name a file or directory, so there is no stated scope"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "clean"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_CraoFFA43Qbg2fgUEEgDRnCT",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.464413+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "sed -n '1,80p' src/messages.js",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sed -n '1,80p' src/messages.js"
+    },
+    "tool_use_id": "call_CraoFFA43Qbg2fgUEEgDRnCT"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ },
+ {
+  "event": {
+   "id": "call_BZw9TipcYxPTcm5CFUZ2be2r",
+   "sessionId": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+   "turnId": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+   "at": "2026-09-23T17:57:27.47586+01:00",
+   "host": "codex",
+   "phase": "pre-tool",
+   "cwd": "/work/lab",
+   "transcriptPath": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+   "request": "Change the welcome message to 'Welcome back'.",
+   "action": {
+    "type": "run-command",
+    "command": "git diff -- src/messages.js",
+    "toolName": "Bash"
+   },
+   "raw": {
+    "session_id": "01a0cf2e-2438-71f1-a510-95b2aff30944",
+    "turn_id": "01a0cf2e-24df-76a3-9d54-313b0c797518",
+    "transcript_path": "/Users/dev/.codex/sessions/2026/09/23/rollout-2026-09-23T17-51-42-01a0cf2e-2438-71f1-a510-95b2aff30944.jsonl",
+    "cwd": "/work/lab",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-5.5",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git diff -- src/messages.js"
+    },
+    "tool_use_id": "call_BZw9TipcYxPTcm5CFUZ2be2r"
+   }
+  },
+  "results": [
+   {
+    "signal": "off-limits",
+    "outcome": "not-applicable",
+    "reason": "this action touches no files"
+   },
+   {
+    "signal": "dependency-added",
+    "outcome": "not-applicable",
+    "reason": "no dependency manifest is being modified"
+   },
+   {
+    "signal": "scope",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "diff-size",
+    "outcome": "not-applicable",
+    "reason": "this action does not write to a file"
+   },
+   {
+    "signal": "repetition",
+    "outcome": "clean"
+   }
+  ],
+  "mode": "warn",
+  "blocked": false
+ }
+]
