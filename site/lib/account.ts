@@ -55,6 +55,23 @@ export async function startGithub() {
   window.location.assign(url);
 }
 
+const NEXT_KEY = "trackline.next";
+
+/**
+ * Where to go after signing in. Only a path on this site is accepted, never a
+ * full URL, so a crafted link cannot bounce someone off to another domain.
+ */
+export function rememberNext(path: string) {
+  if (path.startsWith("/") && !path.startsWith("//")) sessionStorage.setItem(NEXT_KEY, path);
+}
+export function takeNext(): string {
+  const n = sessionStorage.getItem(NEXT_KEY);
+  sessionStorage.removeItem(NEXT_KEY);
+  return n && n.startsWith("/") && !n.startsWith("//") ? n : "/account";
+}
+
+export type Device = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
+
 export function takeGithubState(): string | null {
   const s = sessionStorage.getItem(STATE_KEY);
   sessionStorage.removeItem(STATE_KEY);

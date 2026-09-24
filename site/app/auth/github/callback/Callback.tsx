@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, githubCallback, setSession, takeGithubState } from "@/lib/account";
+import { api, githubCallback, setSession, takeGithubState, takeNext } from "@/lib/account";
 
 export default function Callback() {
   const [error, setError] = useState("");
@@ -23,7 +23,7 @@ export default function Callback() {
       method: "POST",
       body: JSON.stringify({ code, state, redirectUri: githubCallback() }),
     })
-      .then((r) => { setSession(r.token); window.location.replace("/account"); })
+      .then((r) => { setSession(r.token); window.location.replace(takeNext()); })
       .catch((e) => setError((e as Error).message));
   }, []);
 

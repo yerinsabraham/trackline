@@ -502,3 +502,17 @@ footer a:hover { color: var(--night-text); }
 .btn-danger { background: #b42318; color: #fff; }
 .btn-danger:hover { background: #912018; }
 @media (max-width: 520px) { .account-card { padding: 28px 20px; border-radius: 16px; } }
+.account-h2 { font-size: 18px; letter-spacing: -0.01em; margin: 26px 0 10px; }
+.account-note { margin-top: 16px; font-size: 14px; }
+.device-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 12px; }
+.device-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; }
+.device-list li + li { border-top: 1px solid var(--line); }
+.device-list li div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.device-list li strong { overflow-wrap: anywhere; }
+.device-list li span { color: var(--ink-3); font-size: 13px; }
+.connect-form { display: flex; gap: 10px; margin: 18px 0 6px; }
+.code-input { flex: 1; min-width: 0; font: 600 20px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fafaf9; color: var(--ink); }
+.code-input:focus { outline: 2px solid var(--signal); outline-offset: 1px; }
+.connect-device { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; margin: 16px 0; background: #fafaf9; }
+.connect-name { font-weight: 600; overflow-wrap: anywhere; }
+.connect-code { font: 600 16px/1 var(--mono); letter-spacing: 0.1em; color: var(--ink-2); white-space: nowrap; }

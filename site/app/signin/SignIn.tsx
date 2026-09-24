@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, GOOGLE_CLIENT_ID, session, setSession, startGithub } from "@/lib/account";
+import { api, GOOGLE_CLIENT_ID, session, setSession, startGithub, takeNext } from "@/lib/account";
 
 type GoogleId = {
   accounts: { id: {
@@ -16,7 +16,7 @@ export default function SignIn() {
   const googleEl = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (session()) window.location.replace("/account");
+    if (session()) window.location.replace(takeNext());
   }, []);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function SignIn() {
           try {
             const r = await api<{ token: string }>("/auth/google", { method: "POST", body: JSON.stringify({ credential }) });
             setSession(r.token);
-            window.location.replace("/account");
+            window.location.replace(takeNext());
           } catch (e) {
             setError((e as Error).message);
             setBusy(false);
