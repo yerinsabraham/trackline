@@ -70,6 +70,12 @@ func main() {
 		err = cmdTraces(os.Args[2:])
 	case "serve":
 		err = cmdServe(os.Args[2:])
+	case "connect":
+		err = cmdConnect(os.Args[2:])
+	case "disconnect":
+		err = cmdDisconnect(os.Args[2:])
+	case "account":
+		err = cmdAccount(os.Args[2:])
 	case "mcp":
 		f := parse(os.Args[2:])
 		// stdout is the protocol, so warnings go to stderr, which clients log.
@@ -106,6 +112,9 @@ func usage() {
   revoke   withdraw an approval
   traces   check exported production traces (OTLP, protobuf or JSON)
   serve    receive traces from a running agent and check them live
+  connect  link this machine to a trackline account (optional)
+  account  who this machine is connected as
+  disconnect  unlink this machine
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
 
@@ -176,6 +185,24 @@ Slack and most chat tools accept directly.
 --out appends every result as a JSON line.
 
 Listens on localhost unless told otherwise: traces carry customer messages.
+`,
+	"connect": `trackline connect [--no-requests] [--root DIR] [--yes] [--no-browser] [--api URL]
+
+Link this machine to a trackline account, then choose whether this project
+uploads. Optional: trackline works fully without an account.
+
+Shows a code and a link; approve it on the site while signed in. The
+credential is kept in your user config directory, readable only by you, never
+inside a project. You are asked whether to share what you ask your agent;
+--no-requests says no. File contents and command text are never sent.
+`,
+	"account": `trackline account
+
+Who this machine is connected as, and which projects upload.
+`,
+	"disconnect": `trackline disconnect
+
+Revoke this machine's credential on the account and remove it from here.
 `,
 	"mcp": `trackline mcp [--root DIR]
 
