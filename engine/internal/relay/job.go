@@ -57,8 +57,9 @@ const (
 	MaxText = 32 << 10
 )
 
-// Kinds a job may be. R2 runs only the test job; prompts arrive with R3.
-var kinds = map[string]bool{"test": true}
+// Kinds a job may be: a test job proves the path and runs nothing; a prompt
+// starts an agent.
+var kinds = map[string]bool{"test": true, "prompt": true}
 
 // Agents a job may name. Anything else is refused before it gets near a
 // command line.
@@ -141,6 +142,9 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	}
 	if len(j.Text) > MaxText || strings.ContainsRune(j.Text, 0) {
 		return Accepted{}, refuse("unsupported", "the instruction is too long or not text")
+	}
+	if j.Kind == "prompt" && (j.Agent == "" || strings.TrimSpace(j.Text) == "") {
+		return Accepted{}, refuse("unsupported", "a prompt needs an agent and an instruction")
 	}
 
 	p, ok := s.Projects[j.Project]

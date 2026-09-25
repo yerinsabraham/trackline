@@ -112,8 +112,10 @@ func remoteEnable(args []string) error {
 		}
 	}
 
+	found := findAgents()
 	if err := relay.Update(func(s *relay.State) error {
 		s.Enable(proj.ID, projRoot, name, time.Now())
+		s.Agents, s.Path = found, os.Getenv("PATH")
 		return nil
 	}); err != nil {
 		return err
@@ -126,7 +128,7 @@ func remoteEnable(args []string) error {
 			fmt.Fprintf(os.Stderr, "Could not start the runner: %v\nRun it yourself: trackline remote run\n", err)
 		}
 	}
-	fmt.Printf("\nRemote is on for %s. Turn it off: trackline remote disable\n", name)
+	fmt.Printf("\nRemote is on for %s. Agents it can start: %s.\nTurn it off: trackline remote disable\n", name, agentList(found))
 	return nil
 }
 
@@ -274,6 +276,7 @@ func remoteStatus() error {
 		fmt.Printf("  %s  (%s)\n", p.Root, last)
 	}
 	fmt.Println()
+	fmt.Println(statusAgents(s))
 	fmt.Println(runnerLine())
 	return nil
 }
@@ -361,6 +364,8 @@ func remoteRun() error {
 		client.SetRemoteProject(id, p.Name)
 	}
 	logf("runner started for %d project(s)", len(s.Projects))
+	writeStatus(runnerStatus{PID: os.Getpid()})
+	r := newRuns()
 
 	backoff := time.Second
 	for {
@@ -369,6 +374,7 @@ func remoteRun() error {
 		if errors.As(err, &apiErr) && apiErr.Status == 401 {
 			writeStatus(runnerStatus{PID: os.Getpid()})
 			logf("this machine was disconnected from the account; stopping")
+			r.stopAll(errors.New("disconnected"))
 			return nil
 		}
 		if err != nil {
@@ -383,19 +389,21 @@ func remoteRun() error {
 		writeStatus(runnerStatus{PID: os.Getpid(), Contact: time.Now()})
 		if next.Stop {
 			logf("stopped from the site; run trackline remote enable on this laptop to start again")
+			r.stopAll(errors.New("stopped from the site"))
 			return nil
 		}
 		if next.Job != nil {
-			handle(client, creds, *next.Job)
+			handle(client, creds, *next.Job, r)
 		}
 		if s, err := relay.Load(); err == nil && len(s.Projects) == 0 {
 			logf("remote was turned off for every project; stopping")
+			r.stopAll(errors.New("remote was turned off"))
 			return nil
 		}
 	}
 }
 
-func handle(client remote.Client, creds account.Credentials, d remote.Delivery) {
+func handle(client remote.Client, creds account.Credentials, d remote.Delivery, running *runs) {
 	var got relay.Accepted
 	err := relay.Update(func(s *relay.State) error {
 		var err error
@@ -417,6 +425,10 @@ func handle(client remote.Client, creds account.Credentials, d remote.Delivery) 
 
 	name := filepath.Base(got.Root)
 	logf("accepted %s job %s for %s", got.Job.Kind, d.ID, name)
+	if got.Job.Kind == "prompt" {
+		startPrompt(client, d, got, running)
+		return
+	}
 	notify("trackline: remote job", fmt.Sprintf("A %s job arrived for %s.", got.Job.Kind, name))
 	// A test job proves the path from the phone to this folder, and runs
 	// nothing.

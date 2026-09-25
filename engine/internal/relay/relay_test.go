@@ -145,6 +145,12 @@ func TestRefusals(t *testing.T) {
 		{"a kind of job this runner does not do", "unsupported", func(f fixture) relay.Envelope {
 			return f.phone.Send(job(func(j *relay.Job) { j.Kind = "shell" }))
 		}, now},
+		{"a prompt naming no agent", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) { j.Kind = "prompt" }))
+		}, now},
+		{"a prompt with nothing to do", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) { j.Kind, j.Agent, j.Text = "prompt", "claude", "  " }))
+		}, now},
 		{"an agent that is not one", "unsupported", func(f fixture) relay.Envelope {
 			return f.phone.Send(job(func(j *relay.Job) { j.Agent = "bash" }))
 		}, now},

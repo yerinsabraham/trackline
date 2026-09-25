@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
+	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
 )
 
 // The runner's side of remote jobs. The machine credential can receive jobs
@@ -85,6 +86,20 @@ type Result struct {
 	Code   string `json:"code,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Output string `json:"output,omitempty"`
+	// Session is the agent's own session id, which joins the job to the
+	// session trackline watched, and is what R4 resumes.
+	Session string `json:"session,omitempty"`
+}
+
+// JobEvents sends what a running agent did, numbered from from so a batch
+// sent twice after a lost reply is stored once. The answer says whether the
+// person pressed stop.
+func (c Client) JobEvents(id string, from int, events []agent.Event) (cancel bool, err error) {
+	var out struct {
+		Cancel bool `json:"cancel"`
+	}
+	err = c.do("POST", "/remote/jobs/"+url.PathEscape(id)+"/events", map[string]any{"from": from, "events": events}, &out)
+	return out.Cancel, err
 }
 
 func (c Client) JobResult(id string, r Result) error {

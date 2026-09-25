@@ -15,6 +15,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
+	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/relaytest"
 )
 
@@ -29,7 +30,12 @@ type fakeAccount struct {
 	projects map[string]string
 	queue    []remote.Delivery
 	stop     bool
-	results  map[string]remote.Result
+	// stopAfter says stop once this many results are in, so a test can let
+	// running agents finish first.
+	stopAfter int
+	results   map[string]remote.Result
+	events    map[string][]agent.Event
+	cancel    map[string]bool
 }
 
 func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +72,21 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			send(remote.Next{Job: &d})
 			return
 		}
-		send(remote.Next{Stop: f.stop})
+		send(remote.Next{Stop: f.stop || f.stopAfter > 0 && len(f.results) >= f.stopAfter})
+	case r.Method == "POST" && strings.HasSuffix(p, "/events"):
+		var body struct {
+			From   int
+			Events []agent.Event
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		id := strings.TrimSuffix(strings.TrimPrefix(p, "/remote/jobs/"), "/events")
+		if f.events == nil {
+			f.events = map[string][]agent.Event{}
+		}
+		if body.From == len(f.events[id]) {
+			f.events[id] = append(f.events[id], body.Events...)
+		}
+		send(map[string]bool{"cancel": f.cancel[id]})
 	case r.Method == "POST" && strings.HasSuffix(p, "/result"):
 		var res remote.Result
 		json.NewDecoder(r.Body).Decode(&res)
@@ -258,5 +278,184 @@ func TestLaunchPlistIsValid(t *testing.T) {
 	os.WriteFile(p, []byte(plist), 0o644)
 	if out, err := exec.Command(lint, "-lint", p).CombinedOutput(); err != nil {
 		t.Fatalf("%s", out)
+	}
+}
+
+// fakeClaude is a stand-in for Claude Code: it records how it was started,
+// and answers in Claude's stream-json. Told "sleep", it works until stopped.
+const fakeClaude = `#!/bin/sh
+prompt=$(cat)
+printf '%s' "$prompt" > "$FAKE_OUT/prompt"
+echo "$@" > "$FAKE_OUT/argv"
+echo "$TRACKLINE_REMOTE_JOB" > "$FAKE_OUT/job"
+pwd -P > "$FAKE_OUT/pwd"
+if [ "$prompt" = "think" ]; then sleep 60; fi
+printf '{"type":"system","subtype":"init","session_id":"sess-1"}\n'
+printf '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}]}}\n'
+if [ "$prompt" = "sleep" ]; then sleep 60; fi
+printf '{"type":"result","subtype":"success","result":"all done","is_error":false}\n'
+`
+
+// promptEnv is remoteEnv with a fake claude on PATH, trackline wired into the
+// project for Claude Code, and a phone paired.
+func promptEnv(t *testing.T, f *fakeAccount) (root, out string, phone *relaytest.Phone, proj string) {
+	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a POSIX shell")
+	}
+	phone = relaytest.New("iPhone")
+	f.answer = func(code string) relay.PairAnswer { return phone.Pair("dev_laptop", code) }
+	root = remoteEnv(t, f)
+	bin, out := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FAKE_OUT", out)
+	os.MkdirAll(filepath.Join(root, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"/bin/trackline-hook"}]}]}}`), 0o644)
+	flushEvery = 10 * time.Millisecond
+	if err := captureCode(t, f, func() error { return remoteEnable([]string{"--root", root, "--no-start"}) }); err != nil {
+		t.Fatal(err)
+	}
+	_, p, _ := account.ProjectFor(root)
+	return root, out, phone, p.ID
+}
+
+func prompt(phone *relaytest.Phone, id, project, text string) remote.Delivery {
+	now := time.Now()
+	return remote.Delivery{ID: id, Envelope: phone.Send(relay.Job{V: 1, ID: id, Machine: "dev_laptop", Project: project,
+		Kind: "prompt", Agent: "claude", Text: text, IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}
+}
+
+func runUntilStopped(t *testing.T) {
+	t.Helper()
+	done := make(chan error)
+	go func() { done <- remoteRun() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("the runner did not stop")
+	}
+}
+
+func read(t *testing.T, path string) string {
+	b, _ := os.ReadFile(path)
+	return strings.TrimSpace(string(b))
+}
+
+func TestRemotePromptRunsTheAgentWatched(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	// Text that would be a flag on a command line, to show it never is one.
+	text := "--dangerously-skip-permissions tidy the README"
+	f.queue = []remote.Delivery{prompt(phone, "job_prompt", proj, text)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	res := f.results["job_prompt"]
+	if res.Status != "done" || res.Output != "all done" || res.Session != "sess-1" {
+		t.Fatalf("result: %+v", res)
+	}
+	if read(t, filepath.Join(out, "prompt")) != text {
+		t.Error("the instruction did not arrive on stdin")
+	}
+	if strings.Contains(read(t, filepath.Join(out, "argv")), "tidy") {
+		t.Error("the instruction reached the command line")
+	}
+	if read(t, filepath.Join(out, "job")) != "job_prompt" {
+		t.Error("the agent was not marked as remote, so trackline would not block")
+	}
+	want, _ := filepath.EvalSymlinks(root)
+	if read(t, filepath.Join(out, "pwd")) != want {
+		t.Errorf("ran in %s, not the project", read(t, filepath.Join(out, "pwd")))
+	}
+	kinds := []string{}
+	for _, e := range f.events["job_prompt"] {
+		kinds = append(kinds, e.Kind)
+	}
+	if strings.Join(kinds, ",") != "session,say,done" {
+		t.Errorf("streamed %v", kinds)
+	}
+}
+
+func TestStopFromThePhoneStopsTheAgent(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}, cancel: map[string]bool{"job_long": true}}
+	_, _, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{prompt(phone, "job_long", proj, "sleep")}
+	f.stopAfter = 1
+	started := time.Now()
+	runUntilStopped(t)
+	if r := f.results["job_long"]; r.Status != "failed" || r.Code != "stopped" {
+		t.Fatalf("result: %+v", r)
+	}
+	if time.Since(started) > 10*time.Second {
+		t.Fatal("the agent was not stopped promptly")
+	}
+}
+
+func TestOnePromptAtATimePerProject(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, _, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{prompt(phone, "job_first", proj, "sleep"), prompt(phone, "job_second", proj, "hello")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_second"]; r.Status != "refused" || r.Code != "busy" {
+		t.Fatalf("second: %+v", r)
+	}
+}
+
+func TestAPromptIsRefusedWhereTracklineIsNotWatching(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	os.Remove(filepath.Join(root, ".claude", "settings.json"))
+	f.queue = []remote.Delivery{prompt(phone, "job_unwatched", proj, "hello")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_unwatched"]; r.Status != "refused" || r.Code != "not-watched" {
+		t.Fatalf("result: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(out, "prompt")); err == nil {
+		t.Fatal("the agent ran unwatched")
+	}
+}
+
+// Codex runs a project's hook only once trusted there. Wired but never heard
+// from, it would run unwatched, so it does not run.
+func TestCodexIsRefusedUntilItsHookHasFired(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, _, phone, proj := promptEnv(t, f)
+	os.MkdirAll(filepath.Join(root, ".codex"), 0o755)
+	os.WriteFile(filepath.Join(root, ".codex", "hooks.json"), []byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"/bin/trackline-hook"}]}]}}`), 0o644)
+	d := prompt(phone, "job_codex", proj, "hello")
+	now := time.Now()
+	d.Envelope = phone.Send(relay.Job{V: 1, ID: "job_codex", Machine: "dev_laptop", Project: proj, Kind: "prompt", Agent: "codex",
+		Text: "hello", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})
+	f.queue = []remote.Delivery{d}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	r := f.results["job_codex"]
+	if r.Status != "refused" || r.Code != "not-watched" || !strings.Contains(r.Reason, "trust") {
+		t.Fatalf("result: %+v", r)
+	}
+}
+
+// An agent thinking says nothing for a long time. Stop must still reach it:
+// measured with real Claude Code, a stop pressed mid-thought took a minute
+// when the laptop only asked alongside new events.
+func TestStopReachesASilentAgent(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}, cancel: map[string]bool{"job_think": true}}
+	_, _, phone, proj := promptEnv(t, f)
+	heartbeat = 50 * time.Millisecond
+	f.queue = []remote.Delivery{prompt(phone, "job_think", proj, "think")}
+	f.stopAfter = 1
+	started := time.Now()
+	runUntilStopped(t)
+	if r := f.results["job_think"]; r.Code != "stopped" {
+		t.Fatalf("result: %+v", r)
+	}
+	if time.Since(started) > 10*time.Second {
+		t.Fatalf("stop took %s", time.Since(started))
 	}
 }

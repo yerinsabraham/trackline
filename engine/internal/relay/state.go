@@ -23,6 +23,11 @@ type State struct {
 	// Seen holds each job id until it could no longer pass the expiry check,
 	// which keeps this small.
 	Seen map[string]int64 `json:"seen"`
+	// Agents are the agent binaries found when remote was last enabled, and
+	// Path the PATH they were found on. The runner starts at login under
+	// launchd, whose PATH is bare, and an agent needs git, node and the rest.
+	Agents map[string]string `json:"agents,omitempty"`
+	Path   string            `json:"path,omitempty"`
 }
 
 // Key is a passkey paired with this laptop.
