@@ -263,6 +263,33 @@ func TestDisableAllForgetsEverything(t *testing.T) {
 	}
 }
 
+func TestMacPermissionPromptHintsProtectedFolders(t *testing.T) {
+	cases := []struct {
+		text string
+		want string
+	}{
+		{`cat ~/Downloads/cv.pdf`, "Downloads"},
+		{`/Users/ada/Desktop/report.pdf`, "Desktop"},
+		{`read $HOME/Documents/tax.txt`, "Documents"},
+		{`/Users/ada/Library/Mobile Documents/com~apple~CloudDocs/CV.pdf`, "iCloud Drive"},
+		{`ls /Volumes/Passport/archive`, "an external or network volume"},
+		{`cat ./downloads-helper.ts`, ""},
+	}
+	for _, c := range cases {
+		if got := macPermissionArea(c.text); got != c.want {
+			t.Errorf("%q: got %q, want %q", c.text, got, c.want)
+		}
+	}
+
+	hint, ok := permissionPromptEvent(agent.Event{Kind: "tool", Tool: "Read", Text: "~/Downloads/cv.pdf"})
+	if !ok || hint.Kind != "permission" || !strings.Contains(hint.Text, "Approve it on the Mac") {
+		t.Fatalf("no useful hint: ok=%v %+v", ok, hint)
+	}
+	if _, ok := permissionPromptEvent(agent.Event{Kind: "say", Text: "~/Downloads/cv.pdf"}); ok {
+		t.Fatal("ordinary agent text must not become a permission prompt")
+	}
+}
+
 func TestLaunchPlistIsValid(t *testing.T) {
 	plist := launchPlist("/usr/local/bin/trackline", "/tmp/a&b/remote.log", map[string]string{"TRACKLINE_API": "http://localhost:3000/trackline/v1"})
 	for _, want := range []string{"<string>remote</string>", "<string>run</string>", "SuccessfulExit", "a&amp;b", "TRACKLINE_API"} {
@@ -457,5 +484,22 @@ func TestStopReachesASilentAgent(t *testing.T) {
 	}
 	if time.Since(started) > 10*time.Second {
 		t.Fatalf("stop took %s", time.Since(started))
+	}
+}
+
+// The reply box on the phone continues the agent's own session.
+func TestARemotePromptContinuesItsSession(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	now := time.Now()
+	f.queue = []remote.Delivery{{ID: "job_again", Envelope: phone.Send(relay.Job{V: 1, ID: "job_again", Machine: "dev_laptop", Project: proj,
+		Kind: "prompt", Agent: "claude", Text: "and add a test", Session: "sess-1", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_again"]; r.Status != "done" {
+		t.Fatalf("result: %+v", r)
+	}
+	if argv := read(t, filepath.Join(out, "argv")); !strings.Contains(argv, "--resume sess-1") {
+		t.Fatalf("not resumed: %s", argv)
 	}
 }

@@ -153,6 +153,12 @@ func TestRefusals(t *testing.T) {
 		{"a prompt with nothing to do", "unsupported", func(f fixture) relay.Envelope {
 			return f.phone.Send(job(func(j *relay.Job) { j.Kind, j.Agent, j.Text = "prompt", "claude", "  " }))
 		}, now},
+		{"a session id that reads as a flag", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) { j.Kind, j.Agent, j.Session = "prompt", "claude", "--dangerously-skip-permissions" }))
+		}, now},
+		{"a session to continue on a test job", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) { j.Session = "sess-1" }))
+		}, now},
 		{"an agent that is not one", "unsupported", func(f fixture) relay.Envelope {
 			return f.phone.Send(job(func(j *relay.Job) { j.Agent = "bash" }))
 		}, now},

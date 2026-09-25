@@ -49,11 +49,10 @@ export default function Alerts() {
   const thisDevice = s?.devices.find((d) => d.endpoint === mine);
 
   return (
-    <div className="wrap dash">
-      <a href="/app" className="dash-back">← All sessions</a>
+    <div className="dash alerts-page">
       <div className="dash-head">
-        <p className="eyebrow">Alerts</p>
-        <h1>Hear when an agent needs you</h1>
+        <h1 className="app-h1">Alerts</h1>
+        <p className="app-sub">Hear when an agent needs you.</p>
       </div>
       {error && <p className="account-error" role="alert">{error}</p>}
       {!s && !error && <p className="dash-muted">Loading…</p>}

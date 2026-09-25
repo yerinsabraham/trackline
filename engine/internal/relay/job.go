@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -28,10 +29,13 @@ type Job struct {
 	Machine string `json:"machine"`
 	// Project is the random id `trackline connect` gave the project. The
 	// server never learns the path, so it cannot name one.
-	Project   string `json:"project"`
-	Kind      string `json:"kind"`
-	Agent     string `json:"agent,omitempty"`
-	Text      string `json:"text"`
+	Project string `json:"project"`
+	Kind    string `json:"kind"`
+	Agent   string `json:"agent,omitempty"`
+	Text    string `json:"text"`
+	// Session continues the agent's own session instead of starting one:
+	// the reply box under an answer, on the phone.
+	Session   string `json:"session,omitempty"`
 	IssuedAt  int64  `json:"issuedAt"`
 	ExpiresAt int64  `json:"expiresAt"`
 }
@@ -60,6 +64,8 @@ const (
 // Kinds a job may be: a test job proves the path and runs nothing; a prompt
 // starts an agent.
 var kinds = map[string]bool{"test": true, "prompt": true}
+
+var sessionID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
 // Agents a job may name. Anything else is refused before it gets near a
 // command line.
@@ -145,6 +151,11 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	}
 	if j.Kind == "prompt" && (j.Agent == "" || strings.TrimSpace(j.Text) == "") {
 		return Accepted{}, refuse("unsupported", "a prompt needs an agent and an instruction")
+	}
+	// A session id goes on the agent's command line, so it must look like
+	// one: never empty-but-set, never something that reads as a flag.
+	if j.Session != "" && (j.Kind != "prompt" || !sessionID.MatchString(j.Session)) {
+		return Accepted{}, refuse("unsupported", "that is not a session this runner can continue")
 	}
 
 	p, ok := s.Projects[j.Project]

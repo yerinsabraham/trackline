@@ -22,11 +22,28 @@ export type Overview = { machines: Machine[]; pairings: Pairing[]; jobs: JobSumm
 export type Job = {
   id: string; kind: string; agent: string | null; status: string; code: string | null; reason: string | null;
   output: string | null; session: string | null; createdAt: string; finishedAt: string | null;
+  machine?: string; project?: string; dashboardSession?: string | null;
+};
+
+/** Where a reply goes: the laptop, project and agent, and the session to continue. */
+export type Continuation = {
+  machine: { id: string; name: string; online: boolean; stopped: boolean };
+  project: string; agent: string; session: string;
 };
 export type AgentEvent = { seq: number; kind: string; tool: string | null; text: string | null; createdAt: string };
 type Assertion = { authenticatorData: string; clientDataJSON: string; signature: string };
 
 export const AGENT_LABEL: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
+
+export function protectedMacArea(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/\bicloud drive\b|mobile documents|clouddocs/.test(t)) return "iCloud Drive";
+  if (/(^|[^a-z])downloads?($|[^a-z])/.test(t)) return "Downloads";
+  if (/(^|[^a-z])desktop($|[^a-z])/.test(t)) return "Desktop";
+  if (/(^|[^a-z])documents?($|[^a-z])/.test(t)) return "Documents";
+  if (/\/volumes\//.test(t) || /\bexternal (drive|disk|volume)\b|\bnetwork (drive|volume|share)\b/.test(t)) return "an external or network volume";
+  return null;
+}
 
 /** How long a job may wait for the laptop. The laptop refuses anything older. */
 const JOB_LIFE_MS = 3 * 60 * 1000;
@@ -98,11 +115,15 @@ function jobId(): string {
   return `job_${b64u(crypto.getRandomValues(new Uint8Array(16)))}`;
 }
 
-/** Builds and signs a prompt for one project on one laptop. */
-export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[]) {
+/**
+ * Builds and signs a prompt for one project on one laptop. With a session,
+ * the agent continues that conversation instead of starting one.
+ */
+export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
-    v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, issuedAt: now, expiresAt: now + JOB_LIFE_MS,
+    v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}),
+    issuedAt: now, expiresAt: now + JOB_LIFE_MS,
   }));
   const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
   return { machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };

@@ -37,16 +37,32 @@ var ErrNotYet = errors.New("remote does not start this agent yet")
 //
 // Codex: the workspace-write sandbox, set here so no config can widen it,
 // and never asking. User config still loads, because hook trust lives there.
-func Command(name, binary, root string) ([]string, error) {
+//
+// session, when set, continues that session of the agent rather than
+// starting one. `codex exec resume` takes no --sandbox or -C, so the sandbox
+// is pinned by -c there and the folder is where the runner starts it.
+// Measured: resumed that way, a write to the home folder was refused.
+func Command(name, binary, root, session string) ([]string, error) {
 	switch name {
 	case "claude":
-		return []string{binary, "-p",
+		argv := []string{binary, "-p",
 			"--output-format", "stream-json", "--verbose",
 			"--permission-mode", "acceptEdits",
 			"--permission-prompts", "none",
 			"--setting-sources", "project,local",
-		}, nil
+		}
+		if session != "" {
+			argv = append(argv, "--resume", session)
+		}
+		return argv, nil
 	case "codex":
+		if session != "" {
+			return []string{binary, "exec", "resume", "--json",
+				"-c", `sandbox_mode="workspace-write"`,
+				"-c", `approval_policy="never"`,
+				session, "-",
+			}, nil
+		}
 		return []string{binary, "exec", "--json",
 			"--sandbox", "workspace-write",
 			"-c", `approval_policy="never"`,
@@ -62,8 +78,9 @@ func Command(name, binary, root string) ([]string, error) {
 // Event is one thing the agent did, as the phone shows it.
 type Event struct {
 	// Kind is session (the agent's own session id, in Text), say (the agent
-	// talking), tool (an action: Tool names it, Text says on what), denied (an
-	// action refused for want of permission), done (the final answer), or
+	// talking), tool (an action: Tool names it, Text says on what),
+	// permission (the runner thinks macOS may need local approval), denied
+	// (an action refused for want of permission), done (the final answer), or
 	// error.
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`

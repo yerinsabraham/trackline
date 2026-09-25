@@ -17,11 +17,15 @@ export type FeedEvent = {
   severity: "block" | "warn" | null; checked: boolean;
   findings: Finding[]; unmeasured: { check: string; reason: string }[];
 };
+import type { Continuation } from "./remote";
+
 export type SessionView = {
   session: Status & { id: string; host: string; startedAt: string; lastAt: string; project: { id: string; name: string } };
   events: FeedEvent[];
   replies: (Reply & { id: string })[];
   cursor: string | null;
+  // Where a reply would go; only on the first page. Null: no laptop can take it.
+  continueWith?: Continuation | null;
 };
 
 export const LIGHT_LABEL: Record<Light, string> = {

@@ -85,7 +85,7 @@ func TestParsersIgnoreWhatTheyCannotRead(t *testing.T) {
 // is only text.
 func TestCommandsStaySafe(t *testing.T) {
 	for _, name := range []string{"claude", "codex"} {
-		argv, err := agent.Command(name, "/bin/"+name, "/work/app")
+		argv, err := agent.Command(name, "/bin/"+name, "/work/app", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,17 +96,17 @@ func TestCommandsStaySafe(t *testing.T) {
 			}
 		}
 	}
-	claude, _ := agent.Command("claude", "claude", "/work/app")
+	claude, _ := agent.Command("claude", "claude", "/work/app", "")
 	for _, need := range []string{"acceptEdits", "--permission-prompts none", "--setting-sources project,local"} {
 		if !strings.Contains(strings.Join(claude, " "), need) {
 			t.Errorf("claude is missing %s", need)
 		}
 	}
-	codex, _ := agent.Command("codex", "codex", "/work/app")
+	codex, _ := agent.Command("codex", "codex", "/work/app", "")
 	if !strings.Contains(strings.Join(codex, " "), "--sandbox workspace-write") || codex[len(codex)-1] != "-" {
 		t.Errorf("codex: %v", codex)
 	}
-	if _, err := agent.Command("cursor", "cursor-agent", "/work/app"); err != agent.ErrNotYet {
+	if _, err := agent.Command("cursor", "cursor-agent", "/work/app", ""); err != agent.ErrNotYet {
 		t.Errorf("cursor: %v", err)
 	}
 }
@@ -124,3 +124,25 @@ func TestLongTextIsClippedOnACharacter(t *testing.T) {
 }
 
 func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "�") == s }
+
+// Continuing a session keeps every safeguard of a new one: the same
+// permissions for Claude Code, the same sandbox for Codex.
+func TestResumingKeepsTheSafeguards(t *testing.T) {
+	claude, _ := agent.Command("claude", "claude", "/work/app", "sess-1")
+	line := strings.Join(claude, " ")
+	for _, need := range []string{"--resume sess-1", "acceptEdits", "--permission-prompts none", "--setting-sources project,local"} {
+		if !strings.Contains(line, need) {
+			t.Errorf("claude resume is missing %s: %s", need, line)
+		}
+	}
+	codex, _ := agent.Command("codex", "codex", "/work/app", "sess-1")
+	line = strings.Join(codex, " ")
+	for _, need := range []string{"exec resume", `sandbox_mode="workspace-write"`, `approval_policy="never"`, "sess-1 -"} {
+		if !strings.Contains(line, need) {
+			t.Errorf("codex resume is missing %s: %s", need, line)
+		}
+	}
+	if strings.Contains(line, "danger") || strings.Contains(line, "bypass") {
+		t.Errorf("codex resume: %s", line)
+	}
+}

@@ -119,6 +119,8 @@
 .remote-machine.on { color: #22a355; }
 .remote-agents { display: flex; gap: 8px; flex-wrap: wrap; }
 .remote-text { resize: vertical; min-height: 120px; font-size: 16px; line-height: 1.45; }
+.remote-warning { margin: 0; color: #8a5a00; border-left: 3px solid var(--amber); padding-left: 10px; font-size: 14px; line-height: 1.45; }
+.remote-setup-note { line-height: 1.45; }
 .remote-send { justify-self: stretch; min-height: 48px; }
 .remote-pair { display: grid; gap: 10px; margin-bottom: 18px; }
 .remote-code { font: 600 22px/1.2 var(--mono); letter-spacing: 0.12em; text-align: center; text-transform: uppercase; }
@@ -126,6 +128,7 @@
 .remote-events { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 8px; }
 .remote-event p { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
 .remote-event code { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.remote-permission { background: #fff7e0; border: 1px solid #eed58d; border-left: 3px solid var(--amber); border-radius: 12px; padding: 12px 14px; }
 .remote-denied { border-left: 3px solid #e5341b; padding-left: 10px; }
 .remote-error { color: #b42318; }
 .remote-done { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }

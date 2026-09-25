@@ -33,6 +33,10 @@ var (
 	// heartbeat is how often the laptop asks about stop while the agent is
 	// silent: thinking can take minutes without a single event.
 	heartbeat = 2 * time.Second
+	// permissionWait is long enough not to fire on normal quick reads, but
+	// short enough that a phone does not look frozen while macOS waits for a
+	// local Files and Folders prompt.
+	permissionWait = 8 * time.Second
 )
 
 var agentNames = map[string]string{"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
@@ -58,7 +62,7 @@ func findAgents() map[string]string {
 func agentList(found map[string]string) string {
 	var names []string
 	for name, bin := range found {
-		if _, err := agent.Command(name, bin, ""); err == nil {
+		if _, err := agent.Command(name, bin, "", ""); err == nil {
 			names = append(names, agentNames[name])
 		}
 	}
@@ -150,7 +154,7 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("agent-missing", fmt.Sprintf("%s was not found on this laptop. Install it, then run trackline remote enable again", name))
 		return
 	}
-	argv, err := agent.Command(j.Agent, binary, got.Root)
+	argv, err := agent.Command(j.Agent, binary, got.Root, j.Session)
 	if err != nil {
 		refuse("unsupported", fmt.Sprintf("%s: %v", name, err))
 		return
@@ -180,6 +184,65 @@ func firstLine(s string, n int) string {
 		return s[:n] + "…"
 	}
 	return s
+}
+
+type permissionWatch struct {
+	start time.Time
+	event agent.Event
+	sent  bool
+}
+
+func macPermissionArea(s string) string {
+	t := strings.ToLower(strings.ReplaceAll(s, "\\", "/"))
+	switch {
+	case strings.Contains(t, "icloud drive") || strings.Contains(t, "/mobile documents/"):
+		return "iCloud Drive"
+	case namesProtectedFolder(t, "downloads"):
+		return "Downloads"
+	case namesProtectedFolder(t, "desktop"):
+		return "Desktop"
+	case namesProtectedFolder(t, "documents"):
+		return "Documents"
+	case strings.Contains(t, "/volumes/"):
+		return "an external or network volume"
+	}
+	return ""
+}
+
+func namesProtectedFolder(s, name string) bool {
+	for start := 0; ; {
+		i := strings.Index(s[start:], name)
+		if i < 0 {
+			return false
+		}
+		i += start
+		beforeOK := i == 0 || strings.ContainsRune(` /'"=$~`, rune(s[i-1]))
+		after := i + len(name)
+		afterOK := after == len(s) || strings.ContainsRune(`/ '"`, rune(s[after]))
+		if beforeOK && afterOK {
+			return true
+		}
+		start = i + len(name)
+	}
+}
+
+func permissionPromptEvent(e agent.Event) (agent.Event, bool) {
+	if e.Kind != "tool" {
+		return agent.Event{}, false
+	}
+	area := macPermissionArea(e.Text)
+	if area == "" {
+		return agent.Event{}, false
+	}
+	action := strings.TrimSpace(strings.TrimSpace(e.Tool + " " + e.Text))
+	if action != "" {
+		action = " Last action: " + firstLine(action, 180)
+	}
+	return agent.Event{
+		Kind: "permission",
+		Tool: "macOS permission",
+		Text: fmt.Sprintf("Your Mac may be waiting for a local macOS permission prompt to access %s. Approve it on the Mac to continue, or stop this job.%s", area, action),
+	}, true
 }
 
 // agentEnv is the environment an agent runs in: the person's own, with the
@@ -241,7 +304,12 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 	var pending []agent.Event
 	sent := 0
 	asked := time.Now()
+	var permission *permissionWatch
 	flush := func() {
+		if permission != nil && !permission.sent && time.Since(permission.start) >= permissionWait {
+			pending = append(pending, permission.event)
+			permission.sent = true
+		}
 		if len(pending) == 0 && time.Since(asked) < heartbeat {
 			return
 		}
@@ -277,6 +345,11 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 				res.Output = e.Text
 			case "error":
 				res.Reason = e.Text
+			}
+			if hint, ok := permissionPromptEvent(e); ok {
+				permission = &permissionWatch{start: time.Now(), event: hint}
+			} else if e.Kind != "session" && e.Kind != "permission" {
+				permission = nil
 			}
 			pending = append(pending, e)
 		case <-tick.C:
