@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -479,7 +481,17 @@ func notify(title, body string) {
 
 // ── starting at login ──────────────────────────────────────────────────────
 
-const launchLabel = "dev.trackline.remote"
+// launchLabel names the login agent. A config folder other than the usual
+// one (TRACKLINE_CONFIG_DIR, as tests and development use) gets its own name:
+// the name is per user, not per folder, and a test's `disable --all` once
+// removed the real runner's agent.
+func launchLabel() string {
+	if d := os.Getenv("TRACKLINE_CONFIG_DIR"); d != "" {
+		sum := sha256.Sum256([]byte(d))
+		return "dev.trackline.remote." + hex.EncodeToString(sum[:4])
+	}
+	return "dev.trackline.remote"
+}
 
 // launchctl is replaced in tests, which must never load an agent into the
 // real session.
@@ -496,7 +508,7 @@ func plistPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "Library", "LaunchAgents", launchLabel+".plist"), nil
+	return filepath.Join(home, "Library", "LaunchAgents", launchLabel()+".plist"), nil
 }
 
 // launchPlist starts the runner at login, and again if it crashes, but not
@@ -532,7 +544,7 @@ func launchPlist(binary, log string, env map[string]string) string {
   <key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, launchLabel, xmlEscape(binary), envXML.String(), xmlEscape(log), xmlEscape(log))
+`, launchLabel(), xmlEscape(binary), envXML.String(), xmlEscape(log), xmlEscape(log))
 }
 
 func xmlEscape(s string) string {
@@ -573,7 +585,7 @@ func startAtLogin() error {
 	}
 	domain := "gui/" + strconv.Itoa(os.Getuid())
 	// Restarted, so a new binary or a newly enabled project is picked up.
-	launchctl("bootout", domain+"/"+launchLabel)
+	launchctl("bootout", domain+"/"+launchLabel())
 	return launchctl("bootstrap", domain, p)
 }
 
@@ -581,7 +593,7 @@ func stopAtLogin() {
 	if runtime.GOOS != "darwin" {
 		return
 	}
-	launchctl("bootout", "gui/"+strconv.Itoa(os.Getuid())+"/"+launchLabel)
+	launchctl("bootout", "gui/"+strconv.Itoa(os.Getuid())+"/"+launchLabel())
 	if p, err := plistPath(); err == nil {
 		os.Remove(p)
 	}

@@ -503,3 +503,22 @@ func TestARemotePromptContinuesItsSession(t *testing.T) {
 		t.Fatalf("not resumed: %s", argv)
 	}
 }
+
+// A test or development config folder has its own login agent, so turning
+// remote off there never touches the real one. It once did.
+func TestAnotherConfigFolderNeverTouchesTheRealLoginAgent(t *testing.T) {
+	t.Setenv("TRACKLINE_CONFIG_DIR", "")
+	real := launchLabel()
+	t.Setenv("TRACKLINE_CONFIG_DIR", t.TempDir())
+	if launchLabel() == real || !strings.HasPrefix(launchLabel(), real+".") {
+		t.Fatalf("real %q, test %q", real, launchLabel())
+	}
+	var booted []string
+	launchctl = func(args ...string) error { booted = append(booted, strings.Join(args, " ")); return nil }
+	stopAtLogin()
+	for _, b := range booted {
+		if strings.HasSuffix(b, "/"+real) {
+			t.Fatalf("stopped the real agent: %s", b)
+		}
+	}
+}
