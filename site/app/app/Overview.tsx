@@ -37,6 +37,7 @@ export default function Overview() {
       <div className="dash-head">
         <p className="eyebrow">Dashboard</p>
         <h1>Your agents</h1>
+        <a className="btn btn-signal" href="/app/remote">Send a task</a>
       </div>
       {error && <p className="account-error" role="alert">{error}</p>}
       {projects === null && !error && <p className="dash-muted">Loading…</p>}
