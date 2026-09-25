@@ -29,11 +29,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
+	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
@@ -72,6 +74,12 @@ func main() {
 	}
 	if resolved == runner.HostAuto {
 		resolved = runner.Detect(raw)
+	}
+
+	// The end of a turn: nothing to judge, only the agent's reply to keep.
+	if t, ok := parseTurnEnd(raw, resolved); ok {
+		queueReply(*root, t)
+		allow(resolved)
 	}
 
 	d, err := runner.Run(raw, runner.Options{Host: resolved, Root: *root, Now: time.Now()})
@@ -214,6 +222,98 @@ func queue(root string, d runner.Decision) {
 	}
 	box := outbox.Box{Dir: dir}
 	if box.Put(ev) != nil || !box.NeedsSender(time.Now()) {
+		return
+	}
+	startSync()
+}
+
+// turnEnd is what the hosts send when the agent has finished answering.
+type turnEnd struct {
+	host          event.Host
+	session, turn string
+	cwd, text     string
+}
+
+// parseTurnEnd recognises the end of a turn. Claude Code and Codex send Stop
+// with last_assistant_message (both checked by running them, 2026-09-25).
+// Cursor sends afterAgentResponse with the text; its CLI does not fire it, so
+// that path is unverified until seen from the editor.
+func parseTurnEnd(raw []byte, host string) (turnEnd, bool) {
+	var p struct {
+		Event        string   `json:"hook_event_name"`
+		Session      string   `json:"session_id"`
+		Conversation string   `json:"conversation_id"`
+		Prompt       string   `json:"prompt_id"`
+		Turn         string   `json:"turn_id"`
+		Generation   string   `json:"generation_id"`
+		CWD          string   `json:"cwd"`
+		Roots        []string `json:"workspace_roots"`
+		Last         string   `json:"last_assistant_message"`
+		Text         string   `json:"text"`
+	}
+	if json.Unmarshal(raw, &p) != nil {
+		return turnEnd{}, false
+	}
+	switch {
+	case p.Event == "Stop" && host == runner.HostCursor:
+		// Cursor also runs Claude-format hooks, so its end of turn can
+		// arrive as Stop. The backend keeps one reply per turn.
+		text := p.Last
+		if text == "" {
+			text = p.Text
+		}
+		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), text}, true
+	case p.Event == "Stop" && host == runner.HostCodex:
+		return turnEnd{event.HostCodex, p.Session, p.Turn, p.CWD, p.Last}, true
+	case p.Event == "Stop":
+		return turnEnd{event.HostClaudeCode, p.Session, p.Prompt, p.CWD, p.Last}, true
+	case p.Event == "afterAgentResponse":
+		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), p.Text}, true
+	}
+	return turnEnd{}, false
+}
+
+func first(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func firstOf(s []string) string {
+	if len(s) > 0 {
+		return s[0]
+	}
+	return ""
+}
+
+// queueReply sends the reply the way queue sends an action, and only for a
+// connected project that agreed to share its conversation.
+func queueReply(root string, t turnEnd) {
+	if root == "" {
+		root = t.cwd
+	}
+	dir, err := account.Dir()
+	if err != nil || root == "" {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(dir, "credentials.json")); err != nil {
+		return
+	}
+	projectRoot, p, ok := account.ProjectFor(root)
+	if !ok || !p.ShareReplies {
+		return
+	}
+	r, err := payload.BuildReply(t.host, t.session, t.turn, t.text, time.Now(), payload.Options{
+		Root:      projectRoot,
+		ProjectID: p.ID,
+		ID:        "rp_" + strings.TrimPrefix(outbox.NewID(), "ev_"),
+	})
+	if err != nil {
+		return
+	}
+	box := outbox.Box{Dir: dir}
+	if box.PutReply(r) != nil || !box.NeedsSender(time.Now()) {
 		return
 	}
 	startSync()

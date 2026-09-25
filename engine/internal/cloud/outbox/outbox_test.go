@@ -333,3 +333,26 @@ func TestASenderHoldsTheLockWhileItGathers(t *testing.T) {
 		t.Errorf("batches %v, want one batch of 2", s.batches)
 	}
 }
+
+// Replies share the queue, so a turn's actions and the reply that ends it go
+// in the order they happened, in one request.
+func TestRepliesTravelWithTheActionsBeforeThem(t *testing.T) {
+	b := Box{Dir: t.TempDir()}
+	queue(t, b, 3)
+	if err := b.PutReply(payload.Reply{ID: "rp_1", Session: "s", Text: "Done."}); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{}
+	var got payload.Batch
+	s.failWith = func(_ int, batch payload.Batch) error { got = batch; return nil }
+	res, err := b.Drain(s)
+	if err != nil || res.Sent != 4 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if len(got.Events) != 3 || len(got.Replies) != 1 || got.Replies[0].Text != "Done." {
+		t.Errorf("batch had %d events and %v replies", len(got.Events), got.Replies)
+	}
+	if left, _ := b.Pending(); len(left) != 0 {
+		t.Errorf("%d left", len(left))
+	}
+}

@@ -1,0 +1,5 @@
+{
+  "claude-stop": {"session_id":"8ae3ba4e-dbd9-4f00-8bbc-8a035fd7ba98","transcript_path":"/Users/dev/.claude/projects/x/8ae3ba4e.jsonl","cwd":"/work/lab","prompt_id":"9420d9d8-3508-4c2b-8a0a-4b0dddaa55ca","permission_mode":"default","hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"The capital of France is Paris."},
+  "codex-stop": {"session_id":"01a0d85c-41ac-77d0-890e-4ee49a2963d1","turn_id":"01a0d85c-42d3-76f0-986c-709d511b56b2","cwd":"/work/lab","hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"The capital of France is Paris."},
+  "codex-pre": {"session_id":"01a0d85c-41ac-77d0-890e-4ee49a2963d1","turn_id":"01a0d85c-42d3-76f0-986c-709d511b56b2","cwd":"/work/lab","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}
+}

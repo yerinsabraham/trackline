@@ -74,6 +74,27 @@ func (b Box) Put(e payload.Event) error {
 	return os.Rename(tmp, filepath.Join(dir, name))
 }
 
+// PutReply queues an agent's reply. Replies share the queue with events, so
+// they leave in the order things happened.
+func (b Box) PutReply(r payload.Reply) error {
+	body, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	dir := b.pending()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	name := fmt.Sprintf("%020d-%s%s", time.Now().UnixNano(), r.ID, replySuffix)
+	tmp := filepath.Join(dir, "."+name+".tmp")
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, name))
+}
+
+const replySuffix = ".reply.json"
+
 // Pending lists queued files, oldest first.
 func (b Box) Pending() ([]string, error) {
 	entries, err := os.ReadDir(b.pending())
@@ -217,7 +238,7 @@ func (b Box) DrainAfter(s Sender, wait time.Duration) (Result, error) {
 		}
 
 		batch, used := b.read(names)
-		if len(batch.Events) == 0 {
+		if len(used) == 0 {
 			// Nothing in reach was readable. Corrupt files were removed; one
 			// that cannot even be opened is left for the next sync rather
 			// than spun on here.
@@ -258,7 +279,7 @@ func (b Box) read(names []string) (payload.Batch, []string) {
 	var used []string
 	size := 0
 	for _, n := range names {
-		if len(batch.Events) == 100 {
+		if len(batch.Events) == 100 || len(batch.Replies) == 100 {
 			break
 		}
 		path := filepath.Join(b.pending(), n)
@@ -266,17 +287,29 @@ func (b Box) read(names []string) (payload.Batch, []string) {
 		if err != nil {
 			continue
 		}
-		var e payload.Event
-		if json.Unmarshal(raw, &e) != nil {
-			os.Remove(path)
-			continue
-		}
-		if size+len(raw) > maxBatchBytes && len(batch.Events) > 0 {
+		if size+len(raw) > maxBatchBytes && len(used) > 0 {
 			break
 		}
+		if strings.HasSuffix(n, replySuffix) {
+			var r payload.Reply
+			if json.Unmarshal(raw, &r) != nil {
+				os.Remove(path)
+				continue
+			}
+			batch.Replies = append(batch.Replies, r)
+		} else {
+			var e payload.Event
+			if json.Unmarshal(raw, &e) != nil {
+				os.Remove(path)
+				continue
+			}
+			batch.Events = append(batch.Events, e)
+		}
 		size += len(raw)
-		batch.Events = append(batch.Events, e)
 		used = append(used, n)
+	}
+	if batch.Events == nil {
+		batch.Events = []payload.Event{}
 	}
 	return batch, used
 }

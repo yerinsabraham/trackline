@@ -31,8 +31,31 @@ const Version = 1
 
 // Batch is one upload.
 type Batch struct {
-	V      int     `json:"v"`
-	Events []Event `json:"events"`
+	V        int     `json:"v"`
+	Events   []Event `json:"events"`
+	Replies  []Reply `json:"replies,omitempty"`
+	Projects []Setup `json:"projects,omitempty"`
+}
+
+// Reply is what the agent said when it finished a turn: the summary a person
+// reads to know what happened. It is the one free text that leaves besides
+// the request, and goes only with the same consent.
+type Reply struct {
+	ID      string  `json:"id"`
+	At      string  `json:"at"`
+	Project Project `json:"project"`
+	Host    string  `json:"host"`
+	Session string  `json:"session"`
+	Turn    string  `json:"turn,omitempty"`
+	Text    string  `json:"text"`
+}
+
+// Setup says which agents are wired into a project, so an agent that is set
+// up but has never reported can be shown as such instead of as nothing.
+type Setup struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Agents []string `json:"agents"`
 }
 
 // Event is one action as it is allowed to leave the machine.
@@ -89,6 +112,7 @@ const (
 	maxSession, maxRequest, maxTool             = 128, 2000, 64
 	maxPath, maxPaths, maxInstall, maxInstalls  = 512, 50, 214, 50
 	maxResults, maxFindings, maxText, maxEvents = 12, 10, 300, 100
+	maxReply                                    = 8000
 )
 
 // Options are what Build needs beyond the event itself.
@@ -199,6 +223,36 @@ func Build(ev event.Event, results []verdict.Result, o Options) (Event, error) {
 	}
 	return out, nil
 }
+
+// BuildReply turns an agent's final message into what may be uploaded. It is
+// cleaned like every other text: paths made relative, the home directory
+// replaced, token shapes redacted, then cut to the contract's limit.
+func BuildReply(host event.Host, session, turn, text string, at time.Time, o Options) (Reply, error) {
+	h, ok := hosts[host]
+	if !ok {
+		return Reply{}, errors.New("this host does not upload: " + string(host))
+	}
+	if o.Root == "" || o.ProjectID == "" || o.ID == "" || session == "" || strings.TrimSpace(text) == "" {
+		return Reply{}, errors.New("root, project id, reply id, session and text are required")
+	}
+	if o.Home == "" {
+		o.Home, _ = os.UserHomeDir()
+	}
+	c := cleaner{root: filepath.Clean(o.Root), home: o.Home}
+	return Reply{
+		ID:      cut(o.ID, maxID),
+		At:      cut(at.UTC().Format(time.RFC3339Nano), maxAt),
+		Project: Project{ID: cut(o.ProjectID, maxProjectID), Name: cut(filepath.Base(c.root), maxProjectName)},
+		Host:    h,
+		Session: cut(session, maxSession),
+		Turn:    cut(turn, maxSession),
+		Text:    cut(redact(c.text(text)), maxReply),
+	}, nil
+}
+
+// HostName is how the contract names a host, or "" for one that does not
+// upload.
+func HostName(h event.Host) string { return hosts[h] }
 
 type cleaner struct{ root, home string }
 

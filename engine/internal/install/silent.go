@@ -47,6 +47,19 @@ func Silent(root string) []Host {
 	return silent
 }
 
+// Wired lists the agents whose configuration in root carries the trackline
+// hook, by the name the contract uses for them.
+func Wired(root string) []string {
+	var out []string
+	for _, h := range []Host{Claude, Codex, Cursor} {
+		path, _ := Plan(h, root)
+		if b, err := os.ReadFile(path); err == nil && strings.Contains(string(b), "trackline-hook") {
+			out = append(out, eventHost[h])
+		}
+	}
+	return out
+}
+
 // Unsilence says, in one line, what makes a silent agent start reporting.
 func Unsilence(h Host) string {
 	switch h {

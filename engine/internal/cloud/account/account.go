@@ -47,6 +47,13 @@ type Project struct {
 	// ID is random, so the account never learns the project's path.
 	ID            string `json:"id"`
 	ShareRequests bool   `json:"shareRequests"`
+	// ShareReplies is agreed with the same question as ShareRequests, "your
+	// messages and your agent's replies". Projects connected before replies
+	// existed have it off until connected again.
+	ShareReplies bool `json:"shareReplies,omitempty"`
+	// Agents is the setup last sent to the account, so it is sent again only
+	// when it changes.
+	Agents []string `json:"agents,omitempty"`
 }
 
 func write(path string, v any) error {
@@ -146,9 +153,24 @@ func ConnectProject(root string, shareRequests bool) (Project, error) {
 		p.ID = "proj_" + hex.EncodeToString(b)
 	}
 	p.ShareRequests = shareRequests
+	p.ShareReplies = shareRequests
 	ps[root] = p
 	d, _ := Dir()
 	return p, write(filepath.Join(d, "projects.json"), ps)
+}
+
+// SaveProject replaces what is kept for one connected project.
+func SaveProject(root string, p Project) error {
+	ps, err := Projects()
+	if err != nil {
+		return err
+	}
+	if _, ok := ps[root]; !ok {
+		return errors.New("not a connected project: " + root)
+	}
+	ps[root] = p
+	d, _ := Dir()
+	return write(filepath.Join(d, "projects.json"), ps)
 }
 
 // ProjectFor finds the connected project a directory belongs to: the project

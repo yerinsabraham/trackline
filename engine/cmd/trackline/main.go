@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/hosts"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
@@ -327,6 +329,13 @@ func cmdInit(args []string) error {
 	}
 	if !f.hostSet {
 		fmt.Print("\nOnly these agents were found. Another one later: trackline init --host codex|cursor|claude\n")
+	}
+	// A connected project tells its account straight away, so the dashboard
+	// shows the new agent before it has done anything.
+	if _, _, ok := account.ProjectFor(f.root); ok {
+		if creds, err := account.LoadCredentials(); err == nil {
+			sendSetup(remote.Client{Base: creds.API, Token: creds.Token}, false)
+		}
 	}
 	for _, h := range targets {
 		if h == install.Codex {

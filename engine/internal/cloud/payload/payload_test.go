@@ -360,6 +360,9 @@ func TestTypesMatchTheSchemaFile(t *testing.T) {
 		"action":  {ev["properties"].(map[string]any)["action"].(map[string]any)["properties"].(map[string]any), payload.Action{}},
 		"result":  {defs["result"].(map[string]any)["properties"].(map[string]any), payload.Result{}},
 		"finding": {defs["result"].(map[string]any)["properties"].(map[string]any)["findings"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any), payload.Finding{}},
+		"batch":   {s["properties"].(map[string]any), payload.Batch{}},
+		"reply":   {defs["reply"].(map[string]any)["properties"].(map[string]any), payload.Reply{}},
+		"setup":   {defs["setup"].(map[string]any)["properties"].(map[string]any), payload.Setup{}},
 	}
 	for name, c := range cases {
 		if got, want := jsonFields(c.v), names(c.schema); got != want {
@@ -402,5 +405,41 @@ func TestTimesKeepTheOrderWithinASecond(t *testing.T) {
 	b, _ := time.Parse(time.RFC3339Nano, got[1])
 	if !a.Before(b) || !a.Equal(first) {
 		t.Errorf("times %v lost their order or precision", got)
+	}
+}
+
+// The agent's reply is free text written by a model that has read the
+// project, so it gets everything a request gets: paths made relative, the
+// home directory replaced, keys redacted, and the contract's length.
+func TestRepliesAreCleanedLikeRequests(t *testing.T) {
+	text := "Done. I edited /work/lab/src/app.ts and read " + home + "/.ssh/config. Key: sk-ant-abcdefghijklmnopqrstuvwxyz0123\n" + strings.Repeat("é", 6000)
+	r, err := payload.BuildReply(event.HostCodex, "s1", "t1", text, at("2026-09-25T10:00:00Z"),
+		payload.Options{Root: root, Home: home, ProjectID: "p", ID: "rp_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{"/work/lab", home, "sk-ant-"} {
+		if strings.Contains(r.Text, leak) {
+			t.Errorf("reply carries %q", leak)
+		}
+	}
+	if !strings.Contains(r.Text, "src/app.ts") || !strings.Contains(r.Text, "~/.ssh/config") || !strings.Contains(r.Text, "[redacted]") {
+		t.Errorf("reply lost what it should keep: %.120s", r.Text)
+	}
+	s := schema(t)
+	batch := payload.Batch{V: 1, Events: []payload.Event{}, Replies: []payload.Reply{r},
+		Projects: []payload.Setup{{ID: "p", Name: "lab", Agents: []string{"claude-code", "codex"}}}}
+	for _, e := range validate(s, s, asJSON(t, batch), "reply") {
+		t.Error(e)
+	}
+}
+
+func TestAReplyNeedsTextAndASession(t *testing.T) {
+	o := payload.Options{Root: root, Home: home, ProjectID: "p", ID: "rp_1"}
+	if _, err := payload.BuildReply(event.HostClaudeCode, "s", "t", "   ", at("2026-09-25T10:00:00Z"), o); err == nil {
+		t.Error("an empty reply was built")
+	}
+	if _, err := payload.BuildReply(event.HostOTel, "s", "t", "hi", at("2026-09-25T10:00:00Z"), o); err == nil {
+		t.Error("a production event built a reply")
 	}
 }

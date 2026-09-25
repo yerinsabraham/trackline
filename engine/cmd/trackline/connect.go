@@ -14,7 +14,9 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
+	"github.com/yerinsabraham/trackline/engine/internal/install"
 )
 
 // cmdConnect asks about the project first, then links this machine to an
@@ -73,7 +75,7 @@ func cmdConnect(args []string) error {
 	}
 	share := false
 	if !noRequests {
-		share = ask("Include the messages you send your agent?", true)
+		share = ask("Include your messages and your agent's replies?", true)
 	}
 
 	if who == "" {
@@ -83,6 +85,9 @@ func cmdConnect(args []string) error {
 	}
 	if _, err := account.ConnectProject(root, share); err != nil {
 		return err
+	}
+	if creds, err := account.LoadCredentials(); err == nil {
+		sendSetup(remote.Client{Base: creds.API, Token: creds.Token}, true)
 	}
 
 	fmt.Printf("\n%s is connected to %s.\n", name, who)
@@ -209,7 +214,9 @@ func cmdSync(args []string) error {
 	if quiet {
 		wait = 2 * time.Second
 	}
-	res, err := outbox.Box{Dir: dir}.DrainAfter(remote.Client{Base: creds.API, Token: creds.Token}, wait)
+	client := remote.Client{Base: creds.API, Token: creds.Token}
+	sendSetup(client, false)
+	res, err := outbox.Box{Dir: dir}.DrainAfter(client, wait)
 	if res.Revoked {
 		// The account no longer knows this machine. Keeping its credential
 		// would only queue more for nobody.
@@ -334,4 +341,40 @@ func openBrowser(url string) {
 		cmd = exec.Command("xdg-open", url)
 	}
 	_ = cmd.Start()
+}
+
+// sendSetup tells the account which agents are wired into each connected
+// project, so the dashboard can show an agent that is set up but has never
+// reported, such as Codex before its hook is trusted. It sends only what
+// changed since last time unless forced, and a failure waits for the next
+// sync: setup is a courtesy, never a reason to hold back events.
+func sendSetup(c remote.Client, force bool) {
+	ps, err := account.Projects()
+	if err != nil {
+		return
+	}
+	var batch []payload.Setup
+	var roots []string
+	for root, p := range ps {
+		agents := install.Wired(root)
+		if agents == nil {
+			agents = []string{}
+		}
+		if !force && strings.Join(agents, ",") == strings.Join(p.Agents, ",") {
+			continue
+		}
+		batch = append(batch, payload.Setup{ID: p.ID, Name: filepath.Base(root), Agents: agents})
+		roots = append(roots, root)
+	}
+	if len(batch) == 0 {
+		return
+	}
+	if c.Ingest(payload.Batch{V: payload.Version, Events: []payload.Event{}, Projects: batch}) != nil {
+		return
+	}
+	for i, root := range roots {
+		p := ps[root]
+		p.Agents = batch[i].Agents
+		account.SaveProject(root, p)
+	}
 }

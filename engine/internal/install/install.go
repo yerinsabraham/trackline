@@ -102,58 +102,61 @@ func Install(host Host, root, binary string) (Result, error) {
 	return res, os.WriteFile(path, append(out, '\n'), 0o644)
 }
 
-// The two hosts use the same event name and the same block semantics, and
+// The two hosts use the same event names and the same block semantics, and
 // differ only in where the hook list is rooted. Codex nests it under a "hooks"
 // key; Claude Code puts "hooks" at the top level. Getting this wrong is silent,
 // which is why Verify exists.
+//
+// Two events: PreToolUse checks each action, and Stop hands over the agent's
+// final message for the turn, which is what the dashboard shows as its reply.
+// Each is added only if missing, so a project set up before Stop existed gains
+// it on the next init without a duplicate PreToolUse.
 func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 	if host == Cursor {
 		return addCursorHook(doc, binary)
 	}
-	container := doc
-	if host == Codex {
-		inner, _ := doc["hooks"].(map[string]any)
-		if inner == nil {
-			inner = map[string]any{}
-			doc["hooks"] = inner
-		}
-		container = inner
-	} else {
-		inner, _ := doc["hooks"].(map[string]any)
-		if inner == nil {
-			inner = map[string]any{}
-			doc["hooks"] = inner
-		}
-		container = inner
+	container, _ := doc["hooks"].(map[string]any)
+	if container == nil {
+		container = map[string]any{}
+		doc["hooks"] = container
 	}
 
-	entries, _ := container["PreToolUse"].([]any)
+	changed := false
+	for _, ev := range []string{"PreToolUse", "Stop"} {
+		entries, _ := container[ev].([]any)
+		if groupsHold(entries, binary) {
+			continue
+		}
+		entry := map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": binary,
+				"timeout": 15,
+			}},
+		}
+		// Claude Code matches on tool name; Codex applies to all tools when
+		// no matcher is given. Stop has no tool to match.
+		if host == Claude && ev == "PreToolUse" {
+			entry["matcher"] = "Write|Edit|MultiEdit|NotebookEdit|Bash"
+		}
+		container[ev] = append(entries, entry)
+		changed = true
+	}
+	return changed, nil
+}
+
+func groupsHold(entries []any, binary string) bool {
 	for _, e := range entries {
 		m, _ := e.(map[string]any)
 		hooks, _ := m["hooks"].([]any)
 		for _, h := range hooks {
 			hm, _ := h.(map[string]any)
 			if cmd, _ := hm["command"].(string); containsBinary(cmd, binary) {
-				return false, nil
+				return true
 			}
 		}
 	}
-
-	entry := map[string]any{
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": binary,
-			"timeout": 15,
-		}},
-	}
-	// Claude Code matches on tool name; Codex applies to all tools when no
-	// matcher is given.
-	if host == Claude {
-		entry["matcher"] = "Write|Edit|MultiEdit|NotebookEdit|Bash"
-	}
-
-	container["PreToolUse"] = append(entries, entry)
-	return true, nil
+	return false
 }
 
 func containsBinary(cmd, binary string) bool {
@@ -170,7 +173,7 @@ func indexOf(h, n string) int {
 	return -1
 }
 
-// addCursorHook wires preToolUse, and only that. It covers Shell, Write, Read,
+// addCursorHook wires preToolUse, and afterAgentResponse for the reply. It covers Shell, Write, Read,
 // Delete and MCP tools in one event and runs in Cursor's cloud agents, where
 // beforeMCPExecution does not. Shell commands also fire beforeShellExecution;
 // hooking both would judge every command twice.
@@ -194,20 +197,31 @@ func addCursorHook(doc map[string]any, binary string) (bool, error) {
 		doc["hooks"] = hooks
 	}
 
-	entries, _ := hooks["preToolUse"].([]any)
-	for _, e := range entries {
-		m, _ := e.(map[string]any)
-		if cmd, _ := m["command"].(string); containsBinary(cmd, binary) {
-			return false, nil
-		}
-	}
-
+	// afterAgentResponse carries the agent's reply text. It is not fired by
+	// the cursor-agent CLI (checked 2026-09-25, where preToolUse is), so the
+	// reply arrives from the editor only; unverified there until seen.
+	//
 	// failClosed is deliberately left at its default, false. If trackline
 	// itself breaks, the user keeps working: a watcher that jams the editor
 	// gets uninstalled, and then it watches nothing.
-	hooks["preToolUse"] = append(entries, map[string]any{
-		"command": binary,
-		"timeout": 15,
-	})
-	return true, nil
+	changed := false
+	for _, ev := range []string{"preToolUse", "afterAgentResponse"} {
+		entries, _ := hooks[ev].([]any)
+		held := false
+		for _, e := range entries {
+			m, _ := e.(map[string]any)
+			if cmd, _ := m["command"].(string); containsBinary(cmd, binary) {
+				held = true
+			}
+		}
+		if held {
+			continue
+		}
+		hooks[ev] = append(entries, map[string]any{
+			"command": binary,
+			"timeout": 15,
+		})
+		changed = true
+	}
+	return changed, nil
 }
