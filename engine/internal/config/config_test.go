@@ -142,3 +142,25 @@ func TestUnreadableRulesFileIsReportedAndDoesNotHideTheRest(t *testing.T) {
 		t.Error("CLAUDE.md read fine and its rules must still be returned")
 	}
 }
+
+// A remote session blocks on secrets and new dependencies whatever the
+// project says, and never loosens anything.
+func TestForRemoteOnlyTightens(t *testing.T) {
+	c := config.Default()
+	c.Mode = config.ModeAsk
+	c.Modes = map[string]config.Mode{"off-limits": config.ModeWarn, "scope": config.ModeAuto}
+	c.Disabled = []string{"dependency-added", "diff-size"}
+
+	r := c.ForRemote()
+	for _, name := range []string{"off-limits", "dependency-added"} {
+		if r.ModeFor(name) != config.ModeAuto || r.IsDisabled(name) {
+			t.Errorf("%s: mode %s, disabled %v", name, r.ModeFor(name), r.IsDisabled(name))
+		}
+	}
+	if r.ModeFor("scope") != config.ModeAuto || r.ModeFor("repetition") != config.ModeAsk || !r.IsDisabled("diff-size") {
+		t.Error("checks outside the remote set must keep what the project chose")
+	}
+	if c.Modes["off-limits"] != config.ModeWarn || !c.IsDisabled("dependency-added") {
+		t.Error("ForRemote changed the configuration it was given")
+	}
+}

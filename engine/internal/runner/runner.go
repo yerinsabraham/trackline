@@ -167,6 +167,9 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	// A configuration that cannot be read is worth saying out loud, but it must
 	// never stop the user working. Defaults carry on.
 	cfg, cfgErr := config.Load(root)
+	if os.Getenv(config.RemoteEnv) != "" {
+		cfg = cfg.ForRemote()
+	}
 	rules, rulesErr := config.LoadRules(root, cfg)
 
 	// Two separate stores, on purpose. The recording is the full session, for

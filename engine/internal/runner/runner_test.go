@@ -54,6 +54,20 @@ func TestWarnModeNeverBlocks(t *testing.T) {
 	}
 }
 
+// A session started from the phone blocks on a secret even where the project
+// only warns: there is nobody at the keyboard to read a warning.
+func TestRemoteSessionBlocksWhereTheProjectOnlyWarns(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.RemoteEnv, "job_1")
+	d, err := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Block {
+		t.Fatal("a remote session wrote to .env without being stopped")
+	}
+}
+
 func TestAutoModeBlocksWithAnActionableMessage(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, ".trackline.json"),

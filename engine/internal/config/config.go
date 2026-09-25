@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // Mode is how far trackline is allowed to go when a check fires.
@@ -133,6 +134,36 @@ func (c Config) ModeFor(signal string) Mode {
 		return c.Mode
 	}
 	return ModeWarn
+}
+
+// RemoteEnv is set by `trackline remote run` on every agent it starts, and
+// reaches the hook through the agent's environment.
+const RemoteEnv = "TRACKLINE_REMOTE_JOB"
+
+// remoteBlocks are the checks that block in a remote session whatever the
+// project says: with nobody at the keyboard, writing a secret or pulling in a
+// new dependency is not something to find out about afterwards.
+var remoteBlocks = []string{"off-limits", "dependency-added"}
+
+// ForRemote is the configuration for a session started from the phone. It
+// only ever tightens: an agent that sets RemoteEnv on itself gains nothing,
+// and a check switched off for local work is on again here.
+func (c Config) ForRemote() Config {
+	modes := make(map[string]Mode, len(c.Modes)+len(remoteBlocks))
+	for k, v := range c.Modes {
+		modes[k] = v
+	}
+	var disabled []string
+	for _, d := range c.Disabled {
+		if !slices.Contains(remoteBlocks, d) {
+			disabled = append(disabled, d)
+		}
+	}
+	for _, name := range remoteBlocks {
+		modes[name] = ModeAuto
+	}
+	c.Modes, c.Disabled = modes, disabled
+	return c
 }
 
 // IsDisabled reports whether a check has been switched off.
