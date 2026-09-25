@@ -1,10 +1,12 @@
 package relay_test
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -294,5 +296,48 @@ func TestParseKeyRefusesWhatItCannotUse(t *testing.T) {
 		if _, err := relay.ParseKey(base64.RawURLEncoding.EncodeToString(b)); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// A passkey is ES256, EdDSA or RS256 depending on where it lives. Each must
+// sign jobs, and a signature from the wrong key must still fail. Measured: a
+// passkey made through the site in Chrome came out EdDSA.
+func TestEveryKindOfPasskeySignsJobs(t *testing.T) {
+	for name, make := range map[string]func(string) *relaytest.Phone{
+		"ES256": relaytest.New, "EdDSA": relaytest.NewEd25519, "RS256": relaytest.NewRSA,
+	} {
+		t.Run(name, func(t *testing.T) {
+			phone := make("phone")
+			s := &relay.State{Projects: map[string]relay.Enabled{}, Seen: map[string]int64{}}
+			k, err := relay.VerifyPair(relay.DefaultRP, machine, "ABCD1234", phone.Pair(machine, "ABCD1234"), now)
+			if err != nil {
+				t.Fatalf("pairing: %v", err)
+			}
+			s.AddKey(k)
+			s.Enable("proj_enabled", t.TempDir(), "app", now)
+			if _, err := relay.Check(s, phone.Send(job()), machine, now); err != nil {
+				t.Fatalf("refused: %v", err)
+			}
+			impostor := make("impostor")
+			impostor.ID = phone.ID
+			if got := code(func() error {
+				_, err := relay.Check(s, impostor.Send(job(func(j *relay.Job) { j.ID = "job_2" })), machine, now)
+				return err
+			}()); got != "bad-signature" {
+				t.Fatalf("impostor: %s", got)
+			}
+		})
+	}
+}
+
+func TestParseKeyRefusesWeakOrMismatchedKeys(t *testing.T) {
+	short := &rsa.PublicKey{N: new(big.Int).Lsh(big.NewInt(1), 1023), E: 65537}
+	if _, err := relay.ParseKey(relay.EncodeKey(short)); err == nil {
+		t.Error("accepted a 1024-bit RSA key")
+	}
+	ed, _ := base64.RawURLEncoding.DecodeString(relaytest.NewEd25519("x").PublicKey())
+	ed[2] = 0x02 // kty EC2, alg still EdDSA
+	if _, err := relay.ParseKey(base64.RawURLEncoding.EncodeToString(ed)); err == nil {
+		t.Error("accepted a key whose type and algorithm disagree")
 	}
 }

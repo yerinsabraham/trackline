@@ -4,9 +4,12 @@
 package relaytest
 
 import (
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -20,8 +23,10 @@ var b64 = base64.RawURLEncoding
 type Phone struct {
 	ID   string
 	Name string
-	Key  *ecdsa.PrivateKey
-	RP   relay.RP
+	// Key is an *ecdsa.PrivateKey (ES256), ed25519.PrivateKey (EdDSA) or
+	// *rsa.PrivateKey (RS256): the three kinds of passkey there are.
+	Key crypto.Signer
+	RP  relay.RP
 	// Origin overrides where the browser says it signed, and Flags the
 	// authenticator's flags, so tests can play a phishing page or a
 	// passkey used without Face ID.
@@ -32,19 +37,41 @@ type Phone struct {
 	Type        string
 }
 
-// New makes a phone with a fresh passkey for the product site.
+// New makes a phone with a fresh P-256 passkey for the product site.
 func New(name string) *Phone {
 	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
+	return with(name, k)
+}
+
+// NewEd25519 makes a phone whose passkey is EdDSA, as security keys often are.
+func NewEd25519(name string) *Phone {
+	_, k, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return with(name, k)
+}
+
+// NewRSA makes a phone whose passkey is RS256, as some Windows Hello ones are.
+func NewRSA(name string) *Phone {
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return with(name, k)
+}
+
+func with(name string, k crypto.Signer) *Phone {
 	id := make([]byte, 16)
 	rand.Read(id)
 	return &Phone{ID: b64.EncodeToString(id), Name: name, Key: k, RP: relay.DefaultRP, Flags: 0x05}
 }
 
 // PublicKey is the passkey's public key as the server stores it.
-func (p *Phone) PublicKey() string { return relay.EncodeKey(&p.Key.PublicKey) }
+func (p *Phone) PublicKey() string { return relay.EncodeKey(p.Key.Public()) }
 
 // Sign makes a WebAuthn assertion over challenge.
 func (p *Phone) Sign(challenge []byte) relay.Assertion {
@@ -69,8 +96,18 @@ func (p *Phone) Sign(challenge []byte) relay.Assertion {
 	rpHash := sha256.Sum256([]byte(rpID))
 	auth := append(rpHash[:], p.Flags, 0, 0, 0, 0)
 	clientHash := sha256.Sum256(client)
-	digest := sha256.Sum256(append(append([]byte{}, auth...), clientHash[:]...))
-	sig, err := ecdsa.SignASN1(rand.Reader, p.Key, digest[:])
+	signed := append(append([]byte{}, auth...), clientHash[:]...)
+	digest := sha256.Sum256(signed)
+	var sig []byte
+	var err error
+	switch k := p.Key.(type) {
+	case *ecdsa.PrivateKey:
+		sig, err = ecdsa.SignASN1(rand.Reader, k, digest[:])
+	case ed25519.PrivateKey:
+		sig = ed25519.Sign(k, signed)
+	case *rsa.PrivateKey:
+		sig, err = rsa.SignPKCS1v15(rand.Reader, k, crypto.SHA256, digest[:])
+	}
 	if err != nil {
 		panic(err)
 	}

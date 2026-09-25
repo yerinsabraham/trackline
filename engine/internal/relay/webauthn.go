@@ -1,9 +1,12 @@
 package relay
 
 import (
+	"crypto"
 	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -18,8 +21,11 @@ import (
 // hash of the job. The laptop verifies it itself, against keys it learned at
 // pairing, so the server that relays the job cannot make one up.
 //
-// Only ES256 (P-256) is accepted. It is what iPhone, Mac, Android and
-// Windows passkeys produce, and one algorithm is less to get wrong.
+// The three algorithms passkeys use are accepted: ES256 (P-256), which
+// iPhone, Mac and Android produce; EdDSA (Ed25519), common on security keys;
+// and RS256, which some Windows Hello passkeys still use. Measured: a passkey
+// made through the site in Chrome came out EdDSA, and a laptop that took
+// P-256 alone refused it.
 
 // Assertion is what the browser's navigator.credentials.get returns, as
 // base64url strings.
@@ -86,7 +92,7 @@ const (
 
 // verifyAssertion checks that key signed want as a WebAuthn assertion for rp,
 // with the person verified (Face ID, fingerprint or PIN), not merely present.
-func verifyAssertion(key *ecdsa.PublicKey, rp RP, a Assertion, want []byte) error {
+func verifyAssertion(key crypto.PublicKey, rp RP, a Assertion, want []byte) error {
 	authData, err := decodeB64(a.AuthenticatorData)
 	if err != nil || len(authData) < 37 {
 		return errors.New("authenticator data is malformed")
@@ -132,16 +138,28 @@ func verifyAssertion(key *ecdsa.PublicKey, rp RP, a Assertion, want []byte) erro
 	}
 
 	clientHash := sha256.Sum256(clientJSON)
-	signed := sha256.Sum256(append(append([]byte{}, authData...), clientHash[:]...))
-	if !ecdsa.VerifyASN1(key, signed[:], sig) {
+	signed := append(append([]byte{}, authData...), clientHash[:]...)
+	digest := sha256.Sum256(signed)
+	ok := false
+	switch k := key.(type) {
+	case *ecdsa.PublicKey:
+		ok = ecdsa.VerifyASN1(k, digest[:], sig)
+	case ed25519.PublicKey:
+		// EdDSA signs the message itself, not a hash of it.
+		ok = ed25519.Verify(k, signed, sig)
+	case *rsa.PublicKey:
+		ok = rsa.VerifyPKCS1v15(k, crypto.SHA256, digest[:], sig) == nil
+	}
+	if !ok {
 		return errors.New("the signature does not match")
 	}
 	return nil
 }
 
 // ParseKey reads a passkey's public key as the server stores it: a COSE key,
-// base64url, as the registration returned it.
-func ParseKey(cose string) (*ecdsa.PublicKey, error) {
+// base64url, as the registration returned it. The key type, algorithm and
+// curve must agree; a key that claims one and carries another is refused.
+func ParseKey(cose string) (crypto.PublicKey, error) {
 	raw, err := decodeB64(cose)
 	if err != nil {
 		return nil, errors.New("public key is not base64url")
@@ -152,10 +170,25 @@ func ParseKey(cose string) (*ecdsa.PublicKey, error) {
 	}
 	const (
 		kty, alg, crv, x, y = 1, 3, -1, -2, -3
-		ec2, es256, p256    = 2, -7, 1
+		okp, ec2, rsaKty    = 1, 2, 3
+		es256, eddsa, rs256 = -7, -8, -257
+		p256, ed25519Crv    = 1, 6
 	)
-	if m.ints[kty] != ec2 || m.ints[alg] != es256 || m.ints[crv] != p256 {
-		return nil, errors.New("only P-256 (ES256) passkeys can sign jobs")
+	switch {
+	case m.ints[kty] == okp && m.ints[alg] == eddsa && m.ints[crv] == ed25519Crv:
+		if len(m.bytes[x]) != ed25519.PublicKeySize {
+			return nil, errors.New("public key has the wrong length")
+		}
+		return ed25519.PublicKey(m.bytes[x]), nil
+	case m.ints[kty] == rsaKty && m.ints[alg] == rs256:
+		// For RSA, -1 and -2 are the modulus and exponent.
+		n, e := new(big.Int).SetBytes(m.bytes[-1]), new(big.Int).SetBytes(m.bytes[-2])
+		if n.BitLen() < 2048 || !e.IsInt64() || e.Int64() < 3 || e.Int64()%2 == 0 || e.Int64() > 1<<31 {
+			return nil, errors.New("RSA key is too short or malformed")
+		}
+		return &rsa.PublicKey{N: n, E: int(e.Int64())}, nil
+	case m.ints[kty] != ec2 || m.ints[alg] != es256 || m.ints[crv] != p256:
+		return nil, errors.New("a passkey type this laptop does not know: ES256, EdDSA and RS256 are accepted")
 	}
 	xb, yb := m.bytes[x], m.bytes[y]
 	if len(xb) != 32 || len(yb) != 32 {
@@ -169,16 +202,26 @@ func ParseKey(cose string) (*ecdsa.PublicKey, error) {
 	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(xb), Y: new(big.Int).SetBytes(yb)}, nil
 }
 
-// EncodeKey writes a P-256 key as a COSE key, base64url: the inverse of
+// EncodeKey writes a public key as a COSE key, base64url: the inverse of
 // ParseKey, for tests and the test sender.
-func EncodeKey(k *ecdsa.PublicKey) string {
-	var x, y [32]byte
-	k.X.FillBytes(x[:])
-	k.Y.FillBytes(y[:])
-	out := []byte{0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20}
-	out = append(out, x[:]...)
-	out = append(out, 0x22, 0x58, 0x20)
-	out = append(out, y[:]...)
+func EncodeKey(key crypto.PublicKey) string {
+	var out []byte
+	switch k := key.(type) {
+	case *ecdsa.PublicKey:
+		var x, y [32]byte
+		k.X.FillBytes(x[:])
+		k.Y.FillBytes(y[:])
+		out = append([]byte{0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20}, x[:]...)
+		out = append(append(out, 0x22, 0x58, 0x20), y[:]...)
+	case ed25519.PublicKey:
+		out = append([]byte{0xa4, 0x01, 0x01, 0x03, 0x27, 0x20, 0x06, 0x21, 0x58, 0x20}, k...)
+	case *rsa.PublicKey:
+		n := k.N.Bytes()
+		e := big.NewInt(int64(k.E)).Bytes()
+		out = []byte{0xa4, 0x01, 0x03, 0x03, 0x39, 0x01, 0x00, 0x20, 0x59, byte(len(n) >> 8), byte(len(n))}
+		out = append(out, n...)
+		out = append(append(out, 0x21, 0x40|byte(len(e))), e...)
+	}
 	return b64.EncodeToString(out)
 }
 
