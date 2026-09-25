@@ -28,7 +28,10 @@ export default function Remote() {
     Promise.all([api<Overview>("/app/remote"), api<{ passkeys: Passkey[] }>("/app/remote/passkeys")])
       .then(([o, p]) => { setData(o); setKeys(p.passkeys); })
       .catch((e) => {
-        if ((e as { status?: number }).status === 401) { clearSession(); rememberNext(HERE); window.location.replace("/signin"); }
+        const status = (e as { status?: number }).status;
+        if (status === 401) { clearSession(); rememberNext(HERE); window.location.replace("/signin"); }
+        // The API answers 404 until remote is switched on for the account service.
+        else if (status === 404) setError("Remote is not switched on yet.");
         else setError((e as Error).message);
       });
   }, []);

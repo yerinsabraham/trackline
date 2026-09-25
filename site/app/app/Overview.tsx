@@ -68,7 +68,7 @@ export default function Overview() {
       {projects && projects.length > 0 && (
         <p className="dash-muted dash-help">
           An agent missing? Run <code>trackline status</code> in the project. It says which agent has never reported, and why.
-          {" "}<a href="/app/alerts">Alert settings</a>. <a href="/app/remote">Send a task from here</a>.
+          {" "}<a href="/app/alerts">Alert settings</a>.
         </p>
       )}
     </div>
