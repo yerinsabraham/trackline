@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import AccountButton from "@/components/AccountButton";
 import Mark from "@/components/Mark";
 import Search from "@/components/Search";
 import { GITHUB, SITE } from "@/lib/site";
@@ -47,14 +48,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="nav-links" aria-label="Main">
               <Link href="/agents" className="wide">Agents</Link>
               <Link href="/docs">Docs</Link>
+              <Link href="/evidence" className="wide">Evidence</Link>
               <Link href="/changelog" className="wide">Changelog</Link>
               <Search />
             </nav>
             <div className="nav-cta">
               <span className="frame">
-                <Link className="btn btn-quiet" href="/evidence"><span className="plus">+</span>Evidence</Link>
+                <AccountButton />
               </span>
-              <span className="frame">
+              <span className="frame cta-install">
                 <Link className="btn btn-signal" href="/#install"><span className="plus">+</span>Install</Link>
               </span>
             </div>

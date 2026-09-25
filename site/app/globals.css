@@ -83,7 +83,9 @@ code, pre { font-family: var(--mono); }
 @media (max-width: 820px) {
   .nav .wrap { grid-template-columns: auto 1fr auto; gap: 20px; }
   .nav-links { justify-self: end; gap: 20px; }
-  .nav-cta .frame:first-child { display: none; }
+  /* On a phone you sign in to watch; installing happens on the laptop, and
+     the page's own install section is one tap away. */
+  .nav-cta .cta-install { display: none; }
 }
 @media (max-width: 520px) {
   .nav-links .wide { display: none; }
