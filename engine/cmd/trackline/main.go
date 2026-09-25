@@ -128,6 +128,8 @@ Flags: --host claude|codex|cursor   --root DIR
 var commandHelp = map[string]string{
 	"init": `trackline init [--host claude|codex|cursor] [--root DIR]
 
+Without --host, sets up every agent installed on this machine.
+
 Wire the hook into an agent's configuration, merging with what is there.
 Starts in warn mode: it records, and never interrupts.
 `,
@@ -228,6 +230,9 @@ servers far from the project.
 type flags struct {
 	host string
 	root string
+	// hostSet is whether --host was given. init sets up every agent it finds
+	// unless told which one.
+	hostSet bool
 }
 
 func parse(args []string) flags {
@@ -238,6 +243,7 @@ func parse(args []string) flags {
 			if i+1 < len(args) {
 				i++
 				f.host = args[i]
+				f.hostSet = true
 			}
 		case "--root", "-root":
 			if i+1 < len(args) {
@@ -287,32 +293,58 @@ func cmdInit(args []string) error {
 	}
 	fmt.Println("ok")
 
-	res, err := install.Install(install.Host(f.host), f.root, binary)
-	if err != nil {
-		return err
+	targets := []install.Host{install.Host(f.host)}
+	if !f.hostSet {
+		home, _ := os.UserHomeDir()
+		if found := install.Detect(home, nil); len(found) > 0 {
+			targets = found
+		}
 	}
 
-	switch {
-	case res.AlreadyPresent:
-		fmt.Printf("already installed in %s\n", rel(f.root, res.Path))
-	case res.Created:
-		fmt.Printf("created %s\n", rel(f.root, res.Path))
-	default:
-		fmt.Printf("updated %s, leaving your other settings alone\n", rel(f.root, res.Path))
+	for _, h := range targets {
+		res, err := install.Install(h, f.root, binary)
+		if err != nil {
+			return fmt.Errorf("%s: %w", hostName(h), err)
+		}
+		switch {
+		case res.AlreadyPresent:
+			fmt.Printf("%s: already set up in %s\n", hostName(h), rel(f.root, res.Path))
+		case res.Created:
+			fmt.Printf("%s: created %s\n", hostName(h), rel(f.root, res.Path))
+		default:
+			fmt.Printf("%s: updated %s, leaving your other settings alone\n", hostName(h), rel(f.root, res.Path))
+		}
 	}
 
 	fmt.Printf("\nmode: warn — it will notice things and write them down, and never interrupt you.\n")
 	fmt.Printf("findings go to %s\n", filepath.Join(".trackline", "findings.jsonl"))
 
 	// Said at install, not discovered later. See internal/hosts.
-	if caps, ok := hosts.For(f.host); ok {
-		fmt.Print("\n" + caps.Describe())
+	for _, h := range targets {
+		if caps, ok := hosts.For(string(h)); ok {
+			fmt.Print("\n" + caps.Describe())
+		}
+	}
+	if !f.hostSet {
+		fmt.Print("\nOnly these agents were found. Another one later: trackline init --host codex|cursor|claude\n")
 	}
 
 	fmt.Print("\nOne thing left, and it matters: a misconfigured hook does not warn, it\n" +
 		"simply never runs. Make one edit with your agent, then:\n\n    trackline status\n\n" +
 		"which will tell you whether it actually fired.\n")
 	return nil
+}
+
+func hostName(h install.Host) string {
+	switch h {
+	case install.Claude:
+		return "Claude Code"
+	case install.Codex:
+		return "Codex"
+	case install.Cursor:
+		return "Cursor"
+	}
+	return string(h)
 }
 
 func cmdDoctor(args []string) error {

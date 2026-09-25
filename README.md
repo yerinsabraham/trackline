@@ -74,7 +74,7 @@ Approvals are narrow on purpose: one thing, for one request, unless you say
 ## Commands
 
 ```bash
-trackline init            # wire it into Claude Code (--host codex|cursor for the others)
+trackline init            # wire it into every agent installed here (--host to pick one)
 trackline status          # what it has seen, per check
 trackline show            # replay a session as a readable story
 trackline allow / revoke  # approve something, or take it back
