@@ -33,7 +33,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(body.error ?? "Something went wrong."), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(body.error ?? "Something went wrong."), { status: res.status, stepUp: body.stepUp === true });
   return body as T;
 }
 

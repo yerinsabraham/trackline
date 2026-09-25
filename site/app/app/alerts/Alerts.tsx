@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, clearSession, rememberNext, session } from "@/lib/account";
 import { type AlertSettings, current, deviceLabel, subscribe, support, type Support } from "@/lib/alerts";
+import { withStepUp } from "@/lib/security";
 import "../dashboard.css";
 
 const KINDS: { key: keyof AlertSettings["prefs"]; label: string; note: string }[] = [
@@ -165,7 +166,7 @@ export default function Alerts() {
                 className="btn btn-quiet"
                 disabled={busy || !slack}
                 onClick={() => act(async () => {
-                  setS(await api<AlertSettings>("/app/alerts", { method: "PUT", body: JSON.stringify({ slackWebhook: slack.trim() }) }));
+                  setS(await withStepUp(() => api<AlertSettings>("/app/alerts", { method: "PUT", body: JSON.stringify({ slackWebhook: slack.trim() }) })));
                   setSlack("");
                   setNote("Slack is connected.");
                 })}
@@ -175,7 +176,7 @@ export default function Alerts() {
             </div>
             {s.slack && (
               <button className="link-danger" onClick={() => act(async () => {
-                setS(await api<AlertSettings>("/app/alerts", { method: "PUT", body: JSON.stringify({ slackWebhook: null }) }));
+                setS(await withStepUp(() => api<AlertSettings>("/app/alerts", { method: "PUT", body: JSON.stringify({ slackWebhook: null }) })));
               })}>Disconnect Slack</button>
             )}
           </section>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import AgentChecklist from "@/components/AgentChecklist";
 import type { Project } from "@/lib/dashboard";
 import { api, clearSession, rememberNext, session } from "@/lib/account";
+import { withStepUp } from "@/lib/security";
 
 type Pending = { deviceName: string; expiresAt: string };
 
@@ -44,7 +45,9 @@ export default function Connect() {
   const decide = async (approve: boolean) => {
     setError("");
     try {
-      await api(`/devices/code/${encodeURIComponent(code)}/${approve ? "approve" : "deny"}`, { method: "POST", body: "{}" });
+      // An account with a second factor confirms it is you before a machine
+      // joins it; one without is not asked.
+      await withStepUp(() => api(`/devices/code/${encodeURIComponent(code)}/${approve ? "approve" : "deny"}`, { method: "POST", body: "{}" }));
       setState(approve ? "approved" : "declined");
     } catch (e) {
       setError((e as Error).message);
