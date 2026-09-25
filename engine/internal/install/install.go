@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Host is an agent trackline can attach to.
@@ -124,7 +125,12 @@ func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 	changed := false
 	for _, ev := range []string{"PreToolUse", "Stop"} {
 		entries, _ := container[ev].([]any)
-		if groupsHold(entries, binary) {
+		entries, held, moved := keepOneOurs(entries, binary, true)
+		if moved {
+			container[ev] = entries
+			changed = true
+		}
+		if held {
 			continue
 		}
 		entry := map[string]any{
@@ -145,18 +151,63 @@ func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 	return changed, nil
 }
 
-func groupsHold(entries []any, binary string) bool {
+// ours recognises trackline's hook by its file name, wherever it lives. A
+// check for this exact path missed an older install at another path, so an
+// upgrade added a second hook beside the first and every action was judged
+// twice (found in real use, 2026-09-25).
+func ours(cmd string) bool {
+	f := strings.Fields(cmd)
+	return len(f) > 0 && strings.TrimSuffix(filepath.Base(f[0]), ".exe") == "trackline-hook"
+}
+
+// keepOneOurs leaves exactly one trackline hook in an event's list, pointing
+// at binary: an older one is moved to the current path, and any extra is
+// removed. grouped is true for Claude Code and Codex, whose entries are
+// matcher groups holding hooks; Cursor's are the hooks themselves. It reports
+// whether one is present afterwards, and whether anything changed.
+func keepOneOurs(entries []any, binary string, grouped bool) (out []any, held, changed bool) {
 	for _, e := range entries {
 		m, _ := e.(map[string]any)
+		if !grouped {
+			if cmd, _ := m["command"].(string); ours(cmd) {
+				if held {
+					changed = true
+					continue
+				}
+				held = true
+				if cmd != binary {
+					m["command"] = binary
+					changed = true
+				}
+			}
+			out = append(out, e)
+			continue
+		}
 		hooks, _ := m["hooks"].([]any)
+		var kept []any
 		for _, h := range hooks {
 			hm, _ := h.(map[string]any)
-			if cmd, _ := hm["command"].(string); containsBinary(cmd, binary) {
-				return true
+			if cmd, _ := hm["command"].(string); ours(cmd) {
+				if held {
+					changed = true
+					continue
+				}
+				held = true
+				if cmd != binary {
+					hm["command"] = binary
+					changed = true
+				}
 			}
+			kept = append(kept, h)
 		}
+		if len(kept) == 0 {
+			changed = true
+			continue
+		}
+		m["hooks"] = kept
+		out = append(out, e)
 	}
-	return false
+	return out, held, changed
 }
 
 func containsBinary(cmd, binary string) bool {
@@ -207,12 +258,10 @@ func addCursorHook(doc map[string]any, binary string) (bool, error) {
 	changed := false
 	for _, ev := range []string{"preToolUse", "afterAgentResponse"} {
 		entries, _ := hooks[ev].([]any)
-		held := false
-		for _, e := range entries {
-			m, _ := e.(map[string]any)
-			if cmd, _ := m["command"].(string); containsBinary(cmd, binary) {
-				held = true
-			}
+		entries, held, moved := keepOneOurs(entries, binary, false)
+		if moved {
+			hooks[ev] = entries
+			changed = true
 		}
 		if held {
 			continue

@@ -64,10 +64,10 @@ func Wired(root string) []string {
 func Unsilence(h Host) string {
 	switch h {
 	case Codex:
-		return "Codex only runs hooks you trust. Open Codex in this folder, type /hooks, and trust trackline."
+		return "Codex runs a hook only once you trust it. In the Codex panel: Settings, Hooks, From Projects, then Trust. In a terminal: run codex here and type /hooks."
 	case Cursor:
-		return "Open this folder in Cursor and start a new agent chat."
+		return "Send a message in Cursor's agent chat in this project."
 	default:
-		return "Start a new Claude Code session in this folder."
+		return "Send a message in Claude Code in this project."
 	}
 }

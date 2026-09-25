@@ -339,7 +339,7 @@ func cmdInit(args []string) error {
 	}
 	for _, h := range targets {
 		if h == install.Codex {
-			fmt.Print("\nCodex needs one step from you: open Codex here, type /hooks, and trust trackline. Until then it records nothing.\n")
+			fmt.Print("\nCodex needs one step from you, once: in the Codex panel, Settings, Hooks, From Projects, then Trust.\n")
 		}
 	}
 

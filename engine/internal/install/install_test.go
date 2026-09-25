@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yerinsabraham/trackline/engine/internal/install"
@@ -104,5 +105,34 @@ func TestCursorUnknownVersionIsRefused(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != string(original) {
 		t.Error("a refused install must not touch the file")
+	}
+}
+
+// An older install at another path is moved, not duplicated: found in real
+// use, where an upgrade left two hooks and every action was judged twice.
+func TestAnOlderInstallIsMovedNotDuplicated(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(`{"hooks":{"PreToolUse":[
+		{"matcher":"Write","hooks":[{"type":"command","command":"/usr/local/bin/trackline-hook","timeout":15}]},
+		{"matcher":"Bash","hooks":[{"type":"command","command":"/opt/old/trackline-hook -host claude","timeout":15},{"type":"command","command":"/usr/bin/other-tool"}]}
+	]}}`), 0o644)
+	if _, err := install.Install(install.Claude, root, "/new/trackline-hook"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
+	s := string(b)
+	if n := strings.Count(s, "trackline-hook"); n != 2 { // one PreToolUse, one Stop
+		t.Errorf("%d trackline hooks, want one per event:\n%s", n, s)
+	}
+	if strings.Contains(s, "/usr/local/bin/trackline-hook") || strings.Contains(s, "/opt/old") {
+		t.Errorf("an old path survived:\n%s", s)
+	}
+	if !strings.Contains(s, "/usr/bin/other-tool") {
+		t.Errorf("someone else's hook was removed:\n%s", s)
+	}
+	res, _ := install.Install(install.Claude, root, "/new/trackline-hook")
+	if !res.AlreadyPresent {
+		t.Error("a second install changed something")
 	}
 }
