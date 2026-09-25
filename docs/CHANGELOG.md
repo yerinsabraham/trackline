@@ -3,6 +3,16 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.4.0 · 2026-09-25
+
+- **Reply from your phone.** A task or a session can be continued from the
+  app: the reply goes to the same Claude Code or Codex session on your laptop,
+  with the same permissions and sandbox as a new one. Works for sessions you
+  started in the terminal too.
+- **macOS permission prompts.** When an agent started from your phone seems
+  to be held by a Files and Folders prompt on the Mac (Documents, Desktop,
+  Downloads, iCloud Drive), the app says so, so a task does not look frozen.
+
 ## 0.3.0 · 2026-09-25
 
 - **Remote prompts.** Send a task from your phone to Claude Code or Codex on

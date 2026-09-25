@@ -1,6 +1,6 @@
 {
   "name": "@trackline/darwin-x64",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "trackline binaries for darwin x64. Installed automatically by the trackline package.",
   "license": "Apache-2.0",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
