@@ -58,7 +58,7 @@ export default function Overview() {
       </header>
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
 
-      <section className="stats rise rise-1" aria-label="Today">
+      <section className="metrics rise rise-1" aria-label="Today">
         <Stat dot="needs-you" label="Needs you" value={projects ? needsYou.length : null} note={needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
         <Stat dot="working" label="Working" value={projects ? working.length : null} note={working.length ? [...new Set(working.map((s) => agentName(s.host)))].join(", ") : "No agent running"} />
         <Stat dot="done" label="Done today" value={projects ? doneToday : null} note={`Across ${new Set(today.map((s) => s.project)).size} project${new Set(today.map((s) => s.project)).size === 1 ? "" : "s"}`} desktopOnly />
@@ -71,7 +71,7 @@ export default function Overview() {
             <h2 id="recent">Recent sessions</h2>
             <div className="chips" role="tablist" aria-label="Filter" style={{ marginLeft: "auto" }}>
               {FILTERS.map(([f, label]) => (
-                <button key={f} role="tab" className="chip" aria-selected={filter === f} onClick={() => setFilter(f)}>{label}</button>
+                <button key={f} role="tab" className="pick" aria-selected={filter === f} onClick={() => setFilter(f)}>{label}</button>
               ))}
             </div>
           </div>
@@ -156,7 +156,7 @@ export default function Overview() {
 
 function Stat({ dot, label, value, note, desktopOnly }: { dot: string; label: string; value: number | string | null; note: string; desktopOnly?: boolean }) {
   return (
-    <div className={`stat ${desktopOnly ? "desktop-only" : ""}`}>
+    <div className={`metric ${desktopOnly ? "desktop-only" : ""}`}>
       <span className="stat-label"><span className={`dot ${dot}`} style={dot === "working" ? { animation: "none" } : undefined} />{label}</span>
       {value === null ? <span className="skel" style={{ height: 30, width: 48 }} /> : <span className="stat-num">{value}</span>}
       <span className="stat-note">{note}</span>

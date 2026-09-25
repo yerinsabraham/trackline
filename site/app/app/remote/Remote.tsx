@@ -30,7 +30,7 @@ export default function Remote() {
 
   if (job === undefined) return <AppShell section="new"><div className="skel" style={{ height: 320 }} /></AppShell>;
   return job
-    ? <AppShell section="new" chat><JobChat id={job} onNew={() => { window.history.pushState(null, "", "/app/remote"); setJob(null); }} open={open} /></AppShell>
+    ? <AppShell section="new" chat><JobChat key={job} id={job} onNew={() => { window.history.pushState(null, "", "/app/remote"); setJob(null); }} open={open} /></AppShell>
     : <AppShell section="new"><NewTask open={open} /></AppShell>;
 }
 
@@ -103,7 +103,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
               </span>
             </div>
             {machines.length > 1 && (
-              <select aria-label="Laptop" className="chip" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); }}>
+              <select aria-label="Laptop" className="pick" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); }}>
                 {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             )}
@@ -117,7 +117,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                 <legend>Project</legend>
                 <div className="chips">
                   {machine.projects.map((p) => (
-                    <button type="button" key={p.id} className="chip mono" aria-pressed={p.id === project?.id} onClick={() => setProjectId(p.id)}>{p.name}</button>
+                    <button type="button" key={p.id} className="pick mono" aria-pressed={p.id === project?.id} onClick={() => setProjectId(p.id)}>{p.name}</button>
                   ))}
                 </div>
               </fieldset>
@@ -210,7 +210,8 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         ]);
         if (e.events.length) {
           after.current = e.events[e.events.length - 1].seq;
-          setEvents((old) => [...old, ...e.events]);
+          // By number, so a poll that overlaps another never shows a step twice.
+          setEvents((old) => [...new Map([...old, ...e.events].map((x) => [x.seq, x])).values()].sort((a, b) => a.seq - b.seq));
         }
         setJob(j);
       } catch (err) {
@@ -262,7 +263,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         </header>
 
         <div className="chat-scroll" ref={scroller}>
-          <div className="chat">
+          <div className="convo">
             {missing && <p className="composer-note error">This task does not exist, or is not yours.</p>}
             {asked && <MyMessage text={asked} note={job ? `Sent to ${machineName}` : undefined} />}
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}

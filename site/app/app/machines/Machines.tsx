@@ -54,7 +54,7 @@ export default function Machines() {
             <div style={{ display: "grid", gap: 6 }}>
               <span className="app-nav-label" style={{ padding: 0 }}>Takes tasks for</span>
               {m.projects.length === 0 ? <span className="app-muted" style={{ fontSize: 14 }}>No project</span> : (
-                <div className="chips">{m.projects.map((p) => <span key={p.id} className="chip mono" style={{ display: "inline-flex", alignItems: "center" }}>{p.name}</span>)}</div>
+                <div className="chips">{m.projects.map((p) => <span key={p.id} className="pick mono" style={{ display: "inline-flex", alignItems: "center" }}>{p.name}</span>)}</div>
               )}
             </div>
             <div style={{ display: "grid", gap: 6 }}>

@@ -154,7 +154,7 @@ export default function Session() {
         </header>
 
         <div className="chat-scroll" ref={scroller}>
-          <div className="chat">
+          <div className="convo">
             {error && <p className="composer-note error">{error}</p>}
             {!view && !error && [0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: i === 1 ? 120 : 56 }} />)}
             {s && <p className="chat-divider">{scoreLine(s.score.session)}</p>}

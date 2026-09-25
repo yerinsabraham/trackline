@@ -53,7 +53,7 @@ export default function Sessions() {
       </div>
       <div className="chips rise rise-2" role="tablist" aria-label="Status">
         {FILTERS.map(([f, label]) => (
-          <button key={f} role="tab" className="chip" aria-selected={filter === f} onClick={() => setFilter(f)}>
+          <button key={f} role="tab" className="pick" aria-selected={filter === f} onClick={() => setFilter(f)}>
             {label} {projects ? all.filter((s) => matches(s, f)).length : ""}
           </button>
         ))}

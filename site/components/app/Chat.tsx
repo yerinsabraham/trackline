@@ -23,7 +23,7 @@ export function MyMessage({ text, note }: { text: string; note?: string }) {
 export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
   if (!lines.length && !live) return null;
   return (
-    <div className="term rise">
+    <div className="aterm rise">
       <div className="term-head">
         <span style={{ width: 14, display: "flex" }}><IconTerminal /></span>
         <span>Activity · {lines.length} step{lines.length === 1 ? "" : "s"}</span>
