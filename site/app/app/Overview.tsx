@@ -35,6 +35,7 @@ export default function Overview() {
         <div className="dash-empty">
           <p>Nothing here yet.</p>
           <p className="dash-muted">Run <code>trackline connect</code> in a project. What your agent does there shows up here as it happens.</p>
+          <p className="dash-muted">Using Codex? It only runs hooks you trust: open it in the project, type <code>/hooks</code>, and trust trackline.</p>
         </div>
       )}
       {projects?.map((p) => (
@@ -60,6 +61,11 @@ export default function Overview() {
           </ul>
         </section>
       ))}
+      {projects && projects.length > 0 && (
+        <p className="dash-muted dash-help">
+          An agent missing? Run <code>trackline status</code> in the project. It says which agent has never reported, and why.
+        </p>
+      )}
     </div>
   );
 }

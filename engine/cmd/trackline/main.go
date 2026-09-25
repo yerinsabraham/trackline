@@ -328,6 +328,11 @@ func cmdInit(args []string) error {
 	if !f.hostSet {
 		fmt.Print("\nOnly these agents were found. Another one later: trackline init --host codex|cursor|claude\n")
 	}
+	for _, h := range targets {
+		if h == install.Codex {
+			fmt.Print("\nCodex needs one step from you: open Codex here, type /hooks, and trust trackline. Until then it records nothing.\n")
+		}
+	}
 
 	fmt.Print("\nOne thing left, and it matters: a misconfigured hook does not warn, it\n" +
 		"simply never runs. Make one edit with your agent, then:\n\n    trackline status\n\n" +
@@ -398,16 +403,28 @@ func cmdStatus(args []string) error {
 	if err != nil {
 		return err
 	}
+	silent := install.Silent(f.root)
 	if !seen {
-		fmt.Print("The hook has never run here.\n\n" +
-			"That is the failure worth catching: a hook can be configured correctly\n" +
-			"and still never fire, and nothing warns you. Check that init was run for\n" +
-			"the agent you are actually using, and on Codex that the hook is trusted.\n")
+		fmt.Print("The hook has never run here.\n")
+		if len(silent) == 0 {
+			fmt.Print("No agent is set up in this folder. Run: trackline init\n")
+		}
+		printSilent(silent)
 		return nil
 	}
 
-	fmt.Printf("The hook is running. Last seen %s.\n\n", humanAge(time.Since(at)))
+	fmt.Printf("The hook is running. Last seen %s.\n", humanAge(time.Since(at)))
+	printSilent(silent)
+	fmt.Println()
 	return summarise(filepath.Join(f.root, ".trackline", "findings.jsonl"))
+}
+
+// A hook that is set up but never fires looks like one with nothing to
+// report, so each such agent is named along with what wakes it.
+func printSilent(silent []install.Host) {
+	for _, h := range silent {
+		fmt.Printf("\n%s is set up here but has never reported. %s\n", hostName(h), install.Unsilence(h))
+	}
 }
 
 func rel(root, path string) string {

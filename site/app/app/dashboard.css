@@ -8,6 +8,7 @@
 .dash-back:hover { color: var(--ink); }
 .dash-empty { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
 .dash-empty p { margin: 0 0 6px; }
+.dash-help { margin-top: 32px; font-size: 14px; }
 
 .light-on-track { --light: #22a355; }
 .light-drifting { --light: var(--amber); }
