@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { api, clearSession, rememberNext, session } from "@/lib/account";
 import {
-  describe, type FeedEvent, HOST_LABEL, LIGHT_LABEL, scoreLine, type SessionView, whileVisible,
+  describe, type FeedEvent, HOST_LABEL, LIGHT_LABEL, type Reply, scoreLine, type SessionView, whileVisible,
 } from "@/lib/dashboard";
+import ReplyText from "@/components/ReplyText";
 import "../dashboard.css";
 
 const CHECK_LABEL: Record<string, string> = {
@@ -23,6 +24,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-di
 export default function Session() {
   const [view, setView] = useState<SessionView["session"] | null>(null);
   const [events, setEvents] = useState<FeedEvent[]>([]);
+  const [replies, setReplies] = useState<(Reply & { id: string })[]>([]);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const [live, setLive] = useState(true);
@@ -42,6 +44,13 @@ export default function Session() {
         const r = await api<SessionView>(`/app/sessions/${encodeURIComponent(id)}${after}`);
         cursor.current = r.cursor;
         setView(r.session);
+        if (r.replies?.length) {
+          setReplies((old) => {
+            const byId = new Map(old.map((x) => [x.id, x]));
+            for (const x of r.replies) byId.set(x.id, x);
+            return [...byId.values()];
+          });
+        }
         if (r.events.length) {
           setEvents((old) => {
             const byId = new Map(old.map((e) => [e.id, e]));
@@ -76,14 +85,22 @@ export default function Session() {
 
   // A heading wherever the request changes, so the feed reads as what you
   // asked, then what the agent did about it.
-  const rows: ({ kind: "request"; text: string | null; key: string } | { kind: "event"; e: FeedEvent })[] = [];
+  // Newest first, so a turn's reply, the last thing it produced, sits just
+  // under what was asked.
+  const replyFor = new Map(replies.filter((r) => r.turn).map((r) => [r.turn as string, r]));
+  const agent = HOST_LABEL[view.host] ?? "The agent";
+  const rows: ({ kind: "request"; text: string | null; key: string; reply?: Reply } | { kind: "event"; e: FeedEvent })[] = [];
   let last: string | null | undefined;
   for (const e of events) {
     const k = e.turn ?? e.request;
-    if (k !== last) rows.push({ kind: "request", text: e.request, key: `r-${e.id}` });
+    if (k !== last) rows.push({ kind: "request", text: e.request, key: `r-${e.id}`, reply: e.turn ? replyFor.get(e.turn) : undefined });
     last = k;
     rows.push({ kind: "event", e });
   }
+  const firstKey = rows[0]?.kind === "request" ? rows[0].key : undefined;
+  const latestReply = [...replies].sort((a, b) => +new Date(b.at) - +new Date(a.at))[0];
+  const currentTurn = events[0]?.turn;
+  const currentReply = currentTurn ? replyFor.get(currentTurn) : latestReply;
 
   return (
     <div className="wrap dash">
@@ -108,13 +125,15 @@ export default function Session() {
         <p className="eyebrow">What you asked</p>
         <p>{view.request ?? <span className="dash-muted">Not recorded.</span>}</p>
       </div>
+      {currentReply && <ReplyCard who={agent} reply={currentReply} />}
 
       <ol className="dash-feed">
         {rows.map((row) => {
           if (row.kind === "request") {
             return (
               <li key={row.key} className="dash-feed-request">
-                {row.text ? `You asked: ${row.text}` : "A request"}
+                {row.key === firstKey ? "What it did" : row.text ? `You asked: ${row.text}` : "A request"}
+                {row.reply && row.reply !== currentReply && <ReplyCard who={agent} reply={row.reply} />}
               </li>
             );
           }
@@ -160,6 +179,20 @@ export default function Session() {
         })}
       </ol>
       {events.length === 0 && <p className="dash-muted">No actions in the last 30 days.</p>}
+    </div>
+  );
+}
+
+// The agent's own summary of what it did. Long replies open on a tap, so the
+// feed stays readable on a phone.
+function ReplyCard({ who, reply }: { who: string; reply: Reply }) {
+  const [open, setOpen] = useState(false);
+  const long = reply.text.length > 420 || reply.text.split("\n").length > 6;
+  return (
+    <div className={`dash-reply ${long && !open ? "clamped" : ""}`}>
+      <p className="eyebrow">{who} replied</p>
+      <ReplyText text={reply.text} />
+      {long && <button onClick={() => setOpen(!open)}>{open ? "Show less" : "Show all"}</button>}
     </div>
   );
 }

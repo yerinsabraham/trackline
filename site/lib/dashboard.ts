@@ -4,8 +4,10 @@ export type Light = "on-track" | "drifting" | "needs-you" | "quiet";
 export type Score = { checked: number; aligned: number; notCheckable: number; percent: number | null };
 export type Status = { light: Light; request: string | null; score: { request: Score; session: Score } };
 
-export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string };
-export type Project = { id: string; name: string; lastSeenAt: string; sessions: SessionSummary[] };
+export type Reply = { id?: string; at: string; turn: string | null; text: string };
+export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null };
+export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
+export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
 
 export type Finding = { check: string; severity: string; summary: string; target?: string; suggestion?: string };
 export type FeedEvent = {
@@ -18,6 +20,7 @@ export type FeedEvent = {
 export type SessionView = {
   session: Status & { id: string; host: string; startedAt: string; lastAt: string; project: { id: string; name: string } };
   events: FeedEvent[];
+  replies: (Reply & { id: string })[];
   cursor: string | null;
 };
 
@@ -69,3 +72,13 @@ export function whileVisible(fn: () => void, ms: number): () => void {
   if (!document.hidden) start();
   return () => { stop(); document.removeEventListener("visibilitychange", onChange); };
 }
+
+/** What wakes an agent that is set up but has never reported. */
+export const WAKE: Record<string, { text: string; copy?: string }> = {
+  codex: {
+    text: "Open Codex in this project. When it asks to review hooks, choose Trust all and continue. Missed it? Type /hooks.",
+    copy: "/hooks",
+  },
+  cursor: { text: "Open this project in Cursor and start a new agent chat." },
+  "claude-code": { text: "Start a new Claude Code session in this project." },
+};

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AgentChecklist from "@/components/AgentChecklist";
+import type { Project } from "@/lib/dashboard";
 import { api, clearSession, rememberNext, session } from "@/lib/account";
 
 type Pending = { deviceName: string; expiresAt: string };
@@ -94,13 +96,7 @@ export default function Connect() {
           </>
         )}
 
-        {state === "approved" && (
-          <>
-            <h1>Connected</h1>
-            <p className="account-sub">Go back to your terminal. It finishes on its own in a few seconds.</p>
-            <a className="btn btn-quiet" href="/account">See your machines</a>
-          </>
-        )}
+        {state === "approved" && <Connected />}
 
         {state === "declined" && (
           <>
@@ -112,5 +108,41 @@ export default function Connect() {
         {error && <p className="account-error" role="alert">{error}</p>}
       </div>
     </div>
+  );
+}
+
+// After approving: the project that was just set up, and each of its agents,
+// ready or with the one step left. The terminal sends this a moment after
+// approval, so it is asked for a few times.
+function Connected() {
+  const [project, setProject] = useState<Project | null>(null);
+  useEffect(() => {
+    const started = Date.now();
+    let stop = false;
+    const look = async () => {
+      try {
+        const r = await api<{ projects: Project[] }>("/app/overview");
+        const recent = r.projects.find((p) => Date.now() - new Date(p.lastSeenAt).getTime() < 2 * 60_000 && p.agents.length);
+        if (recent) { setProject(recent); if (recent.agents.every((a) => a.reported)) stop = true; }
+      } catch { /* the page still says what to do next */ }
+      if (!stop && Date.now() - started < 5 * 60_000) setTimeout(look, 3000);
+    };
+    look();
+    return () => { stop = true; };
+  }, []);
+  return (
+    <>
+      <h1>Connected</h1>
+      {!project && <p className="account-sub">Go back to your terminal. It finishes on its own in a few seconds.</p>}
+      {project && (
+        <>
+          <p className="account-sub"><strong>{project.name}</strong> is connected. Your agents there:</p>
+          <AgentChecklist agents={project.agents} />
+        </>
+      )}
+      <div className="account-actions">
+        <a className="btn btn-signal" href="/app">Open your dashboard</a>
+      </div>
+    </>
   );
 }

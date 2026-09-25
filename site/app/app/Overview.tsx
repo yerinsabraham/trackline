@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api, clearSession, rememberNext, session } from "@/lib/account";
 import { ago, HOST_LABEL, LIGHT_LABEL, type Project, scoreLine, whileVisible } from "@/lib/dashboard";
+import AgentChecklist from "@/components/AgentChecklist";
+import { plain } from "@/components/ReplyText";
 import "./dashboard.css";
 
 export default function Overview() {
@@ -41,7 +43,8 @@ export default function Overview() {
       {projects?.map((p) => (
         <section key={p.id} className="dash-project">
           <h2>{p.name}</h2>
-          {p.sessions.length === 0 && <p className="dash-muted">No sessions in the last 30 days.</p>}
+          <AgentChecklist agents={p.agents} />
+          {p.sessions.length === 0 && p.agents.length === 0 && <p className="dash-muted">No sessions in the last 30 days.</p>}
           <ul className="dash-sessions">
             {p.sessions.map((s) => (
               <li key={s.id}>
@@ -53,6 +56,7 @@ export default function Overview() {
                       <span>{HOST_LABEL[s.host] ?? s.host} · {ago(s.lastAt)}</span>
                     </span>
                     <span className="dash-request">{s.request ?? "Request not recorded"}</span>
+                    {s.reply && <span className="dash-session-reply">{HOST_LABEL[s.host] ?? "Agent"}: {plain(s.reply.text)}</span>}
                     <span className="dash-score">{scoreLine(s.score.request)}</span>
                   </span>
                 </a>
