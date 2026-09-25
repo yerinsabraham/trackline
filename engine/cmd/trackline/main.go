@@ -80,6 +80,8 @@ func main() {
 		err = cmdAccount(os.Args[2:])
 	case "sync":
 		err = cmdSync(os.Args[2:])
+	case "remote":
+		err = cmdRemote(os.Args[2:])
 	case "mcp":
 		f := parse(os.Args[2:])
 		// stdout is the protocol, so warnings go to stderr, which clients log.
@@ -120,6 +122,7 @@ func usage() {
   account  who this machine is connected as
   disconnect  unlink this machine
   sync     send what is waiting to the account (the hook runs this for you)
+  remote   let prompts from your phone run in this project (off unless enabled)
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
 
@@ -218,6 +221,24 @@ by hand. Offline, events wait on this machine and go in order later.
 	"disconnect": `trackline disconnect
 
 Revoke this machine's credential on the account and remove it from here.
+`,
+	"remote": `trackline remote enable [--root DIR] [--pair] [--no-start]
+trackline remote disable [--root DIR] [--all]
+trackline remote status
+
+Let a prompt sent from your phone run in this project, on this laptop, with
+your own agent. Off unless enabled here; the website cannot turn it on.
+
+enable   turn it on for this project. The first time, it shows a code to
+         enter on your phone, which pairs your passkey with this laptop.
+         --pair pairs another passkey. Starts the runner at login (macOS).
+disable  turn it off for this project. --all turns it off everywhere on this
+         laptop and forgets every paired passkey.
+status   paired passkeys, enabled projects, and whether the runner is running.
+
+A job runs only if a passkey paired here signed it, it is for this laptop and
+an enabled project, it is under five minutes old, and it was never seen before.
+Anything else is refused and shown on this screen.
 `,
 	"mcp": `trackline mcp [--root DIR]
 

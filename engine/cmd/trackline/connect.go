@@ -17,6 +17,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
+	"github.com/yerinsabraham/trackline/engine/internal/relay"
 )
 
 // cmdConnect asks about the project first, then links this machine to an
@@ -173,6 +174,11 @@ func cmdDisconnect(args []string) error {
 		}
 	}
 	if err := account.Forget(); err != nil {
+		return err
+	}
+	// Remote jobs were for this machine's identity, which is now gone.
+	stopAtLogin()
+	if err := relay.Forget(); err != nil {
 		return err
 	}
 	if revoked {
