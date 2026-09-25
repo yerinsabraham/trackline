@@ -1,6 +1,6 @@
 // What the dashboard reads from the API, and how it words it.
 
-export type Light = "on-track" | "drifting" | "needs-you" | "quiet";
+export type Light = "needs-you" | "drifting" | "working" | "done" | "idle";
 export type Score = { checked: number; aligned: number; notCheckable: number; percent: number | null };
 export type Status = { light: Light; request: string | null; score: { request: Score; session: Score } };
 
@@ -25,10 +25,11 @@ export type SessionView = {
 };
 
 export const LIGHT_LABEL: Record<Light, string> = {
-  "on-track": "On track",
-  drifting: "Drifting",
   "needs-you": "Needs you",
-  quiet: "Quiet",
+  drifting: "Drifting",
+  working: "Working",
+  done: "Done",
+  idle: "Idle",
 };
 
 export const HOST_LABEL: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", cursor: "Cursor" };
@@ -75,10 +76,7 @@ export function whileVisible(fn: () => void, ms: number): () => void {
 
 /** What wakes an agent that is set up but has never reported. */
 export const WAKE: Record<string, { text: string; copy?: string }> = {
-  codex: {
-    text: "Open Codex in this project. When it asks to review hooks, choose Trust all and continue. Missed it? Type /hooks.",
-    copy: "/hooks",
-  },
-  cursor: { text: "Open this project in Cursor and start a new agent chat." },
-  "claude-code": { text: "Start a new Claude Code session in this project." },
+  codex: { text: "Codex runs a hook only once you trust it. In the Codex panel: Settings → Hooks → From Projects → Trust." },
+  cursor: { text: "Send a message in Cursor's agent chat in this project." },
+  "claude-code": { text: "Send a message in Claude Code in this project." },
 };

@@ -14,6 +14,11 @@
 .light-drifting { --light: var(--amber); }
 .light-needs-you { --light: #e5341b; }
 .light-quiet { --light: #b4b4b8; }
+.light-working { --light: #22a355; }
+.light-done { --light: #22a355; }
+.light-idle { --light: #b4b4b8; }
+.light-working .dash-dot { animation: dash-pulse 1.6s infinite; }
+@media (prefers-reduced-motion: reduce) { .light-working .dash-dot { animation: none; } }
 .dash-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--light); flex: none; }
 
 .dash-project { margin-top: 28px; }

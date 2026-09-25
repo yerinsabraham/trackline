@@ -5,14 +5,12 @@ import { api, clearSession, rememberNext, session } from "@/lib/account";
 import { ago, HOST_LABEL, LIGHT_LABEL, type Project, scoreLine, whileVisible } from "@/lib/dashboard";
 import AgentChecklist from "@/components/AgentChecklist";
 import { plain } from "@/components/ReplyText";
-import { current } from "@/lib/alerts";
 import "./dashboard.css";
 
 export default function Overview() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState("");
   const [, tick] = useState(0);
-  const [alertsOff, setAlertsOff] = useState(false);
 
   useEffect(() => {
     if (!session()) { rememberNext("/app"); return window.location.replace("/signin"); }
@@ -24,7 +22,6 @@ export default function Overview() {
           else setError((e as Error).message);
         });
     load();
-    current().then((sub) => setAlertsOff(!sub)).catch(() => setAlertsOff(true));
     return whileVisible(load, 10_000);
   }, []);
 
@@ -34,12 +31,6 @@ export default function Overview() {
         <p className="eyebrow">Dashboard</p>
         <h1>Your agents</h1>
       </div>
-      {alertsOff && (
-        <a href="/app/alerts" className="dash-alerts-nudge">
-          <span>Get an alert on this device when an agent needs you.</span>
-          <strong>Set up →</strong>
-        </a>
-      )}
       {error && <p className="account-error" role="alert">{error}</p>}
       {projects === null && !error && <p className="dash-muted">Loading…</p>}
       {projects?.length === 0 && (

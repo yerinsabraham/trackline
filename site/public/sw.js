@@ -28,13 +28,28 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || "/app", self.location.origin).href;
+  const path = event.notification.data?.url || "/app";
+  const url = new URL(path, self.location.origin).href;
+  // An open window is sent to the session, not just brought forward: on an
+  // iPhone the app is usually open already, and focusing it alone left people
+  // on whatever page it was showing (found in real use, 2026-09-25).
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
-      for (const w of wins) {
-        if (w.url === url && "focus" in w) return w.focus();
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (wins) => {
+      const w = wins.find((c) => "focus" in c);
+      if (!w) return self.clients.openWindow(url);
+      await w.focus();
+      if (w.url === url) return w;
+      if ("navigate" in w) {
+        try {
+          const moved = await w.navigate(url);
+          if (moved) return moved;
+        } catch {
+          // A window this worker does not control cannot be navigated;
+          // it is asked to go there itself.
+        }
       }
-      return self.clients.openWindow(url);
+      w.postMessage({ type: "trackline:open", url: path });
+      return w;
     }),
   );
 });

@@ -113,7 +113,7 @@ export default function Session() {
         <div className="dash-status-top">
           <span className="dash-dot" aria-hidden />
           <strong>{LIGHT_LABEL[view.light]}</strong>
-          <span className={`dash-live ${live ? "" : "off"}`}>{live ? "Live" : "Reconnecting…"}</span>
+          {!live && <span className="dash-live off">Reconnecting…</span>}
         </div>
         <p className="dash-status-score">{scoreLine(view.score.request)}</p>
         {scoreLine(view.score.session) !== scoreLine(view.score.request) && (
