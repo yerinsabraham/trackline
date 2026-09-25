@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, clearSession, rememberNext, session } from "@/lib/account";
+import { api, clearSession, rememberNext, session, type User } from "@/lib/account";
 import { ago, HOST_LABEL, LIGHT_LABEL, type Project, scoreLine, whileVisible } from "@/lib/dashboard";
 import AgentChecklist from "@/components/AgentChecklist";
 import { plain } from "@/components/ReplyText";
@@ -9,6 +9,7 @@ import "./dashboard.css";
 
 export default function Overview() {
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState("");
   const [, tick] = useState(0);
 
@@ -22,11 +23,17 @@ export default function Overview() {
           else setError((e as Error).message);
         });
     load();
+    api<{ user: User }>("/auth/me").then((r) => setUser(r.user)).catch(() => {});
     return whileVisible(load, 10_000);
   }, []);
 
   return (
     <div className="wrap dash">
+      <div className="dash-user">
+        <span>{user ? `Signed in as ${user.name ?? user.email ?? "you"}` : ""}</span>
+        <a href="/account">Account</a>
+        <button className="link-quiet" onClick={() => { clearSession(); window.location.replace("/signin"); }}>Sign out</button>
+      </div>
       <div className="dash-head">
         <p className="eyebrow">Dashboard</p>
         <h1>Your agents</h1>
