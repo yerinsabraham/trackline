@@ -3,6 +3,24 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.3.0 · 2026-09-25
+
+- **Remote prompts.** Send a task from your phone to Claude Code or Codex on
+  your own laptop, and watch it run. `trackline remote enable` turns it on for
+  one project and pairs your passkey by a code shown on the laptop. Every
+  message is signed by your passkey and checked on the laptop, so the server
+  that carries it cannot write one. Remote sessions block writes to secrets and
+  new dependencies, and run only where trackline is watching.
+  `trackline remote disable --all` turns it off everywhere and forgets the
+  passkeys.
+- **An optional account.** `trackline connect` links a project to a trackline
+  account and a live dashboard: what the agent is doing, its replies, and
+  alerts. `trackline account` and `trackline disconnect`. Nothing uploads
+  without it.
+- **Setup.** `trackline init` sets up every installed agent when not told
+  which, and `trackline status` says which agent is set up but has never
+  reported, and why.
+
 ## 0.2.0 · 2026-09-24
 
 - **Cursor.** `trackline init --host cursor` wires the hook into Cursor. It sees
