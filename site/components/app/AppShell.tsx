@@ -6,6 +6,7 @@ import { type Project, whileVisible } from "@/lib/dashboard";
 import type { Overview as Remote } from "@/lib/remote";
 import Mark from "@/components/Mark";
 import AgentLogo from "./AgentLogo";
+import InstallHint from "./InstallHint";
 import PairingPrompt from "./PairingPrompt";
 import { IconBell, IconChat, IconHome, IconLaptop, IconPlus, IconSignOut, IconUser } from "./icons";
 import "./app.css";
@@ -141,7 +142,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
           <a href="/account" className="app-avatar-link" aria-label="Account"><Avatar user={user} /></a>
         </header>
 
-        <main className={`app-main ${flush || chat ? "flush" : ""}`}>{children}</main>
+        <main className={`app-main ${flush || chat ? "flush" : ""}`}>{!chat && <InstallHint />}{children}</main>
 
         <nav className="app-tabs" aria-label="Main">
           <a className="app-tab" href="/app" aria-current={section === "overview" ? "page" : undefined}><IconHome />Home</a>
