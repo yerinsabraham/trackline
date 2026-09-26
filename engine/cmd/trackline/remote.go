@@ -427,7 +427,7 @@ func handle(client remote.Client, creds account.Credentials, d remote.Delivery, 
 
 	name := filepath.Base(got.Root)
 	logf("accepted %s job %s for %s", got.Job.Kind, d.ID, name)
-	if got.Job.Kind == "prompt" {
+	if relay.Continues(got.Job.Kind) {
 		startPrompt(client, d, got, running)
 		return
 	}

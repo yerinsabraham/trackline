@@ -17,6 +17,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
+	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
 )
@@ -165,6 +166,15 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("busy", "an agent is already working in this project; wait for it or stop it")
 		return
 	}
+	if j.Kind == "allow" || j.Kind == "deny" {
+		if err := decide(got); err != nil {
+			r.finish(j.Project)
+			cancel(nil)
+			refuse("failed", "the laptop could not record the decision: "+err.Error())
+			return
+		}
+		j.Text = decisionText(j)
+	}
 	logf("starting %s for job %s in %s", name, d.ID, got.Root)
 	notify("trackline: remote prompt", fmt.Sprintf("%s started in %s: %s", name, filepath.Base(got.Root), firstLine(j.Text, 80)))
 	go func() {
@@ -176,6 +186,37 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		}
 		logf("job %s ended: %s %s", d.ID, res.Status, res.Code)
 	}()
+}
+
+// decide records "allow once" where trackline's hook will find it: the next
+// matching action in this session passes, once. "Keep blocked" records
+// nothing; the check already blocks.
+func decide(got relay.Accepted) error {
+	j := got.Job
+	if j.Kind != "allow" {
+		return nil
+	}
+	return override.NewStore(got.Root).Add(override.Grant{
+		Signal: j.Check, Target: j.Target, Scope: override.ScopeNext, Session: j.Session,
+		Reason: "allowed from your phone",
+	})
+}
+
+// decisionText is what the agent is told, written here on the laptop: a
+// decision carries a check and a target, never words of its own for the agent.
+func decisionText(j relay.Job) string {
+	// Measured: told only "approved, go ahead", Claude Code declined, taking
+	// it as a request to get round the hook and expecting a retry to be
+	// blocked again. It has to know the approval is recorded in trackline
+	// itself, and that the same action, unchanged, is what passes.
+	if j.Kind == "allow" {
+		return fmt.Sprintf("You were stopped by trackline (%s: %s). The person you are working with has now approved exactly that action "+
+			"from their phone, and trackline has recorded the approval: trackline's hook will let the same action through once. "+
+			"Retry the same action now, unchanged, the same way you tried it before. Do not use any other way around the check. "+
+			"If it is stopped again, say so and stop.", j.Check, j.Target)
+	}
+	return fmt.Sprintf("The person you are working with has decided, from their phone, to keep this blocked (%s: %s). "+
+		"Do not try it again or work around it. Carry on without it, and say so if you cannot finish.", j.Check, j.Target)
 }
 
 func firstLine(s string, n int) string {

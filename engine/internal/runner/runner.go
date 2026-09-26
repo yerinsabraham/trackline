@@ -288,7 +288,10 @@ func applyOverrides(rep engine.Report, grants *override.Store, ev event.Event) (
 		}
 		var kept []verdict.Verdict
 		for _, v := range res.Verdicts {
-			if _, ok := grants.Allows(res.Signal, v.Target, ev.SessionID, ev.TurnID); ok {
+			if g, ok := grants.Allows(res.Signal, v.Target, ev.SessionID, ev.TurnID); ok {
+				if g.Scope == override.ScopeNext {
+					_ = grants.Consume(g)
+				}
 				removed = append(removed, v)
 				continue
 			}

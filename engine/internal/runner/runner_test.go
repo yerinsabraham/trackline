@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"os"
 	"path/filepath"
 	"strings"
@@ -241,5 +242,24 @@ func TestUnreadableRulesAreCannotMeasure(t *testing.T) {
 	}
 	if d.Block {
 		t.Error("an unreadable rules file must never block")
+	}
+}
+
+// "Allow once" from the phone lets the retried action through in a remote
+// session, once; the next attempt is stopped again.
+func TestAllowOnceFromThePhoneLetsOneActionThrough(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.RemoteEnv, "job_1")
+	override.NewStore(root).Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeNext, Session: "s"})
+	first, err := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Block {
+		t.Fatal("the approved action was still stopped")
+	}
+	second, _ := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
+	if !second.Block {
+		t.Fatal("an approval for one action let a second one through")
 	}
 }

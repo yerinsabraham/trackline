@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 )
@@ -100,5 +101,42 @@ func TestRemove(t *testing.T) {
 	}
 	if _, ok := s.Allows("scope", "b.ts", "s", "t"); !ok {
 		t.Error("removing one must not remove the others")
+	}
+}
+
+// "Allow once" from the phone holds for the next matching action in its
+// session, in whatever request that comes, and never anywhere else.
+func TestNextHoldsInItsSessionAcrossRequests(t *testing.T) {
+	root := t.TempDir()
+	s := override.NewStore(root)
+	s.Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeNext, Session: "s1"})
+
+	// The dashboard shows paths relative to the project; the check sees them whole.
+	g, ok := s.Allows("off-limits", filepath.Join(root, ".env"), "s1", "a-later-request")
+	if !ok {
+		t.Fatal("the approval should hold for the retry in a later request")
+	}
+	if _, ok := s.Allows("off-limits", filepath.Join(root, ".env"), "s2", "t"); ok {
+		t.Error("an approval for one session must not hold in another")
+	}
+	if _, ok := s.Allows("off-limits", filepath.Join(root, "config", ".env"), "s1", "t"); ok {
+		t.Error("an approval for one file must not hold for another")
+	}
+	if err := s.Consume(g); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := override.NewStore(root).Allows("off-limits", filepath.Join(root, ".env"), "s1", "t"); ok {
+		t.Error("allowed once must mean once")
+	}
+}
+
+func TestNextLapsesUnused(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, ".trackline"), 0o755)
+	old := time.Now().Add(-override.NextLife - time.Minute).UTC().Format(time.RFC3339)
+	os.WriteFile(filepath.Join(root, ".trackline", "overrides.json"),
+		[]byte(`[{"signal":"off-limits","target":".env","scope":"next","session":"s1","at":"`+old+`"}]`), 0o600)
+	if _, ok := override.NewStore(root).Allows("off-limits", ".env", "s1", "t"); ok {
+		t.Fatal("an approval unused for over an hour still held")
 	}
 }

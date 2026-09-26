@@ -14,6 +14,7 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
+	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/relaytest"
@@ -520,5 +521,45 @@ func TestAnotherConfigFolderNeverTouchesTheRealLoginAgent(t *testing.T) {
 		if strings.HasSuffix(b, "/"+real) {
 			t.Fatalf("stopped the real agent: %s", b)
 		}
+	}
+}
+
+func decisionJob(phone *relaytest.Phone, id, project, kind string) remote.Delivery {
+	now := time.Now()
+	return remote.Delivery{ID: id, Envelope: phone.Send(relay.Job{V: 1, ID: id, Machine: "dev_laptop", Project: project,
+		Kind: kind, Agent: "claude", Session: "sess-1", Check: "off-limits", Target: ".env",
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}
+}
+
+// Allow once records the approval where the hook finds it, then continues
+// the session telling the agent to go ahead, in words written here.
+func TestAllowOnceRecordsTheApprovalAndResumes(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{decisionJob(phone, "job_allow", proj, "allow")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_allow"]; r.Status != "done" {
+		t.Fatalf("result: %+v", r)
+	}
+	if _, ok := override.NewStore(root).Allows("off-limits", filepath.Join(root, ".env"), "sess-1", "any"); !ok {
+		t.Fatal("the approval was not recorded")
+	}
+	if !strings.Contains(read(t, filepath.Join(out, "argv")), "--resume sess-1") || !strings.Contains(read(t, filepath.Join(out, "prompt")), "Retry the same action now") {
+		t.Fatalf("argv %q prompt %q", read(t, filepath.Join(out, "argv")), read(t, filepath.Join(out, "prompt")))
+	}
+}
+
+func TestKeepBlockedRecordsNothing(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{decisionJob(phone, "job_deny", proj, "deny")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if len(override.NewStore(root).List()) != 0 {
+		t.Fatal("keeping it blocked recorded an approval")
+	}
+	if !strings.Contains(read(t, filepath.Join(out, "prompt")), "keep this blocked") {
+		t.Fatalf("prompt %q", read(t, filepath.Join(out, "prompt")))
 	}
 }

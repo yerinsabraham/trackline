@@ -35,7 +35,11 @@ type Job struct {
 	Text    string `json:"text"`
 	// Session continues the agent's own session instead of starting one:
 	// the reply box under an answer, on the phone.
-	Session   string `json:"session,omitempty"`
+	Session string `json:"session,omitempty"`
+	// Check and Target name what an allow or deny job decides: the check
+	// that stopped an action, and what it stopped.
+	Check     string `json:"check,omitempty"`
+	Target    string `json:"target,omitempty"`
 	IssuedAt  int64  `json:"issuedAt"`
 	ExpiresAt int64  `json:"expiresAt"`
 }
@@ -63,7 +67,12 @@ const (
 
 // Kinds a job may be: a test job proves the path and runs nothing; a prompt
 // starts an agent.
-var kinds = map[string]bool{"test": true, "prompt": true}
+var kinds = map[string]bool{"test": true, "prompt": true, "allow": true, "deny": true}
+
+// Continues is whether a kind of job runs the agent in an existing session.
+func Continues(kind string) bool { return kind == "prompt" || kind == "allow" || kind == "deny" }
+
+var checkName = regexp.MustCompile(`^[a-z][a-z-]{0,39}$`)
 
 var sessionID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
@@ -154,8 +163,20 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	}
 	// A session id goes on the agent's command line, so it must look like
 	// one: never empty-but-set, never something that reads as a flag.
-	if j.Session != "" && (j.Kind != "prompt" || !sessionID.MatchString(j.Session)) {
+	if j.Session != "" && (!Continues(j.Kind) || !sessionID.MatchString(j.Session)) {
 		return Accepted{}, refuse("unsupported", "that is not a session this runner can continue")
+	}
+	// A decision names one check, one target and the session it belongs to.
+	// Never a pattern: allowing "everything under src" is for the laptop's
+	// configuration, not a tap on a phone.
+	if j.Kind == "allow" || j.Kind == "deny" {
+		t := j.Target
+		if j.Agent == "" || j.Session == "" || !checkName.MatchString(j.Check) ||
+			t == "" || len(t) > 512 || strings.ContainsAny(t, "\n\r*\x00") {
+			return Accepted{}, refuse("unsupported", "a decision needs an agent, a session, one check and one target")
+		}
+	} else if j.Check != "" || j.Target != "" {
+		return Accepted{}, refuse("unsupported", "only a decision names a check")
 	}
 
 	p, ok := s.Projects[j.Project]

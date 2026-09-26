@@ -48,7 +48,15 @@ const (
 	// ScopeProject lasts until removed. For a decision that is genuinely
 	// permanent, like a path the project has decided is fine to write.
 	ScopeProject Scope = "project"
+	// ScopeNext is "allow once" from the phone: the next matching action in
+	// one session, whichever request it comes in, then gone. The retry comes
+	// in a new request (the phone's message), so ScopeOnce could never cover
+	// it. Unused, it lapses after NextLife.
+	ScopeNext Scope = "next"
 )
+
+// NextLife is how long an unused "allow once" from the phone waits.
+const NextLife = time.Hour
 
 // Store holds grants for a project.
 type Store struct {
@@ -81,7 +89,7 @@ func (s *Store) load() []Grant {
 // Allows reports whether a human has already approved this, and why.
 func (s *Store) Allows(signal, target, session, turn string) (Grant, bool) {
 	for _, g := range s.load() {
-		if g.Signal != signal || !matches(g.Target, target) {
+		if g.Signal != signal || !matches(g.Target, s.relative(target)) && !matches(g.Target, target) {
 			continue
 		}
 		switch g.Scope {
@@ -92,9 +100,54 @@ func (s *Store) Allows(signal, target, session, turn string) (Grant, bool) {
 			if g.Session == session && g.Turn == turn {
 				return g, true
 			}
+		case ScopeNext:
+			if g.Session == session && g.Session != "" && time.Since(g.At) < NextLife {
+				return g, true
+			}
 		}
 	}
 	return Grant{}, false
+}
+
+// relative is a path as the dashboard shows it, relative to the project, so
+// an approval made there (which never sees absolute paths) matches the
+// absolute path the check reports. Anything else is returned unchanged.
+func (s *Store) relative(target string) string {
+	root := filepath.Dir(filepath.Dir(s.Path))
+	if !filepath.IsAbs(target) || root == "." {
+		return target
+	}
+	r, err := filepath.Rel(root, target)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return target
+	}
+	return filepath.ToSlash(r)
+}
+
+// Consume removes a "next" grant once it has been used: allowed once means
+// once.
+func (s *Store) Consume(used Grant) error {
+	var kept []Grant
+	gone := false
+	for _, g := range s.load() {
+		if !gone && g.Scope == ScopeNext && g.Signal == used.Signal && g.Target == used.Target && g.Session == used.Session && g.At.Equal(used.At) {
+			gone = true
+			continue
+		}
+		kept = append(kept, g)
+	}
+	if !gone {
+		return nil
+	}
+	if kept == nil {
+		kept = []Grant{}
+	}
+	s.grants = kept
+	b, err := json.MarshalIndent(kept, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.Path, append(b, '\n'), 0o600)
 }
 
 // matches compares an approved target with the one now in question.
@@ -161,8 +214,11 @@ func (s *Store) Remove(signal, target string) (int, error) {
 // Describe renders a grant for a human reading the list back.
 func (g Grant) Describe() string {
 	scope := "for this request only"
-	if g.Scope == ScopeProject {
+	switch g.Scope {
+	case ScopeProject:
 		scope = "for this project"
+	case ScopeNext:
+		scope = "once, from your phone"
 	}
 	out := fmt.Sprintf("%s on %s, %s", g.Signal, g.Target, scope)
 	if g.Reason != "" {
