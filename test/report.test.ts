@@ -4,18 +4,20 @@ import assert from 'node:assert/strict';
 import { findRegressions, toBaseline } from '../src/report.js';
 import type { RunReport } from '../src/types.js';
 
-const report = (value: number): RunReport => ({
+const cases = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `case-${i}`, passed: true, scores: {} }));
+
+const report = (value: number, n = 0, sampleSize?: number, mode: RunReport['mode'] = 'fixture', suite = 'retrieval'): RunReport => ({
   startedAt: '2026-01-01T00:00:00.000Z',
   gitSha: 'abc123',
-  mode: 'fixture',
+  mode,
   judgeModel: null,
   suites: [
     {
-      suite: 'retrieval',
-      cases: [],
+      suite,
+      cases: cases(n),
       errors: [],
       metrics: [
-        { key: 'recall@5', value, primary: true, higherIsBetter: true },
+        { key: 'recall@5', value, primary: true, higherIsBetter: true, sampleSize },
         { key: 'emptyRate', value: 0, primary: false, higherIsBetter: false },
       ],
     },
@@ -38,6 +40,31 @@ describe('gate regressions', () => {
     const regressions = findRegressions(report(0.8), { 'retrieval.recall@5': 0.9 });
     assert.equal(regressions.length, 1);
     assert.equal(regressions[0]?.kind, 'tolerance');
+  });
+
+  it('does not hide a one-case regression on a small dataset', () => {
+    const regressions = findRegressions(report(0.92, 25, 25), { 'retrieval.recall@5': 0.96 });
+    assert.equal(regressions.length, 1);
+    assert.equal(regressions[0]?.kind, 'tolerance');
+  });
+
+  it('uses the metric denominator when it differs from the suite size', () => {
+    const regressions = findRegressions(report(0.75, 100, 20), { 'retrieval.recall@5': 0.8 });
+    assert.equal(regressions.length, 1);
+    assert.equal(regressions[0]?.kind, 'tolerance');
+  });
+
+  it('keeps the full tolerance for live runs, where a row can flip on noise', () => {
+    assert.deepEqual(findRegressions(report(0.995, 200, 200, 'live'), { 'retrieval.recall@5': 1 }), []);
+    assert.deepEqual(findRegressions(report(0.92, 25, 25, 'live'), { 'retrieval.recall@5': 0.96 }), []);
+  });
+
+  it('keeps the full tolerance for the judge even in fixture mode', () => {
+    assert.deepEqual(findRegressions(report(0.92, 25, 25, 'fixture', 'groundedness'), { 'groundedness.recall@5': 0.96 }), []);
+  });
+
+  it('still fails a live run that drifts beyond the full tolerance', () => {
+    assert.equal(findRegressions(report(0.9, 200, 200, 'live'), { 'retrieval.recall@5': 0.96 }).length, 1);
   });
 });
 

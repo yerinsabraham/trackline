@@ -60,6 +60,11 @@ export interface Metric {
   unit?: 'ms' | 'usd' | 'count';
   higherIsBetter: boolean;
   /**
+   * Number of rows behind this metric. Used by the gate to keep a tolerance
+   * from hiding a one-row regression on small datasets.
+   */
+  sampleSize?: number;
+  /**
    * Primary metrics gate the build. Secondary ones are reported and tracked but
    * never block a merge. Latency on a laptop is noise, not signal.
    */
