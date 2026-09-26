@@ -372,3 +372,7 @@ body:has(.app-shell) > footer.dark { display: none; }
 .acct-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 @media (min-width: 1100px) { .acct-grid { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; } }
 .app-shell .account-input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; }
+
+.finding-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.finding-actions .btn-act, .finding-actions .btn-plain { height: 36px; padding: 0 14px; font-size: 13.5px; }
+.finding-actions .decided { font-size: 13px; color: var(--ink-2); }

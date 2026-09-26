@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ago, LIGHT_LABEL, type SessionSummary } from "@/lib/dashboard";
+import { ago, LIGHT_LABEL, requestLabel, type SessionSummary } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
@@ -100,8 +100,8 @@ export default function Overview() {
                 <a key={s.id} href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link">
                   <AgentLogo host={s.host} size={30} />
                   <span className="row-main">
-                    <span className="row-top"><strong>{s.request ?? "A request"}</strong><span className="when">{ago(s.lastAt)}</span></span>
-                    <span className="row-note">trackline stopped an action. Open the session to see why.</span>
+                    <span className="row-top"><strong>{requestLabel(s.request) ?? "A request"}</strong><span className="when">{ago(s.lastAt)}</span></span>
+                    <span className="row-note">trackline stopped an action. Open it to allow once or keep it blocked.</span>
                   </span>
                 </a>
               ))}
@@ -171,7 +171,7 @@ export function SessionRow({ s, project, current }: { s: SessionSummary; project
       <AgentLogo host={s.host} size={34} />
       <span className="row-main">
         <span className="row-top">
-          <strong>{s.request ?? "Request not recorded"}</strong>
+          <strong>{requestLabel(s.request) ?? "Request not recorded"}</strong>
           <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>
         </span>
         <span className="row-meta">{project ? `${project} · ` : ""}{ago(s.lastAt)}</span>

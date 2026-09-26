@@ -43,13 +43,16 @@ export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
   );
 }
 
-export function Finding({ tone, title, children }: { tone: "block" | "warn"; title: ReactNode; children?: ReactNode }) {
+export function Finding({ tone, title, children, actions }: { tone: "block" | "warn"; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div className={`finding ${tone === "warn" ? "warn" : ""}`}>
       <span style={{ width: 20, flex: "none", color: tone === "warn" ? "#9a6700" : "#c8321a", display: "flex" }}>
         {tone === "warn" ? <IconAlert /> : <IconShield />}
       </span>
-      <div><strong>{title}</strong>{children && <p>{children}</p>}</div>
+      <div style={{ flexGrow: 1, minWidth: 0 }}>
+        <strong>{title}</strong>{children && <p>{children}</p>}
+        {actions && <div className="finding-actions">{actions}</div>}
+      </div>
     </div>
   );
 }

@@ -129,6 +129,24 @@ export async function signPrompt(machine: string, project: string, agent: string
   return { machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
 }
 
+/**
+ * Signs a decision about something trackline stopped: allow it once, or keep
+ * it blocked. It names the check and the target only; the laptop writes the
+ * words the agent is told.
+ */
+export async function signDecision(
+  machine: string, project: string, agent: string, session: string,
+  kind: "allow" | "deny", check: string, target: string, keys: Passkey[],
+) {
+  const now = Date.now();
+  const bytes = utf8(JSON.stringify({
+    v: 1, id: jobId(), machine, project, kind, agent, text: "", session, check, target,
+    issuedAt: now, expiresAt: now + JOB_LIFE_MS,
+  }));
+  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
+  return { machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
+}
+
 /** What a job's status means, in words. */
 export function jobState(j: { status: string; code: string | null; reason: string | null }): string {
   switch (j.status) {

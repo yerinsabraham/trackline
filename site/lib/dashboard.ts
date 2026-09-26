@@ -84,3 +84,17 @@ export const WAKE: Record<string, { text: string; copy?: string }> = {
   cursor: { text: "Send a message in Cursor's agent chat in this project." },
   "claude-code": { text: "Send a message in Claude Code in this project." },
 };
+
+/**
+ * A request as a person would name it. A decision made on the phone reaches
+ * the agent as a message the laptop writes (engine/cmd/trackline/remote_agent.go,
+ * decisionText); shown whole it would read as something you typed.
+ */
+export function requestLabel(text: string | null): string | null {
+  if (!text) return text;
+  const allow = text.match(/^You were stopped by trackline \([^:]+: (.+?)\)\. The person you are working with has now approved/);
+  if (allow) return `Allowed once from your phone: ${allow[1]}`;
+  const deny = text.match(/^The person you are working with has decided, from their phone, to keep this blocked \([^:]+: (.+?)\)\./);
+  if (deny) return `Kept blocked from your phone: ${deny[1]}`;
+  return text;
+}

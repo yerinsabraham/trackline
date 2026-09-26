@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
-import { LIGHT_LABEL, type FeedEvent, type Reply, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, jobState, type Job, type Passkey, signPrompt } from "@/lib/remote";
+import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
+import { active, jobState, type Job, type Passkey, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { Activity, AgentReply, Composer, Finding, type Line, MyMessage } from "@/components/app/Chat";
@@ -62,6 +62,10 @@ export default function Session() {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Sent[]>([]);
+  // Decisions made here, by the action they were about.
+  const [decided, setDecided] = useState<Record<string, "allow" | "deny">>({});
+  const [deciding, setDeciding] = useState("");
+  const [decideError, setDecideError] = useState("");
   const cursor = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const keys = useRef<Passkey[] | null>(null);
@@ -123,11 +127,33 @@ export default function Session() {
     : cont.machine.stopped ? `Remote is stopped on ${cont.machine.name}. Turn it on again on the laptop.`
     : undefined;
 
+  const passkeys = async () => {
+    if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
+    if (!keys.current.length) throw new Error("Add a passkey on your account page first: every decision is signed with it.");
+    return keys.current;
+  };
+
+  // Allow once, or keep blocked: signed here, decided on the laptop, and the
+  // agent is told in this same session.
+  const decide = async (e: FeedEvent, kind: "allow" | "deny") => {
+    const f = e.findings[0];
+    if (!cont || !f?.target) return;
+    setDeciding(e.id); setDecideError("");
+    try {
+      const body = await signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, f.target, await passkeys());
+      const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
+      setDecided((d) => ({ ...d, [e.id]: kind }));
+      setSent((x) => [...x, { job: r.id, text: kind === "allow" ? `Allow once: ${f.target}` : `Keep blocked: ${f.target}`, status: "queued", code: null, reason: null }]);
+    } catch (err) {
+      setDecideError((err as Error).message);
+    } finally {
+      setDeciding("");
+    }
+  };
+
   const send = async (text: string) => {
     if (!cont) return;
-    if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
-    if (!keys.current.length) throw new Error("Add a passkey on your account page first: every message is signed with it.");
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, keys.current, cont.session);
+    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     setSent((x) => [...x, { job: r.id, text, status: "queued", code: null, reason: null }]);
   };
@@ -147,7 +173,7 @@ export default function Session() {
           <a href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack /></a>
           {s && <AgentLogo host={s.host} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
-            <h1>{s?.request ?? (error ? "Session" : "Loading…")}</h1>
+            <h1>{requestLabel(s?.request ?? null) ?? (error ? "Session" : "Loading…")}</h1>
             <span className="row-meta">{s ? `${agentName(s.host)} · ${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
           </div>
           {s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
@@ -164,18 +190,35 @@ export default function Session() {
               const stops = t.events.filter((e) => e.findings.length && (e.blocked || e.severity));
               return (
                 <div key={t.key || i} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {t.request && <MyMessage text={t.request} />}
+                  {t.request && <MyMessage text={requestLabel(t.request)!} />}
                   <Activity lines={t.events.map(line)} live={last && working && !t.reply} />
-                  {stops.slice(0, 3).map((e) => (
-                    <Finding key={e.id} tone={e.blocked || e.severity === "block" ? "block" : "warn"} title={e.findings[0].summary}>
-                      {e.findings[0].suggestion ?? (e.blocked ? `${agentName(s?.host)} was told why and carried on.` : undefined)}
-                    </Finding>
-                  ))}
+                  {stops.slice(0, 3).map((e) => {
+                    const blocking = e.blocked || e.severity === "block";
+                    // Only the latest turn's stops are still open to a decision,
+                    // and only where a laptop can carry it out.
+                    const open = last && blocking && !!cont && !cont.machine.stopped && !!e.findings[0].target && !working;
+                    const choice = decided[e.id];
+                    return (
+                      <Finding key={e.id} tone={blocking ? "block" : "warn"} title={e.findings[0].summary}
+                        actions={choice ? <span className="decided">{choice === "allow" ? "Allowed once. It is trying again." : "Kept blocked. It has been told."}</span>
+                          : open ? (
+                            <>
+                              <button className="btn-act" disabled={!!deciding} onClick={() => decide(e, "allow")}>{deciding === e.id ? "Waiting for your passkey…" : "Allow once"}</button>
+                              <button className="btn-plain" disabled={!!deciding} onClick={() => decide(e, "deny")}>Keep blocked</button>
+                            </>
+                          ) : undefined}>
+                        {e.findings[0].suggestion ?? (e.blocked ? `${agentName(s?.host)} was told why and carried on.` : undefined)}
+                        {decideError && open && !choice ? <><br /><span style={{ color: "var(--red-ink)" }}>{decideError}</span></> : null}
+                      </Finding>
+                    );
+                  })}
                   {t.reply && <AgentReply host={s?.host ?? null} text={t.reply.text} />}
                 </div>
               );
             })}
-            {sent.map((x) => (
+            {/* Once the laptop has done it, the conversation above shows it;
+                only what is still on its way, or went wrong, stays here. */}
+            {sent.filter((x) => active(x.status) || x.status !== "done").map((x) => (
               <MyMessage key={x.job} text={x.text} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
             ))}
           </div>
