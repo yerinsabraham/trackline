@@ -174,7 +174,16 @@ npm run evals:record     # live run that rewrites the fixtures
 npm run evals:baseline   # accept current numbers as the new baseline
 npm run doctor           # validate datasets, fixtures, baseline before scoring
 npm run build            # tsc -> dist/, which is what `bin: trackline` points at
+
+# Releasing (changelog entry first)
+./scripts/release.sh 0.11.0   # tag first, main only after npm has it
 ```
+
+**Release with the script, never by pushing the release commit to main.**
+Pushed straight to main, the release commit names platform packages npm does
+not have yet, and CI's strict `npm ci` fails on every release. The script
+pushes the tag alone, waits for the Release workflow to publish, records the
+published packages in the lockfile, and only then pushes main.
 
 CLI equivalents for the gate: `trackline-gate run|record|baseline|doctor|init`.
 `run` is the default command. The watcher's CLI is `trackline`; see
