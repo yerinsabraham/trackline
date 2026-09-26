@@ -29,6 +29,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/signal/repetition"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/testweak"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/workaround"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
 
@@ -257,6 +258,14 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 			d.Message = askMessage(rep)
 		}
 	}
+	// Remembered, so a way round it later in the session can be recognised.
+	if d.Block && record && root != "" {
+		var blocks []session.Block
+		for _, v := range rep.Findings() {
+			blocks = append(blocks, session.Block{Signal: v.Signal, Target: v.Target, What: blockedWhat(ev, v.Target), At: ev.At})
+		}
+		_ = turnState.RecordBlocks(ev, blocks)
+	}
 	return d
 }
 
@@ -363,6 +372,9 @@ func build(cfg config.Config, root string, counter *session.TurnCounter) []signa
 	if !cfg.IsDisabled(dependency.Name) {
 		out = append(out, dependency.New())
 	}
+	if !cfg.IsDisabled(workaround.Name) {
+		out = append(out, workaround.New(counter, root))
+	}
 	if !cfg.IsDisabled(testweak.Name) {
 		out = append(out, testweak.New())
 	}
@@ -418,4 +430,21 @@ func blockMessage(rep engine.Report) string {
 		}
 	}
 	return b.String()
+}
+
+// blockedWhat is a stopped action in a few words, for the evidence of a later
+// way round it.
+func blockedWhat(ev event.Event, target string) string {
+	tool := ev.Action.ToolName
+	if tool == "" {
+		tool = string(ev.Action.Type)
+	}
+	if ev.Action.Command != "" {
+		c := ev.Action.Command
+		if len(c) > 120 {
+			c = c[:120] + "…"
+		}
+		return tool + " `" + c + "`"
+	}
+	return tool + " " + target
 }

@@ -55,7 +55,23 @@ to `toBeDefined()`).
 
 It reads the change to the test itself, so it catches the two-line edit that
 scope and diff size cannot see. It stays quiet when your request asked for a
-test to be skipped or removed, and on a new test file.
+test to be skipped or removed, and on a new test file. `trackline show` lists
+the lines that changed as they were and as they are, so a test that really
+needed updating can be told from one that was made to stop failing.
+
+## workaround
+
+After trackline blocks a file, the same file reached another way: a script
+the agent writes that writes it, a build step or `package.json` hook, a
+command like `python -c "open('.env','w')"`. Each of those is allowed on its
+face, and the check that blocked the first attempt never sees the file named
+as a path.
+
+It remembers what was blocked in the session and reads later writes and
+commands for the file's name standing on its own (`.env`, not
+`.env.example`). The finding shows the blocked call and the route taken after
+it, side by side. It warns: a comment explaining why the agent left `.env`
+alone mentions it too.
 
 ## repetition
 

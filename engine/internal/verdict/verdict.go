@@ -46,6 +46,9 @@ const (
 	EvidenceTurn    EvidenceKind = "turn"
 	EvidenceCommand EvidenceKind = "command"
 	EvidenceCount   EvidenceKind = "count"
+	// EvidenceCode is a line of code as it was or as it now is. Kept on the
+	// laptop: the upload has no field for evidence values.
+	EvidenceCode EvidenceKind = "code"
 )
 
 // Evidence is one checkable fact behind a verdict.

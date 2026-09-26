@@ -110,6 +110,10 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 	}
 
 	ev = append([]verdict.Evidence{{Kind: verdict.EvidenceFile, Value: file, Note: "the test being changed"}}, ev...)
+	// The lines themselves, as they were and as they are. Sometimes a test
+	// really is wrong, and a reviewer can only tell a fix from a disappearing
+	// failure by reading exactly what changed (asked for by a reader).
+	ev = append(ev, sideBySide(before, after)...)
 	return verdict.Finding(Name, verdict.Verdict{
 		Severity:   verdict.SeverityWarn,
 		Target:     file,
@@ -156,6 +160,46 @@ func isTest(p string) bool {
 	}
 	dir := "/" + filepath.ToSlash(strings.ToLower(filepath.Dir(p))) + "/"
 	return strings.Contains(dir, "/__tests__/") || strings.Contains(dir, "/tests/") || strings.Contains(dir, "/test/") || strings.Contains(dir, "/spec/")
+}
+
+// shownLines bounds each side of the comparison.
+const shownLines = 4
+
+// sideBySide lists the test lines that went, then the ones that replaced
+// them: only lines that skip, focus or assert, so a reformat around them does
+// not bury the change.
+func sideBySide(before, after string) []verdict.Evidence {
+	relevant := func(l string) bool {
+		return skipRe.MatchString(l) || assertRe.MatchString(l) || exactRe.MatchString(l) || looseRe.MatchString(l)
+	}
+	lines := func(s string) map[string]int {
+		m := map[string]int{}
+		for _, l := range strings.Split(s, "\n") {
+			m[strings.TrimSpace(l)]++
+		}
+		return m
+	}
+	was, now := lines(before), lines(after)
+	pick := func(text string, other map[string]int, label string) []verdict.Evidence {
+		var out []verdict.Evidence
+		seen := map[string]int{}
+		for _, l := range strings.Split(text, "\n") {
+			t := strings.TrimSpace(l)
+			if t == "" || !relevant(t) {
+				continue
+			}
+			seen[t]++
+			if seen[t] <= other[t] || len(out) == shownLines {
+				continue
+			}
+			if len(t) > 160 {
+				t = t[:160] + "…"
+			}
+			out = append(out, verdict.Evidence{Kind: verdict.EvidenceCode, Value: label + t, Note: strings.TrimSuffix(label, ": ")})
+		}
+		return out
+	}
+	return append(pick(before, now, "was: "), pick(after, was, "now: ")...)
 }
 
 func count(re *regexp.Regexp, s string) int { return len(re.FindAllString(s, -1)) }

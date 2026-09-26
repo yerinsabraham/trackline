@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 )
@@ -112,7 +113,23 @@ type TurnState struct {
 	SessionID string        `json:"sessionId"`
 	TurnID    string        `json:"turnId"`
 	Events    []event.Event `json:"events"`
+	// Blocks are what trackline stopped in this session, kept across turns:
+	// a way round a block often comes after the person has said something.
+	Blocks []Block `json:"blocks,omitempty"`
 }
+
+// Block is one action trackline stopped, as a later check needs it.
+type Block struct {
+	Signal string `json:"signal"`
+	Target string `json:"target"`
+	// What is the stopped action in a few words: the tool and its file or
+	// command.
+	What string    `json:"what"`
+	At   time.Time `json:"at"`
+}
+
+// blocksKept bounds TurnState.Blocks.
+const blocksKept = 20
 
 // TurnCounter reads and updates the per-turn state file.
 type TurnCounter struct {
@@ -146,10 +163,46 @@ func (c *TurnCounter) load(sessionID, turnID string) (TurnState, error) {
 	if c.err != nil {
 		return TurnState{}, c.err
 	}
-	if c.state.SessionID != sessionID || c.state.TurnID != turnID {
+	if c.state.SessionID != sessionID {
 		return TurnState{}, nil
 	}
+	if c.state.TurnID != turnID {
+		return TurnState{SessionID: sessionID, Blocks: c.state.Blocks}, nil
+	}
 	return c.state, nil
+}
+
+// BlocksInSession returns what was stopped earlier in this session.
+func (c *TurnCounter) BlocksInSession(sessionID string) ([]Block, error) {
+	if !c.loaded {
+		if _, err := c.load(sessionID, ""); err != nil {
+			return nil, err
+		}
+	}
+	if c.err != nil {
+		return nil, c.err
+	}
+	if c.state.SessionID != sessionID {
+		return nil, nil
+	}
+	return c.state.Blocks, nil
+}
+
+// RecordBlocks notes what was stopped, after the event itself was appended.
+func (c *TurnCounter) RecordBlocks(ev event.Event, blocks []Block) error {
+	if c.Path == "" || len(blocks) == 0 {
+		return nil
+	}
+	st, err := c.load(ev.SessionID, ev.TurnID)
+	if err != nil {
+		return err
+	}
+	st.SessionID, st.TurnID = ev.SessionID, ev.TurnID
+	st.Blocks = append(st.Blocks, blocks...)
+	if len(st.Blocks) > blocksKept {
+		st.Blocks = st.Blocks[len(st.Blocks)-blocksKept:]
+	}
+	return c.save(st)
 }
 
 // FilesInTurn returns the distinct paths written under this turn.
@@ -215,6 +268,10 @@ func (c *TurnCounter) Append(ev event.Event) error {
 	ev.Raw = nil
 	st.Events = append(st.Events, ev)
 
+	return c.save(st)
+}
+
+func (c *TurnCounter) save(st TurnState) error {
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
@@ -224,7 +281,11 @@ func (c *TurnCounter) Append(ev event.Event) error {
 	}
 	// Written whole each time rather than appended, so the file is always a
 	// complete state and never a half-updated one.
-	return os.WriteFile(c.Path, b, 0o600)
+	if err := os.WriteFile(c.Path, b, 0o600); err != nil {
+		return err
+	}
+	c.state = st
+	return nil
 }
 
 // shortBody is how much of a body is small enough to keep whole, so two

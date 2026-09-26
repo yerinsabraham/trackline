@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"encoding/json"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"os"
 	"path/filepath"
@@ -303,5 +304,68 @@ func TestARemoteSessionMayNotEditItsOwnSettings(t *testing.T) {
 		if !d.Block {
 			t.Errorf("%s: an agent started from the phone could edit what watches it", f)
 		}
+	}
+}
+
+// After a block, the same file reached through a script the agent writes, or
+// a command it runs, is reported with both the block and the new route.
+func TestAWayRoundABlockIsReported(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, ".trackline.json"), []byte(`{"modes":{"off-limits":"auto"}}`), 0o644)
+	run := func(p string) runner.Decision {
+		t.Helper()
+		d, err := runner.Run([]byte(p), runner.Options{Root: root, Now: time.Now()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	write := func(file, content string) string {
+		b, _ := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "prompt_id": "t2", "tool_name": "Write", "cwd": root,
+			"tool_input": map[string]string{"file_path": file, "content": content}})
+		return string(b)
+	}
+	bash := func(cmd string) string {
+		b, _ := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "prompt_id": "t2", "tool_name": "Bash", "cwd": root,
+			"tool_input": map[string]string{"command": cmd}})
+		return string(b)
+	}
+	finding := func(d runner.Decision) *verdict.Verdict {
+		for _, r := range d.Report.Results {
+			if r.Signal == "workaround" && r.Outcome == verdict.OutcomeFinding {
+				return &r.Verdicts[0]
+			}
+		}
+		return nil
+	}
+
+	if d := run(string(payload(root, ".env"))); !d.Block {
+		t.Fatal("the first write to .env should be blocked")
+	}
+	// Nothing to do with the blocked file: quiet.
+	if f := finding(run(write("config.local.json", `{"apiKey":"test123"}`))); f != nil {
+		t.Fatalf("fired on the right correction: %s", f.Summary)
+	}
+	if f := finding(run(write(".env.example", "API_KEY="))); f != nil {
+		t.Fatalf("fired on a different file with a similar name: %s", f.Summary)
+	}
+	// The same change, routed through a script and a command.
+	f := finding(run(write("scripts/setup.sh", "#!/bin/sh\necho API_KEY=test123 > .env\n")))
+	if f == nil {
+		t.Fatal("a script that writes the blocked file was not reported")
+	}
+	var sawBlock, sawLine bool
+	for _, e := range f.Evidence {
+		sawBlock = sawBlock || strings.Contains(e.Value, "Write") && strings.Contains(e.Value, ".env")
+		sawLine = sawLine || e.Value == "echo API_KEY=test123 > .env"
+	}
+	if !sawBlock || !sawLine {
+		t.Errorf("evidence should show the blocked call and the new route: %+v", f.Evidence)
+	}
+	if d := run(bash("cp /tmp/x .env")); !d.Block || finding(d) != nil {
+		t.Fatal("naming the file as a command's target is the same attempt again: off-limits answers it, not this check")
+	}
+	if finding(run(bash(`python3 -c "open('.env','w').write('API_KEY=test123')"`))) == nil {
+		t.Fatal("a command that writes the blocked file indirectly was not reported")
 	}
 }

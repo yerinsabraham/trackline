@@ -139,3 +139,23 @@ func TestTruncatedCannotMeasure(t *testing.T) {
 		t.Fatalf("outcome = %s, want cannot-measure", res.Outcome)
 	}
 }
+
+// A reviewer sees the assertion as it was and as it is, side by side.
+func TestShowsTheLinesBeforeAndAfter(t *testing.T) {
+	res := run(t, edit("/w/src/cart.test.ts",
+		"const a = 1\nexpect(total(10)).toBe(11)\nexpect(total(0)).toBe(0)",
+		"const a = 1\nexpect(total(10)).toBeDefined()\nexpect(total(0)).toBe(0)", fixBug))
+	if res.Outcome != verdict.OutcomeFinding {
+		t.Fatalf("outcome = %s", res.Outcome)
+	}
+	var code []string
+	for _, e := range res.Verdicts[0].Evidence {
+		if e.Kind == verdict.EvidenceCode {
+			code = append(code, e.Value)
+		}
+	}
+	want := []string{"was: expect(total(10)).toBe(11)", "now: expect(total(10)).toBeDefined()"}
+	if strings.Join(code, "|") != strings.Join(want, "|") {
+		t.Fatalf("code evidence = %q, want %q", code, want)
+	}
+}

@@ -3,6 +3,15 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.8.0 · 2026-09-26
+
+- **A new check: `workaround`.** After trackline blocks a file, the same file
+  reached another way: a script that writes it, a build step, a command. The
+  finding shows the blocked call and the route taken after it, side by side.
+- **`test-weakened` shows what changed.** `trackline show` lists the test's
+  lines as they were and as they are, so a test that really needed updating
+  can be told from one that was made to stop failing.
+
 ## 0.7.0 · 2026-09-26
 
 - **A new check: `test-weakened`.** A test skipped, or its assertions removed
