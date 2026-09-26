@@ -7,6 +7,8 @@ import { ClaudeLogo, CursorLogo, OpenAILogo, TraceBars, TracklineTile } from "@/
 import InstallTabs from "@/components/InstallTabs";
 import TypedChat from "@/components/TypedChat";
 import WatchGate from "@/components/WatchGate";
+import OnTrackDemo from "@/components/landing/OnTrackDemo";
+import PhoneDemo from "@/components/landing/PhoneDemo";
 import { SITE } from "@/lib/site";
 
 const hosts = [
@@ -23,6 +25,7 @@ const table = {
     { label: "Stops an action before it happens", cells: ["yes", "yes", "yes", "no, advises only", "no, alerts after"] },
     { label: "Tells the agent why", cells: ["yes", "yes", "yes", "yes", "no"] },
     { label: "Knows what you asked", cells: ["yes", "yes", "yes", "if the agent says", "if content capture is on"] },
+    { label: "Takes a task from your phone", cells: ["yes", "yes, once its hook is trusted", "not yet", "no", "no"] },
   ],
 };
 
@@ -39,6 +42,9 @@ const limits: [string, string][] = [
   ["Scope stays quiet when your request names no file.", "It will not invent a scope you did not state."],
   ["Through MCP, the agent chooses whether to ask.", "An agent that does not ask is not watched."],
   ["Production has not yet met real traffic.", "It was tested on a stream sent by the real OpenTelemetry libraries, with scripted conversations."],
+  ["From your phone, your laptop has to be awake.", "The task runs on your own machine. Asleep or offline, a task waits three minutes, and the app says so."],
+  ["Codex takes tasks from the phone only once its hook is trusted.", "Codex runs a project's hook only after you trust it, and trackline will not start an agent it cannot watch."],
+  ["Cursor cannot take tasks from the phone yet.", "trackline watches Cursor on your laptop as usual."],
 ];
 
 function Plus() {
@@ -67,8 +73,8 @@ export default function Home() {
         }}
       />
       <section className="hero wrap">
-        <Link className="badge" href="/docs/production">
-          <b>New</b> · Production traces <i>›</i>
+        <Link className="badge" href="#phone">
+          <b>New</b> · From your phone <i>›</i>
         </Link>
         <h1>
           <span className="solid">Know when your agent</span>
@@ -76,7 +82,7 @@ export default function Home() {
         </h1>
         <p className="sub">
           trackline watches what coding agents and production agents actually do, and tells you, or the agent, the
-          moment it stops matching what you asked.
+          moment it stops matching what you asked. Then steer them from your phone.
         </p>
         <HeroActions />
       </section>
@@ -176,6 +182,54 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="section wrap" id="phone" aria-labelledby="phone-h">
+        <div className="sec-head">
+          <div>
+            <p className="eyebrow">From your phone</p>
+            <h2 id="phone-h">Send a task. Watch it work. Decide what it may do.</h2>
+          </div>
+          <p>
+            Your agent, on your laptop, with your own subscription, driven from your phone. trackline watches it the
+            same way it does at your desk.
+          </p>
+        </div>
+        <div className="feature-grid">
+          <ul className="feature-points">
+            <li><span className="n">01</span><div><b>Send a task</b><p>Pick the project and the agent, Claude Code or Codex, and type what you want. It runs on your laptop, never on a server.</p></div></li>
+            <li><span className="n">02</span><div><b>Watch it work</b><p>Each step as it happens, the agent&apos;s reply when it finishes, and a push when it is done. Reply, and it carries on in the same session.</p></div></li>
+            <li><span className="n">03</span><div><b>Decide what it may do</b><p>Secrets and new dependencies are stopped before they happen, and the agent is told why. You choose: Allow once, or Keep blocked.</p></div></li>
+            <li><span className="n">04</span><div><b>Stop it at any time</b><p>One task, or every laptop at once. Turning remote on again takes the laptop itself.</p></div></li>
+          </ul>
+          <PhoneDemo />
+        </div>
+        <p className="feature-note">
+          Every message is signed with your passkey, and your laptop checks the signature itself, so the server that
+          carries it cannot write one. Remote is off until you turn it on, on the laptop:{" "}
+          <code>trackline remote enable</code>.
+        </p>
+      </section>
+
+      <section className="section wrap" aria-labelledby="ontrack-h">
+        <div className="sec-head">
+          <div>
+            <p className="eyebrow">On track</p>
+            <h2 id="ontrack-h">One number for whether your agents did what you asked.</h2>
+          </div>
+          <p>
+            Of the actions trackline could check, the share that matched the request. Then the evidence behind it:
+            which check caught what, in which project, by which agent, in which session.
+          </p>
+        </div>
+        <div className="feature-grid flip">
+          <OnTrackDemo />
+          <ul className="feature-points">
+            <li><span className="n">01</span><div><b>Counted, not guessed</b><p>Every action is checked as it happens. On track is how many passed, out of how many could be checked.</p></div></li>
+            <li><span className="n">02</span><div><b>Never flattered</b><p>An action no check can judge, like reading a file, counts neither way. With nothing checked, there is no number.</p></div></li>
+            <li><span className="n">03</span><div><b>Explained</b><p>Today, this week or this month; by project, by agent and by check; and every action that went off track, one tap from its session.</p></div></li>
+          </ul>
+        </div>
+      </section>
+
       <section className="section wrap" aria-labelledby="where-h">
         <div className="sec-head">
           <div>
@@ -262,7 +316,8 @@ export default function Home() {
           <p className="after">
             Paste the prompt into your agent, or run the commands yourself. It starts in warn mode: it notices
             things and writes them down, and never interrupts you. Run{" "}
-            <code>trackline status</code> after your agent&apos;s next edit to see that it fired.
+            <code>trackline status</code> after your agent&apos;s next edit to see that it fired. For the dashboard and
+            your phone, both optional: <code>trackline connect</code>, then <code>trackline remote enable</code>.
           </p>
           <div className="actions">
             <span className="frame"><Link className="btn btn-quiet" href="/evidence"><Plus />Read the evidence</Link></span>

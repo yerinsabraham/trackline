@@ -14,6 +14,8 @@ export function GET() {
 
 Neutral by construction: an open engine that runs on the user's machine, the same way for every agent. Without an account it sends nothing anywhere.
 
+With an optional account, a dashboard scores how on track each agent is, and the user can send tasks to Claude Code or Codex on their own laptop from their phone, watch them, and allow once or keep blocked what trackline stopped. Every task is signed with the user's passkey and checked on the laptop.
+
 To install it for a user in their project, follow ${SITE}/install.md
 
 ## Docs
