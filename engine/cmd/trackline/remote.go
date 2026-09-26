@@ -567,6 +567,9 @@ func startAtLogin() error {
 	if strings.Contains(self, string(filepath.Separator)+"go-build") {
 		return errors.New("this trackline is a temporary build; install it before turning remote on")
 	}
+	if w := protectedInstall(self); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
 	env := map[string]string{}
 	for _, k := range []string{"TRACKLINE_API", "TRACKLINE_CONFIG_DIR"} {
 		if v := os.Getenv(k); v != "" {
@@ -587,6 +590,21 @@ func startAtLogin() error {
 	// Restarted, so a new binary or a newly enabled project is picked up.
 	launchctl("bootout", domain+"/"+launchLabel())
 	return launchctl("bootstrap", domain, p)
+}
+
+// protectedInstall warns when trackline itself lives in a folder macOS
+// guards. Started at login, it then waits at a permission prompt before it
+// can even start, and nobody is at the Mac to see it. Measured: the runner
+// sat for minutes, stopped inside the loader, until someone clicked Allow.
+func protectedInstall(self string) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	area := macPermissionArea(self)
+	if area == "" {
+		return ""
+	}
+	return fmt.Sprintf("Warning: trackline is installed in %s, which macOS guards. Started at login, it can wait at a permission prompt nobody sees. Install it elsewhere, for example with npm install -g trackline.", area)
 }
 
 func stopAtLogin() {

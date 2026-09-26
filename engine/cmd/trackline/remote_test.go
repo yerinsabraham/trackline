@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -561,5 +562,17 @@ func TestKeepBlockedRecordsNothing(t *testing.T) {
 	}
 	if !strings.Contains(read(t, filepath.Join(out, "prompt")), "keep this blocked") {
 		t.Fatalf("prompt %q", read(t, filepath.Join(out, "prompt")))
+	}
+}
+
+func TestAnInstallInAGuardedFolderIsWarnedAbout(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	if protectedInstall("/Users/a/Documents/trackline-dev/trackline") == "" {
+		t.Error("an install in Documents went unmentioned")
+	}
+	if protectedInstall("/usr/local/lib/node_modules/trackline/bin/trackline") != "" {
+		t.Error("an ordinary install was warned about")
 	}
 }
