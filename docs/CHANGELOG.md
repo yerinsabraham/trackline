@@ -3,6 +3,20 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.6.0 · 2026-09-26
+
+- **Multi-turn evals.** `trackline-gate` gains a fourth suite: conversations
+  scored turn by turn, with `memorySafety` for turns that are only correct
+  because of an earlier constraint or refusal. Optional: a project without
+  `datasets/multi-turn.jsonl` reports it as skipped.
+- **A one-row regression now fails the gate** in fixture mode. Live runs and
+  the judge keep the 0.05 tolerance.
+- **Any OpenAI-compatible judge.** `EVAL_JUDGE_BASE_URL` and
+  `EVAL_JUDGE_API_KEY`, with retries on rate limits and dropped connections.
+- **Faster live runs.** `--concurrency=N`, default 4.
+- **`trackline-gate init` starts empty.** The fintech sample is
+  `trackline-gate init --example=fintech-support`.
+
 ## 0.5.0 · 2026-09-26
 
 - **Allow once, or keep it blocked, from your phone.** When trackline stops
