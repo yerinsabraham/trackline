@@ -16,7 +16,7 @@ body:has(.app-shell) > footer.dark { display: none; }
   overflow-x: clip;
 }
 .app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
-.app-shell button { cursor: pointer; font: inherit; color: inherit; }
+:where(.app-shell) button { cursor: pointer; font: inherit; color: inherit; }
 .app-shell .mono { font-family: var(--mono); }
 
 /* ── the frame ─────────────────────────────────────────────────────────── */
@@ -469,3 +469,37 @@ a.metric:active { transform: scale(0.98); }
 /* Nothing matched is not the same as nothing checked: 0% keeps a red ring. */
 .ring-poor .ring-track { stroke: #fbd5cc; }
 .ot .row-top strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* First run: what a new account sees instead of an empty dashboard. */
+.fr { padding: 22px 20px; max-width: 760px; }
+.fr-cmd, .fr-actions { max-width: 460px; }
+.fr-head h2 { margin: 0; font-size: 18px; }
+.fr-laptop { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+@media (min-width: 900px) { .fr-laptop { display: none; } }
+.fr-steps { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; }
+.fr-step { display: flex; gap: 14px; position: relative; padding-bottom: 22px; color: var(--muted); }
+.fr-step:last-child { padding-bottom: 0; }
+.fr-step:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: 4px; width: 2px; background: var(--line); }
+.fr-step.done:not(:last-child)::before { background: var(--ok); transition: background 0.4s; }
+.fr-n {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; border: 1.5px solid var(--line); background: #fff; transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+.fr-step.now { color: var(--ink); }
+.fr-step.now .fr-n { border-color: var(--act); color: var(--act); }
+.fr-step.done { color: var(--ink); }
+.fr-step.done .fr-n { background: var(--ok); border-color: var(--ok); color: #fff; animation: app-rise 0.3s ease-out both; }
+.fr-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex-grow: 1; padding-top: 4px; }
+.fr-body strong { font-size: 15px; }
+.fr-body p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.fr-step:not(.now):not(.done) .fr-body strong { font-weight: 500; }
+.fr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fr-cmd { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 6px 6px 12px; background: #fafaf8; min-width: 0; }
+.fr-cmd code { font-family: var(--mono); font-size: 13px; flex-grow: 1; overflow-x: auto; white-space: nowrap; }
+.fr-copy { padding: 6px 10px !important; font-size: 13px !important; flex: none; }
+.fr-more summary { cursor: pointer; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.fr-more { display: flex; flex-direction: column; gap: 8px; }
+.fr-more .fr-cmd + .fr-cmd { margin-top: 8px; }
+.fr-wait { display: flex; align-items: center; gap: 8px; font-size: 13px !important; color: var(--muted) !important; }
+.fr-hint { display: flex; align-items: flex-start; gap: 8px; }
+.fr-hint .agent-logo { flex: none; }

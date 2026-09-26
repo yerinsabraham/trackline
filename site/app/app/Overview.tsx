@@ -8,6 +8,7 @@ import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { IconAlert, IconLaptop } from "@/components/app/icons";
 import Ring, { band } from "@/components/app/Ring";
+import FirstRun from "@/components/app/FirstRun";
 
 type Filter = "all" | "working" | "needs-you" | "done";
 const FILTERS: [Filter, string][] = [["all", "All"], ["working", "Working"], ["needs-you", "Needs you"], ["done", "Done"]];
@@ -41,7 +42,8 @@ export default function Overview() {
     filter === "all" ? true : filter === "done" ? s.light === "done" || s.light === "idle" : s.light === filter).slice(0, 12);
 
   const first = user?.name?.split(/\s+/)[0];
-  const summary = !projects ? "" :
+  const fresh = !!projects && sessions.length === 0;
+  const summary = !projects ? "" : fresh ? "Three steps and your agents show up here." :
     working.length || needsYou.length
       ? [working.length && `${working.length} ${working.length === 1 ? "agent is" : "agents are"} working`, needsYou.length && `${needsYou.length} ${needsYou.length === 1 ? "needs" : "need"} you`].filter(Boolean).join(". ") + "."
       : "Nothing is running right now.";
@@ -61,6 +63,8 @@ export default function Overview() {
         <p className="app-sub">{summary}</p>
       </header>
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
+      {fresh && <FirstRun projects={projects} />}
+      {!fresh && <>
 
       <section className="metrics rise rise-1" aria-label="Today">
         <Stat href="/app/ontrack" primary percent={onTrack} dot="on-track" label="On track" value={onTrack === undefined ? null : onTrack === null ? "—" : `${onTrack}%`} note={onTrack === null ? "Nothing checked today" : "of today's actions matched the request"} />
@@ -80,12 +84,6 @@ export default function Overview() {
             </div>
           </div>
           {!projects && <div style={{ padding: 16, display: "grid", gap: 10 }}>{[0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: 64 }} />)}</div>}
-          {projects && sessions.length === 0 && (
-            <div className="empty">
-              <strong>No sessions yet.</strong>
-              <span>In a project on your laptop, run <code>trackline connect</code>. What your agent does there shows up here as it happens.</span>
-            </div>
-          )}
           {projects && sessions.length > 0 && shown.length === 0 && <div className="empty">Nothing here.</div>}
           {shown.map((s) => <SessionRow key={s.id} s={s} project={s.project} />)}
           {sessions.length > shown.length && shown.length > 0 && (
@@ -154,6 +152,7 @@ export default function Overview() {
           </section>
         </div>
       </div>
+      </>}
     </div>
   );
 }
