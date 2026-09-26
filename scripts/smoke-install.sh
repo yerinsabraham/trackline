@@ -26,5 +26,11 @@ npm install "$work"/*.tgz >/dev/null 2>&1
 ./node_modules/.bin/trackline --help 2>&1 | grep -q "alignment layer" \
   || { echo "the installed CLI did not run"; exit 1; }
 ./node_modules/.bin/trackline doctor
+
+mkdir "$work/empty-gate" "$work/example-gate"
+./node_modules/.bin/trackline-gate init --root="$work/empty-gate"
+./node_modules/.bin/trackline-gate doctor --root="$work/empty-gate"
+./node_modules/.bin/trackline-gate init --example=fintech-support --root="$work/example-gate"
+./node_modules/.bin/trackline-gate run --root="$work/example-gate" >/dev/null
 echo
 echo "installed from fresh packages for $platform and ran"

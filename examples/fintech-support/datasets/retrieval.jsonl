@@ -1,0 +1,25 @@
+{"id":"ret-001","query":"how do I reset my password","relevant":["kb-auth-reset#0","kb-auth-reset#1"],"grades":{"kb-auth-reset#0":3,"kb-auth-reset#1":2,"kb-security-overview#0":1},"note":"Head query. If this ever misses, retrieval is broken, not tuned."}
+{"id":"ret-002","query":"I forgot my password and the reset email never arrived","relevant":["kb-auth-reset#1","kb-email-deliverability#0"],"grades":{"kb-auth-reset#1":3,"kb-email-deliverability#0":3},"note":"Two-hop: the answer lives across two documents and neither alone is sufficient."}
+{"id":"ret-003","query":"password","relevant":["kb-auth-reset#0"],"grades":{"kb-auth-reset#0":2,"kb-security-overview#0":1},"note":"One-word query. Tests that the hybrid keyword half is doing work; pure dense retrieval drifts here."}
+{"id":"ret-004","query":"what does it cost to send money to another country","relevant":["kb-fees-international#0","kb-fees-international#1"],"grades":{"kb-fees-international#0":3,"kb-fees-international#1":2},"note":"Vocabulary mismatch: the document says 'cross-border transfer fees', the customer says none of those words."}
+{"id":"ret-005","query":"international transfer fees","relevant":["kb-fees-international#0"],"grades":{"kb-fees-international#0":3,"kb-fees-domestic#0":1},"note":"The domestic fees page is a near-duplicate. Ranking, not recall, is what this row measures."}
+{"id":"ret-006","query":"opening hours","relevant":["kb-contact-hours#0"],"grades":{"kb-contact-hours#0":3}}
+{"id":"ret-007","query":"when are you open on public holidays","relevant":["kb-contact-hours#0","kb-contact-hours#1"],"grades":{"kb-contact-hours#1":3,"kb-contact-hours#0":2},"note":"The holiday exception is chunk 1. A chunk-size change that merges or splits this page moves the answer."}
+{"id":"ret-008","query":"how long does a refund take","relevant":["kb-refunds#0"],"grades":{"kb-refunds#0":3,"kb-disputes#0":1}}
+{"id":"ret-009","query":"I want my money back for an order that never came","relevant":["kb-refunds#0","kb-disputes#0"],"grades":{"kb-refunds#0":3,"kb-disputes#0":2},"note":"Customer language for two adjacent policies. Both are legitimately relevant."}
+{"id":"ret-010","query":"card declined","relevant":["kb-card-declines#0","kb-card-declines#1"],"grades":{"kb-card-declines#0":3,"kb-card-declines#1":2}}
+{"id":"ret-011","query":"why did my payment fail","relevant":["kb-card-declines#0"],"grades":{"kb-card-declines#0":3,"kb-transfer-failures#0":2}}
+{"id":"ret-012","query":"KYC documents accepted","relevant":["kb-kyc-requirements#0"],"grades":{"kb-kyc-requirements#0":3}}
+{"id":"ret-013","query":"what ID can I use to verify my account","relevant":["kb-kyc-requirements#0"],"grades":{"kb-kyc-requirements#0":3,"kb-onboarding#1":1},"note":"Synonym query: 'verify' vs 'KYC'. Pure keyword retrieval fails this one."}
+{"id":"ret-014","query":"is there an API","relevant":["kb-developer-api#0"],"grades":{"kb-developer-api#0":3}}
+{"id":"ret-015","query":"rate limits on the developer API","relevant":["kb-developer-api#2"],"grades":{"kb-developer-api#2":3,"kb-developer-api#0":1},"note":"Deep chunk of a long document. Rewards correct chunking; punishes retrieving only the first chunk of a page."}
+{"id":"ret-016","query":"how do I close my account","relevant":["kb-account-closure#0"],"grades":{"kb-account-closure#0":3}}
+{"id":"ret-017","query":"pricing","relevant":["kb-pricing#0"],"grades":{"kb-pricing#0":3,"kb-fees-international#0":1,"kb-fees-domestic#0":1},"note":"Broad head term with three plausible destinations. Authority precedence should put the pricing page first."}
+{"id":"ret-018","query":"do you have a free plan","relevant":["kb-pricing#0","kb-pricing#1"],"grades":{"kb-pricing#1":3,"kb-pricing#0":2}}
+{"id":"ret-019","query":"what happens to my data if I stop using the service","relevant":["kb-account-closure#1","kb-privacy#0"],"grades":{"kb-privacy#0":3,"kb-account-closure#1":2},"note":"Crosses a support page and a policy page. The policy page should outrank on authority."}
+{"id":"ret-020","query":"two factor authentication setup","relevant":["kb-security-overview#1"],"grades":{"kb-security-overview#1":3,"kb-auth-reset#0":1}}
+{"id":"ret-021","query":"can I use the app in Kenya","relevant":["kb-coverage#0"],"grades":{"kb-coverage#0":3}}
+{"id":"ret-022","query":"supported countries","relevant":["kb-coverage#0"],"grades":{"kb-coverage#0":3}}
+{"id":"ret-023","query":"how do I contact support","relevant":["kb-contact-hours#0","kb-contact-channels#0"],"grades":{"kb-contact-channels#0":3,"kb-contact-hours#0":2}}
+{"id":"ret-024","query":"quantum teleportation pricing for badgers","relevant":[],"note":"Nothing in the KB answers this. The correct outcome is an empty or low-score result set, and an agent that says so. A row that scores 1 by returning nothing is the point."}
+{"id":"ret-025","query":"asdkjfh asdf","relevant":[],"note":"Garbage input. Must not surface a confident irrelevant chunk."}
