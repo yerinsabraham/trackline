@@ -36,7 +36,13 @@ export const metadata: Metadata = {
   // Added to a phone's home screen, the dashboard opens as an app, which is
   // what lets an iPhone receive its alerts.
   manifest: "/manifest.webmanifest",
-  icons: { apple: "/apple-touch-icon.png" },
+  // Listed in full: naming only the Apple icon here replaced the favicon link
+  // Next would otherwise add, and browser tabs showed none.
+  icons: {
+    // favicon.ico in app/ is linked by Next itself, for browsers without SVG icons.
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: { capable: true, title: "trackline", statusBarStyle: "default" },
 };
 
