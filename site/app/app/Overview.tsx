@@ -6,7 +6,7 @@ import { ago, LIGHT_LABEL, requestLabel, type SessionSummary } from "@/lib/dashb
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { IconAlert, IconLaptop } from "@/components/app/icons";
+import { IconAlert, IconLaptop, IconServer } from "@/components/app/icons";
 import Ring, { band } from "@/components/app/Ring";
 import FirstRun from "@/components/app/FirstRun";
 
@@ -148,6 +148,11 @@ export default function Overview() {
                   </a>
                 );
               })}
+              <a href="/app/production" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                <span className="agent-logo" style={{ width: 28, height: 28 }}><span style={{ width: 16, display: "flex" }}><IconServer /></span></span>
+                Deployed agents
+                <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--ink-2)" }}>Production</span>
+              </a>
             </div>
           </section>
         </div>

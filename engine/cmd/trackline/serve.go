@@ -27,7 +27,12 @@ func cmdServe(args []string) error {
 	root, _ := os.Getwd()
 	sample := 1.0
 	alert, out := "", ""
+	connect := false
 	for i := 0; i < len(args); i++ {
+		if args[i] == "--connect" {
+			connect = true
+			continue
+		}
 		if i+1 >= len(args) {
 			break
 		}
@@ -86,6 +91,19 @@ func cmdServe(args []string) error {
 	if alert != "" {
 		srv.Alert = production.Webhook(alert)
 	}
+	var up *production.Uploader
+	upStop, upDone := make(chan struct{}), make(chan struct{})
+	if connect {
+		client, creds, err := remoteClient()
+		if err != nil {
+			return err
+		}
+		up = production.NewUploader(client)
+		go func() { up.Run(upStop, 5*time.Second); close(upDone) }()
+		emit := srv.Emit
+		srv.Emit = func(r production.Result) { emit(r); up.Add(r) }
+		fmt.Printf("sending results to your trackline account as %q: tool names, findings, incidents and counts, never what was said\n", creds.DeviceName)
+	}
 
 	fmt.Printf("trackline: receiving traces on http://%s/v1/traces\n", addr)
 	if cfg.Tools.Empty() {
@@ -114,6 +132,16 @@ func cmdServe(args []string) error {
 		mu.Lock()
 		fmt.Printf("\nchecked %d conversations\n", checked)
 		mu.Unlock()
+		if up != nil {
+			close(upStop)
+			<-upDone
+			sent, waiting, dropped, lastErr := up.Stats()
+			fmt.Printf("sent %d to your account", sent)
+			if waiting+dropped > 0 {
+				fmt.Printf(", %d not sent (%v)", waiting+dropped, lastErr)
+			}
+			fmt.Println()
+		}
 		return nil
 	}
 }

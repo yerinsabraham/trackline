@@ -142,3 +142,6 @@ func (c Client) Disconnect() error { return c.do("DELETE", "/devices/me", nil, n
 
 // Ingest uploads one batch.
 func (c Client) Ingest(b payload.Batch) error { return c.do("POST", "/ingest", b, nil) }
+
+// Production uploads checked conversations from a deployed agent.
+func (c Client) Production(b payload.ProdBatch) error { return c.do("POST", "/production", b, nil) }

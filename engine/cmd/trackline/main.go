@@ -171,7 +171,7 @@ List what has been approved.
 
 Withdraw an approval.
 `,
-	"traces": `trackline traces [--root DIR] [--json] [--judge codex|claude|cursor-agent] FILE|DIR...
+	"traces": `trackline traces [--root DIR] [--json] [--judge codex|claude|cursor-agent] [--connect] FILE|DIR...
 
 Check exported production traces: OTLP export requests, protobuf or .json.
 Tool calls are checked against the tool policy in .trackline.json, and the
@@ -183,8 +183,12 @@ reported as not checkable, never as clean.
 --judge asks a model whether each run's tools served its request, which is the
 only thing that catches a permitted tool used off-task. It is sent the request
 and the tool names, never the arguments.
+
+--connect sends the results to your trackline account (run trackline connect
+first): tool names, findings, incidents and counts. Never what a customer or
+the model said.
 `,
-	"serve": `trackline serve [--addr 127.0.0.1:4318] [--root DIR] [--sample 1] [--alert URL] [--out FILE]
+	"serve": `trackline serve [--addr 127.0.0.1:4318] [--root DIR] [--sample 1] [--alert URL] [--out FILE] [--connect]
 
 Receive traces from a running agent: point an OTLP/HTTP exporter, protobuf or
 JSON, at http://ADDR/v1/traces. Each conversation is checked when it completes.
@@ -193,6 +197,9 @@ JSON, at http://ADDR/v1/traces. Each conversation is checked when it completes.
 --alert posts findings and incidents to a webhook as {"text": ...}, which
 Slack and most chat tools accept directly.
 --out appends every result as a JSON line.
+--connect sends each result to your trackline account, so the agent appears
+on the dashboard beside your coding agents: tool names, findings, incidents
+and counts. Never what a customer or the model said.
 
 Listens on localhost unless told otherwise: traces carry customer messages.
 `,

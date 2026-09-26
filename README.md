@@ -84,6 +84,7 @@ trackline review          # ask a model whether the work served the request
 trackline mcp             # let any MCP agent ask before it acts (advisory)
 trackline traces DIR      # check exported production traces (OTLP)
 trackline serve           # receive a deployed agent's traces live
+trackline serve --connect # ...and show it on the dashboard, never what customers said
 trackline connect         # optional: link to an account and a live dashboard
 trackline remote enable   # optional: run and approve tasks from your phone
 ```

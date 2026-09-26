@@ -45,6 +45,32 @@ trackline serve --addr 0.0.0.0:4318              # listen beyond this machine
 - **It listens on localhost by default**, because traces carry customer
   messages. Opening it to the network is your decision.
 
+## See it on the dashboard
+
+```bash
+trackline connect                 # once, on the machine running trackline serve
+trackline serve --connect
+```
+
+Each checked conversation then appears under **Production** on
+[trackline.dev](https://trackline.dev/app/production), beside your coding
+agents, and a broken policy or an incident alerts your phone: at most once per
+service, per kind of problem, per hour.
+
+The conversations are your customers', so what is sent is what trackline
+concluded, never what was said:
+
+| Sent | Never sent |
+|---|---|
+| service name, conversation id | customer messages, model replies |
+| tool names, how many calls failed | tool arguments and results |
+| policy findings, incidents | system prompts |
+| model calls, tokens, latency | raw spans |
+
+The contract is [`docs/contract/production-v1.schema.json`](../contract/production-v1.schema.json);
+anything outside it is refused by the CLI and by the server. A recorded stream
+can be sent the same way: `trackline traces --connect DIR`.
+
 ## Turn on content capture
 
 This is the part that matters most. By default, OpenTelemetry's GenAI

@@ -3,6 +3,15 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.9.0 · 2026-09-26
+
+- **Deployed agents on the dashboard.** `trackline serve --connect` sends
+  each checked conversation to your account, so a production agent appears
+  under Production beside your coding agents, and a broken policy or an
+  incident alerts your phone. What is sent is what trackline concluded: tool
+  names, findings, incidents and counts. Never what a customer or the model
+  said. `trackline traces --connect` sends a recorded stream the same way.
+
 ## 0.8.0 · 2026-09-26
 
 - **A new check: `workaround`.** After trackline blocks a file, the same file

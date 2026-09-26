@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trackline.dev/contract/production-v1.schema.json",
+  "title": "trackline production upload, version 1",
+  "description": "What `trackline serve --connect` and `trackline traces --connect` may send about a deployed agent, and nothing else. The data behind a production agent is its customers', so what travels is what trackline concluded, never what was said: customer messages, model replies, system prompts, tool arguments and raw spans have no field, on purpose. Every object is closed: a field not listed here is refused by the CLI's builder and by the backend.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "conversations"],
+  "properties": {
+    "v": { "const": 1 },
+    "conversations": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/conversation" }
+    }
+  },
+  "$defs": {
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at", "service", "conversation", "tools", "findings", "incidents", "modelCalls", "tokens", "contentAvailable"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "description": "Unique per conversation checked, so a retried batch is stored once." },
+        "at": { "type": "string", "maxLength": 40, "description": "When the conversation started." },
+        "service": { "type": "string", "maxLength": 100, "description": "The service name the agent reports in its traces." },
+        "conversation": { "type": "string", "maxLength": 128, "description": "The conversation's id as the agent reports it, or its trace id. An identifier, never content." },
+        "tools": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "calls", "errors"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 100 },
+              "calls": { "type": "number" },
+              "errors": { "type": "number" }
+            }
+          },
+          "description": "Tools called, by name, with how many calls failed. Never their arguments or results."
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "severity", "summary"],
+            "properties": {
+              "check": { "enum": ["tool-policy"] },
+              "severity": { "enum": ["info", "warn", "block"] },
+              "summary": { "type": "string", "maxLength": 300 },
+              "tool": { "type": "string", "maxLength": 100 }
+            }
+          }
+        },
+        "incidents": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "summary"],
+            "properties": {
+              "kind": { "enum": ["tool-errors", "loop", "latency", "tokens"] },
+              "summary": { "type": "string", "maxLength": 300 }
+            }
+          }
+        },
+        "modelCalls": { "type": "number" },
+        "tokens": { "type": "number" },
+        "modelLatencyMs": { "type": "number", "description": "The median model call in this conversation." },
+        "contentAvailable": { "type": "boolean", "description": "Whether the trace carried message content, which checks that read the request need. The content itself is not sent." },
+        "unmeasured": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "reason"],
+            "properties": {
+              "check": { "type": "string", "maxLength": 40 },
+              "reason": { "type": "string", "maxLength": 300 }
+            }
+          },
+          "description": "Checks that could not run on this conversation, and why, so an unchecked conversation never looks like a clean one."
+        }
+      }
+    }
+  }
+}

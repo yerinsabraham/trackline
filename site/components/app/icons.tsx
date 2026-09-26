@@ -22,3 +22,4 @@ export const IconKey = () => <svg {...base}><circle cx="7.5" cy="15.5" r="4.5" /
 export const IconClock = () => <svg {...base}><path d="M21 12a9 9 0 1 1-9-9" /><path d="M12 7v5l3 2" /></svg>;
 export const IconPhone = () => <svg {...base}><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>;
 export const IconTarget = () => <svg {...base}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /></svg>;
+export const IconServer = () => <svg {...base}><rect x="3" y="4" width="18" height="7" rx="2" /><rect x="3" y="13" width="18" height="7" rx="2" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>;

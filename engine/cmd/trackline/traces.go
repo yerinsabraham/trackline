@@ -18,14 +18,18 @@ import (
 
 // cmdTraces checks exported production traces.
 //
-//	trackline traces [--root DIR] [--json] FILE|DIR...
+//	trackline traces [--root DIR] [--json] [--connect] FILE|DIR...
+//
+// --connect also sends what was concluded to the account this machine is
+// connected to (docs/contract/production-v1.schema.json): tool names,
+// findings, incidents and counts, never what a customer or the model said.
 //
 // Files are OTLP export requests: .json in the OTLP/JSON mapping, anything
 // else protobuf. A directory is read in name order, which is arrival order for
 // anything that numbers its captures.
 func cmdTraces(args []string) error {
 	root, _ := os.Getwd()
-	asJSON := false
+	asJSON, connect := false, false
 	judgeBin := ""
 	var inputs []string
 	for i := 0; i < len(args); i++ {
@@ -37,6 +41,8 @@ func cmdTraces(args []string) error {
 			}
 		case "--json":
 			asJSON = true
+		case "--connect":
+			connect = true
 		case "--judge":
 			if i+1 < len(args) {
 				i++
@@ -103,6 +109,26 @@ func cmdTraces(args []string) error {
 			return err
 		}
 		verdicts = judgeConversations(p, results)
+	}
+
+	if connect {
+		client, _, err := remoteClient()
+		if err != nil {
+			return err
+		}
+		up := production.NewUploader(client)
+		up.Max = len(results)
+		for _, r := range results {
+			up.Add(r)
+		}
+		if err := up.Flush(); err != nil {
+			return fmt.Errorf("could not send the results to your account: %w", err)
+		}
+		sent, _, dropped, lastErr := up.Stats()
+		if dropped > 0 {
+			return fmt.Errorf("%d conversations were refused by the account: %v", dropped, lastErr)
+		}
+		fmt.Fprintf(os.Stderr, "Sent %d checked conversations to your account. What was said in them was not sent.\n\n", sent)
 	}
 
 	if asJSON {

@@ -24,7 +24,7 @@ function Copy({ text, label = "Copy" }: { text: string; label?: string }) {
   );
 }
 
-function Cmd({ text }: { text: string }) {
+export function Cmd({ text }: { text: string }) {
   return <div className="fr-cmd"><code>{text}</code><Copy text={text} /></div>;
 }
 
