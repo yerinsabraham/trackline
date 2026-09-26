@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { RetrievalCase, RiskTier, ToolSelectionCase } from './types.js';
-import { readRetrievalFixture, retrievalInputHash, toolInputHash } from './adapters/fixture.js';
+import type { MultiTurnCase, RetrievalCase, RiskTier, ToolSelectionCase } from './types.js';
+import { multiTurnInputHash, readRetrievalFixture, retrievalInputHash, toolInputHash } from './adapters/fixture.js';
 import {
   CONFIG_NAMES,
   findConfigFile,
@@ -50,17 +50,26 @@ const EXPECTED_BASELINE_KEYS = [
   'tools.riskViolationRate',
   'tools.injectionResistance',
   'tools.p95Latency',
+  'multi-turn.exactMatch',
+  'multi-turn.f1',
+  'multi-turn.forbiddenRate',
+  'multi-turn.riskViolationRate',
+  'multi-turn.injectionResistance',
+  'multi-turn.memorySafety',
+  'multi-turn.p95Latency',
 ];
 
 const DATASET_FILES = {
   retrieval: 'retrieval.jsonl',
   tools: 'tool-selection.jsonl',
+  multiTurn: 'multi-turn.jsonl',
   groundedness: 'groundedness.jsonl',
 } as const;
 
 const FIXTURE_FILES = {
   retrieval: 'retrieval.fixture.json',
   tools: 'tool-selection.fixture.json',
+  multiTurn: 'multi-turn.fixture.json',
 } as const;
 
 function issue(
@@ -205,6 +214,38 @@ function validateTools(rows: Record<string, unknown>[], issues: ValidationIssue[
   return ids;
 }
 
+function validateToolTurn(row: Record<string, unknown>): boolean {
+  let ok = true;
+  if (typeof row.utterance !== 'string' || row.utterance.trim() === '') ok = false;
+  if (!isStringArray(row.available)) ok = false;
+  if (!isStringArray(row.expected)) ok = false;
+  if (row.forbidden !== undefined && !isStringArray(row.forbidden)) ok = false;
+  if (row.maxRisk !== undefined && (typeof row.maxRisk !== 'string' || !RISK_TIERS.has(row.maxRisk as RiskTier))) ok = false;
+  if (row.expectRefusal !== undefined && typeof row.expectRefusal !== 'boolean') ok = false;
+  if (row.dependsOnPrevious !== undefined && typeof row.dependsOnPrevious !== 'boolean') ok = false;
+  return ok;
+}
+
+function validateMultiTurn(rows: Record<string, unknown>[], issues: ValidationIssue[]): string[] {
+  const ids: string[] = [];
+  for (const row of rows) {
+    const id = typeof row.id === 'string' ? row.id : undefined;
+    if (id) ids.push(id);
+    const file = `datasets/${DATASET_FILES.multiTurn}`;
+
+    if (!Array.isArray(row.turns) || row.turns.length < 2) {
+      issue(issues, 'error', 'invalid_multi_turn_turns', 'Multi-turn row needs at least two turns.', file, id);
+      continue;
+    }
+    row.turns.forEach((turn, i) => {
+      if (!isRecord(turn) || !validateToolTurn(turn)) {
+        issue(issues, 'error', 'invalid_multi_turn_turn', `Turn ${i + 1} must match the tool-selection row shape.`, file, id);
+      }
+    });
+  }
+  return ids;
+}
+
 function validateGroundedness(rows: Record<string, unknown>[], issues: ValidationIssue[]): void {
   for (const row of rows) {
     const id = typeof row.id === 'string' ? row.id : undefined;
@@ -278,12 +319,31 @@ function validateFixtureCoverage(
         );
       }
     }
+    if (kind === 'multiTurn') {
+      if (!isRecord(value) || !Array.isArray(value.turns) || value.turns.some((turn) => !isRecord(turn) || !isStringArray(turn.called) || typeof turn.refused !== 'boolean')) {
+        issue(
+          issues,
+          'error',
+          'invalid_multi_turn_fixture',
+          `Multi-turn fixture "${id}" must have turns with called:string[] and refused:boolean.`,
+          file,
+          id,
+        );
+      }
+    }
   }
 }
 
-function validateBaseline(root: string, issues: ValidationIssue[], strict: boolean): void {
+function validateBaseline(
+  root: string,
+  issues: ValidationIssue[],
+  strict: boolean,
+  hasRows: boolean,
+  hasMultiTurn: boolean,
+): void {
   const file = path.join(root, 'baseline.json');
   if (!fs.existsSync(file)) {
+    if (!hasRows) return;
     issue(
       issues,
       strict ? 'error' : 'warning',
@@ -303,7 +363,10 @@ function validateBaseline(root: string, issues: ValidationIssue[], strict: boole
     }
   }
 
+  if (!hasRows) return;
+
   for (const key of EXPECTED_BASELINE_KEYS) {
+    if (!hasMultiTurn && key.startsWith('multi-turn.')) continue;
     if (!(key in baseline)) {
       issue(
         issues,
@@ -326,11 +389,13 @@ function validateBaseline(root: string, issues: ValidationIssue[], strict: boole
  */
 function validateRiskCoverage(
   root: string,
-  toolRows: Record<string, unknown>[],
+  rows: { id?: string; maxRisk?: unknown }[],
+  kind: 'tools' | 'multiTurn',
+  datasetFile: string,
   issues: ValidationIssue[],
   fixtureMode: boolean,
 ): void {
-  const riskRows = toolRows.filter((r) => r.maxRisk !== undefined);
+  const riskRows = rows.filter((r) => r.maxRisk !== undefined);
   if (riskRows.length === 0) return;
 
   // Use the shared lookup rather than a local list, or a `.mjs` config is
@@ -346,23 +411,29 @@ function validateRiskCoverage(
         'risk_unresolvable',
         `${riskRows.length} tool row(s) declare maxRisk but there is no harness config to resolve tiers from. ` +
           `Add one of: ${CONFIG_NAMES.join(', ')}. riskViolationRate cannot be measured.`,
-        'datasets/tool-selection.jsonl',
+        `datasets/${datasetFile}`,
       );
     }
     return;
   }
 
-  const file = `fixtures/${FIXTURE_FILES.tools}`;
+  const file = `fixtures/${FIXTURE_FILES[kind]}`;
   if (!fs.existsSync(path.join(root, file))) return;
   const fixtures = readJsonObject(root, file, issues);
   if (!fixtures) return;
 
   const missing = riskRows
-    .map((r) => (typeof r.id === 'string' ? r.id : undefined))
+    .map((r) => r.id)
     .filter((id): id is string => Boolean(id))
     .filter((id) => {
-      const fx = fixtures[id];
-      return isRecord(fx) && fx.risks === undefined;
+      if (kind === 'tools') {
+        const fx = fixtures[id];
+        return isRecord(fx) && fx.risks === undefined;
+      }
+      const [caseID, rawTurn] = id.split('.');
+      const turn = Number(rawTurn);
+      const fx = fixtures[caseID ?? ''];
+      return isRecord(fx) && Array.isArray(fx.turns) && isRecord(fx.turns[turn]) && fx.turns[turn].risks === undefined;
     });
 
   if (missing.length === 0) return;
@@ -492,14 +563,41 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
 
   const retrieval = readJsonl(root, DATASET_FILES.retrieval, issues);
   const tools = readJsonl(root, DATASET_FILES.tools, issues);
+  // Multi-turn arrived after projects already existed with three datasets. A
+  // project without the file has not opted in, which is not an error: the run
+  // reports the suite as skipped, and --fail-on-skipped-suite can insist.
+  const hasMultiTurn = fs.existsSync(path.join(root, 'datasets', DATASET_FILES.multiTurn));
+  const multiTurn = hasMultiTurn ? readJsonl(root, DATASET_FILES.multiTurn, issues) : [];
   const groundedness = readJsonl(root, DATASET_FILES.groundedness, issues);
+  const hasRows = retrieval.length > 0 || tools.length > 0 || multiTurn.length > 0 || groundedness.length > 0;
 
   const retrievalIds = validateRetrieval(retrieval, issues);
   const toolIds = validateTools(tools, issues);
+  const multiTurnIds = validateMultiTurn(multiTurn, issues);
   validateGroundedness(groundedness, issues);
   validateFixtureCoverage(root, 'retrieval', retrievalIds, issues, fixtureMode);
   validateFixtureCoverage(root, 'tools', toolIds, issues, fixtureMode);
-  validateRiskCoverage(root, tools, issues, fixtureMode);
+  if (hasMultiTurn) validateFixtureCoverage(root, 'multiTurn', multiTurnIds, issues, fixtureMode);
+  validateRiskCoverage(
+    root,
+    tools.map((row) => ({ id: typeof row.id === 'string' ? row.id : undefined, maxRisk: row.maxRisk })),
+    'tools',
+    DATASET_FILES.tools,
+    issues,
+    fixtureMode,
+  );
+  validateRiskCoverage(
+    root,
+    multiTurn.flatMap((row) =>
+      Array.isArray(row.turns)
+        ? row.turns.map((turn, i) => ({ id: typeof row.id === 'string' ? `${row.id}.${i}` : undefined, maxRisk: isRecord(turn) ? turn.maxRisk : undefined }))
+        : [],
+    ),
+    'multiTurn',
+    DATASET_FILES.multiTurn,
+    issues,
+    fixtureMode,
+  );
   validateFixtureFreshness(
     root,
     'retrieval',
@@ -516,7 +614,15 @@ export function validateProject(root: string, options: ValidationOptions = {}): 
     issues,
     fixtureMode,
   );
-  validateBaseline(root, issues, Boolean(options.strictBaseline));
+  validateFixtureFreshness(
+    root,
+    'multiTurn',
+    multiTurn,
+    (row: MultiTurnCase) => multiTurnInputHash(row),
+    issues,
+    fixtureMode,
+  );
+  validateBaseline(root, issues, Boolean(options.strictBaseline), hasRows, hasMultiTurn);
   validateConfigLoadable(root, issues, fixtureMode);
 
   return issues;

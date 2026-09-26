@@ -24,6 +24,9 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type {
   HarnessConfig,
+  MultiTurnCase,
+  MultiTurnFixture,
+  MultiTurnOutcome,
   RetrievalCase,
   RetrievalFixture,
   RiskTier,
@@ -63,6 +66,12 @@ export function toolInputHash(testCase: ToolSelectionCase): string {
   return hashInputs({ utterance: testCase.utterance, available: testCase.available });
 }
 
+export function multiTurnInputHash(testCase: MultiTurnCase): string {
+  return hashInputs({
+    turns: testCase.turns.map((turn) => ({ utterance: turn.utterance, available: turn.available })),
+  });
+}
+
 /**
  * A recorded ranking, in either the current shape or the pre-hash bare array.
  *
@@ -91,6 +100,7 @@ export function staleFixtureMessage(kind: string, id: string): string {
 const projectRoot = () => path.resolve(process.env.TRACKLINE_ROOT ?? process.cwd());
 const retrievalFixtures = () => path.join(projectRoot(), 'fixtures', 'retrieval.fixture.json');
 const toolFixtures = () => path.join(projectRoot(), 'fixtures', 'tool-selection.fixture.json');
+const multiTurnFixtures = () => path.join(projectRoot(), 'fixtures', 'multi-turn.fixture.json');
 
 function readFixtures<T>(file: string): Record<string, T> {
   if (!fs.existsSync(file)) {
@@ -106,6 +116,7 @@ function writeFixtures(file: string, data: unknown): void {
 
 let retrievalCache: Record<string, unknown> | null = null;
 let toolCache: Record<string, ToolFixture> | null = null;
+let multiTurnCache: Record<string, MultiTurnFixture> | null = null;
 
 // ── Retrieval ─────────────────────────────────────────────────────────────────
 
@@ -203,4 +214,56 @@ export async function runToolSelection(
 export function saveToolFixtures(outcomes: Record<string, ToolFixture>): void {
   writeFixtures(toolFixtures(), outcomes);
   toolCache = null;
+}
+
+// ── Multi-turn tool selection ────────────────────────────────────────────────
+
+export async function runMultiTurn(
+  testCase: MultiTurnCase,
+  mode: RunMode,
+  config: HarnessConfig,
+): Promise<MultiTurnOutcome & { latencyMs: number }> {
+  const resolveRisks = (called: string[]): Record<string, RiskTier> | undefined => {
+    if (!config.toolCatalog) return undefined;
+    const risks: Record<string, RiskTier> = {};
+    for (const name of called) {
+      const tier = config.toolCatalog(name);
+      if (tier) risks[name] = tier;
+    }
+    return risks;
+  };
+
+  if (mode === 'fixture') {
+    multiTurnCache ??= readFixtures<MultiTurnFixture>(multiTurnFixtures());
+    const recorded = multiTurnCache[testCase.id];
+    if (!recorded) {
+      throw new Error(`No fixture for multi-turn case "${testCase.id}". Re-record or remove the row.`);
+    }
+    if (recorded.inputHash && recorded.inputHash !== multiTurnInputHash(testCase)) {
+      throw new Error(staleFixtureMessage('multi-turn', testCase.id));
+    }
+    return {
+      turns: recorded.turns.map((turn) => ({
+        ...turn,
+        risks: turn.risks ?? resolveRisks(turn.called),
+      })),
+      latencyMs: 0,
+    };
+  }
+
+  if (!config.multiTurnToolSelector) {
+    throw new Error('A live multi-turn run needs `multiTurnToolSelector` in your harness config. See config.example.ts.');
+  }
+
+  const started = Date.now();
+  const outcome = await config.multiTurnToolSelector(testCase);
+  return {
+    turns: outcome.turns.map((turn) => ({ ...turn, risks: resolveRisks(turn.called) })),
+    latencyMs: Date.now() - started,
+  };
+}
+
+export function saveMultiTurnFixtures(outcomes: Record<string, MultiTurnFixture>): void {
+  writeFixtures(multiTurnFixtures(), outcomes);
+  multiTurnCache = null;
 }

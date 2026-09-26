@@ -85,12 +85,13 @@ hook costs ~88ms per tool call against Go's ~6.5ms, and it runs on every single
 tool call. See `documents/phase0/SPEED-DECISION.md`. Two languages in this repo
 is deliberate, not drift.
 
-### The three suites
+### The four suites
 
 | Suite | Asks | Cost | Primary metrics |
 |---|---|---|---|
 | `retrieval` | Did the right chunks come back, in the right order | free | `recall@5`, `recall@10`, `mrr`, `ndcg@10` |
 | `tools` | Did the agent call the right tool, and never a forbidden one | free in fixture mode | `exactMatch`, `f1`, `forbiddenRate`, `riskViolationRate`, `injectionResistance` |
+| `multi-turn` | Did earlier constraints and refusals still bind later turns | free in fixture mode | `exactMatch`, `f1`, `forbiddenRate`, `riskViolationRate`, `injectionResistance`, `memorySafety` |
 | `groundedness` | Is every claim supported by the retrieved context | 1 judge call/row | `agreement`, `caughtHallucination`, `falseAlarmRate` |
 
 ---
@@ -104,7 +105,10 @@ breaking one, say so explicitly rather than quietly eroding it.
   for exactly once, for the one question set membership cannot answer.
 - **Safety metrics have an absolute floor of zero.** `forbiddenRate` and
   `riskViolationRate` fail at anything above zero, whatever the baseline says.
-  Quality metrics get a `0.05` tolerance; safety metrics get none.
+  Quality metrics get a `0.05` tolerance; safety metrics get none. In fixture
+  mode the replay is deterministic, so the tolerance is capped just below one
+  row's worth for the metric's sample size (groundedness excepted: the judge
+  still runs live).
 - **A case that errors fails the run outright.** Averages computed over a
   shrunken set look better than reality, and that is the most dangerous kind of
   green.
@@ -114,8 +118,8 @@ breaking one, say so explicitly rather than quietly eroding it.
 - **The judge never sees the expected label**, judges claims against a passage
   rather than "quality", and may abstain. `uncertain` is counted separately, and
   a high `abstainRate` means the dataset is badly written, not the model.
-- **A metric that was not measured must never render as a number.** This one is
-  currently violated in places — see `documents/ISSUES.md` items 1 and 5.
+- **A metric that was not measured must never render as a number.** It reports
+  as unmeasured, and a safety metric that could not be measured fails the gate.
 
 ---
 
@@ -162,7 +166,7 @@ cd engine && go test ./... -race && gofmt -l .
 
 # TypeScript eval gate
 npm ci
-npm test                 # node:test, 22 tests, the scorers score themselves
+npm test                 # node:test, the scorers score themselves
 npm run typecheck
 npm run evals            # fixture mode, all suites, gated against baseline
 npm run evals:live       # calls your real retriever and agent
@@ -178,7 +182,7 @@ CLI equivalents for the gate: `trackline-gate run|record|baseline|doctor|init`.
 `--root=`, and the three opt-in strict flags `--fail-on-case-failure`,
 `--fail-on-skipped-suite`, `--strict-baseline`.
 
-Expected clean state: `npm test` 22/22, `npm run evals` exit 0 with one known
+Expected clean state: `npm test` all passing, `npm run evals` exit 0 with one known
 retrieval failure (`ret-015`) that is inside tolerance.
 
 ---
@@ -219,12 +223,10 @@ starting work:
 - `BUILD-PLAN.md` — the phase plan, with a review log
 - `IDEA-agent-watcher.md`, `RESEARCH-market-and-prior-art.md` — the reasoning
 
-The top four issues:
+Still open in the gate:
 
-1. `riskViolationRate` is structurally pinned at 0 without a `toolCatalog`.
-2. Dataset rows can be edited without re-recording and nothing notices.
-3. Tolerance `0.05` vs a 25-row dataset cannot see a one-case regression.
-4. `npx trackline run --live` throws on Node 20 when the config is `.ts`.
+1. Publish with provenance, from CI only (item 13). One-way if missed at release.
+2. `emptyRate` is named as the canary but is not gated (item 7).
 
 ---
 

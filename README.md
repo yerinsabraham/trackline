@@ -135,7 +135,10 @@ Named plainly, because a tool that looks complete stops getting better.
   Cursor loads project hooks from the project, and an agent started elsewhere
   that searches your home directory first does so unwatched. Start it in the
   project.
-- **No multi-turn reasoning.** Each turn is judged against its own request.
+- **The local watcher reasons per task, not across old sessions.** It anchors
+  findings to the request that started the current session. The CI gate now has
+  a multi-turn suite for product agents, but the watcher still does not infer
+  intent from unrelated earlier work.
 - **Production monitoring has not met real traffic.** `trackline traces` and
   `trackline serve` check OTLP traces against a tool policy, watch for outages,
   loops and drift, and can judge each conversation
@@ -169,9 +172,10 @@ with a real recorded session played back.
 ## Also in this repository: the CI eval gate
 
 A separate tool for a different job, installed as `trackline-gate`. It scores
-retrieval, tool selection and groundedness against committed datasets and fails
-the build on a regression — the CI-side answer to the same question, for teams
-shipping an LLM product rather than working with a coding agent.
+retrieval, tool selection, multi-turn behaviour and groundedness against
+committed datasets and fails the build on a regression — the CI-side answer to
+the same question, for teams shipping an LLM product rather than working with a
+coding agent.
 
 ```bash
 trackline-gate run
@@ -179,24 +183,30 @@ trackline-gate run
 
 ---
 
-## The three suites
+## The four suites
 
 | Suite | Asks | Costs | Gates on |
 |---|---|---|---|
 | `retrieval` | Did the right chunks come back, in the right order | free | `recall@5`, `recall@10`, `mrr`, `ndcg@10` |
 | `tools` | Did the agent call the right tool, and never a forbidden one | free in fixture mode | `exactMatch`, `f1`, `forbiddenRate`, `riskViolationRate`, `injectionResistance` |
+| `multi-turn` | Did earlier constraints and refusals still bind later turns | free in fixture mode | `exactMatch`, `f1`, `forbiddenRate`, `riskViolationRate`, `injectionResistance`, `memorySafety` |
 | `groundedness` | Is every claim supported by the retrieved context | one judge call per row | `agreement`, `caughtHallucination`, `falseAlarmRate` |
 
 Everything scoreable by code is scored by code. A judge model is reached for
 once, for the one question set membership cannot answer.
+
+`multi-turn` is optional: a project with no `datasets/multi-turn.jsonl` reports
+it as skipped, so upgrading does not break an existing build.
 
 ---
 
 ## The gate has two rules
 
 **Quality metrics** are compared to `baseline.json` with a tolerance of `0.05`.
-Recall drifting 0.94 to 0.92 across an embedding change is noise. Dropping to
-0.71 is a regression.
+In a live run, recall drifting 0.94 to 0.92 across an embedding change is noise.
+A fixture replay has no noise, so there the tolerance is capped just below one
+row's worth: dropping one case in a 25-row dataset fails the gate. The judge is
+called live even in fixture mode, so groundedness keeps the full `0.05`.
 
 **Safety metrics have an absolute floor of zero.** `forbiddenRate` and
 `riskViolationRate` fail at anything above zero, whatever the baseline says.
@@ -215,9 +225,9 @@ a clean one look identical and only one of them is true.
 For stricter CI, opt in explicitly:
 
 ```bash
-trackline run --fail-on-case-failure
-trackline run --fail-on-skipped-suite
-trackline run --strict-baseline
+trackline-gate run --fail-on-case-failure
+trackline-gate run --fail-on-skipped-suite
+trackline-gate run --strict-baseline
 ```
 
 Those flags are deliberately separate. Some teams want aggregate regression
@@ -236,7 +246,7 @@ tools  24/25 cases
 
 ✗ 5 regression(s)
 
-  retrieval.recall@5   0.960 → 0.800 (worse by 0.160, tolerance 0.05)
+  retrieval.recall@5   0.960 → 0.800 (worse by 0.160)
   tools.forbiddenRate  is 0.040, must be 0. Safety metrics have no tolerance.
 ```
 
@@ -249,7 +259,9 @@ Exit code 1.
 Two modes, one interface:
 
 - **live** calls your retriever and your agent. The honest number, and the
-  slow, paid one.
+  slow, paid one. Rows run with bounded concurrency in live mode
+  (`--concurrency=N`, default 4), and judge calls retry 429/5xx/network
+  failures with backoff.
 - **fixture** replays a recorded ranking or tool choice from `fixtures/`.
   Free, offline, deterministic.
 
@@ -259,7 +271,8 @@ shows up as a **diff to a committed JSON file**, in review, next to the change
 that caused it, instead of as a number nobody re-ran.
 
 Each fixture stores an `inputHash` covering what the system under test was
-actually asked — the query and segments, or the utterance and available tools.
+actually asked — the query and segments, the utterance and available tools, or
+the full sequence of multi-turn utterances and available tools.
 Edit a row and keep its id, and `doctor` fails with the row named, because a
 stale replay answers a question the dataset no longer asks. The hash
 deliberately excludes the expected answers: refining `relevant` or `forbidden`
@@ -277,7 +290,20 @@ model, the retrieval score threshold, or the agent system prompt.
 
 ## Wiring it to your system
 
-Copy an example config and fill in three functions. Two are shipped:
+Start with empty row files:
+
+```bash
+trackline-gate init
+```
+
+Or copy the complete worked example:
+
+```bash
+trackline-gate init --example=fintech-support
+```
+
+Then copy an example config and fill in the functions your suites need. Two are
+shipped:
 
 | File | Use it when |
 |---|---|
@@ -298,6 +324,11 @@ const config: HarnessConfig = {
 
   // Ask the agent what it WOULD call. Never execute anything.
   toolSelector: async (testCase) => ({ called: [...], refused: false }),
+
+  // Run the whole conversation in one eval session so prior turns can matter.
+  multiTurnToolSelector: async (testCase) => ({
+    turns: testCase.turns.map(() => ({ called: [...], refused: false })),
+  }),
 
   // Risk tier for a tool name, read from your live registry.
   toolCatalog: (name) => getTool(name)?.risk,
@@ -346,9 +377,10 @@ JSONL, one case per line, in `datasets/`. Every row carries a `note` saying what
 failure it exists to catch. A golden row whose purpose nobody remembers gets
 deleted the first time it goes red.
 
-The shipped datasets are a worked example for a fintech support agent: 25
-retrieval rows, 25 tool-selection rows, 20 groundedness rows. Replace them with
-your own. The shapes are what matters.
+The `examples/fintech-support` dataset is a worked example: 25 retrieval rows,
+25 tool-selection rows, 5 multi-turn rows, 20 groundedness rows, fixtures and a
+baseline. Your own project should replace those rows with cases from your
+product. The shapes are what matters.
 
 Three kinds of row earn their place beyond the obvious:
 
@@ -358,6 +390,9 @@ Three kinds of row earn their place beyond the obvious:
 - **Injection rows** (`tool-017` to `tool-020`) covering direct injection,
   forged authority, the "just testing" frame, and indirect injection through
   pasted content. These carry `expectRefusal` and drive `injectionResistance`.
+- **Multi-turn rows** (`mt-001` to `mt-005`) where a later request only makes
+  sense in light of an earlier constraint, refusal or approval rule. These
+  carry `dependsOnPrevious` and drive `memorySafety`.
 - **Correct-abstention rows** (`gnd-005`) where the answer says "I don't have
   that information". A judge that marks honest uncertainty as a hallucination is
   miscalibrated, and this row is what catches it.
@@ -386,7 +421,15 @@ Three rules keep an LLM judge honest, and all three are load-bearing:
 
 Use a different model from the one under test. Self-judging inflates every
 number it touches. Set `EVAL_JUDGE_MODEL` to override the default
-(`gpt-4o-mini`).
+(`gpt-4o-mini`). The CI gate uses OpenAI by default, or any OpenAI-compatible
+endpoint:
+
+```bash
+EVAL_JUDGE_API_KEY=... \
+EVAL_JUDGE_BASE_URL=http://localhost:11434/v1 \
+EVAL_JUDGE_MODEL=llama3.1 \
+trackline-gate run --live --suite=groundedness
+```
 
 ---
 
@@ -411,10 +454,10 @@ Named honestly, because a component that looks complete stops getting extended.
 Some of these are gaps the wider alignment engine is meant to close; they are
 marked as such, and marking them is not the same as shipping them.
 
-- **No multi-turn conversation evals.** Every suite tests one turn. Whether an
-  agent correctly refuses on turn 4 what it accepted on turn 1 is untested, and
-  that is where a lot of real jailbreaks live. *On the roadmap: the local
-  surface is inherently multi-turn.*
+- **No long-running scenario simulation.** The multi-turn suite checks
+  short conversations where earlier constraints must still bind later turns. It
+  does not yet simulate hours-long work, changing tool registries or users
+  interrupting an agent mid-task.
 - **No cost or token tracking.** `p95Latency` is recorded but is meaningless in
   fixture mode and noisy on a laptop.
 - **No production sampling.** The full pattern is offline dataset, then CI gate,

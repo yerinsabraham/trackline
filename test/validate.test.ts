@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { validateProject } from '../src/validate.js';
-import { retrievalInputHash, toolInputHash } from '../src/adapters/fixture.js';
+import { multiTurnInputHash, retrievalInputHash, toolInputHash } from '../src/adapters/fixture.js';
 
 function makeProject(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'trackline-'));
@@ -18,6 +18,10 @@ function makeProject(): string {
   fs.writeFileSync(
     path.join(root, 'datasets', 'tool-selection.jsonl'),
     '{"id":"tool-1","utterance":"hello","available":["kb_search"],"expected":[],"maxRisk":"read_public"}\n',
+  );
+  fs.writeFileSync(
+    path.join(root, 'datasets', 'multi-turn.jsonl'),
+    '{"id":"mt-1","turns":[{"utterance":"remember this","available":["kb_search"],"expected":[],"maxRisk":"read_public"},{"utterance":"now answer","available":["kb_search"],"expected":["kb_search"],"maxRisk":"read_public","dependsOnPrevious":true}]}\n',
   );
   fs.writeFileSync(
     path.join(root, 'datasets', 'groundedness.jsonl'),
@@ -44,6 +48,30 @@ function makeProject(): string {
     }) + '\n',
   );
   fs.writeFileSync(
+    path.join(root, 'fixtures', 'multi-turn.fixture.json'),
+    JSON.stringify({
+      'mt-1': {
+        turns: [
+          { called: [], refused: false, risks: {} },
+          { called: ['kb_search'], refused: false, risks: { kb_search: 'read_public' } },
+        ],
+        inputHash: multiTurnInputHash({
+          id: 'mt-1',
+          turns: [
+            { utterance: 'remember this', available: ['kb_search'], expected: [], maxRisk: 'read_public' },
+            {
+              utterance: 'now answer',
+              available: ['kb_search'],
+              expected: ['kb_search'],
+              maxRisk: 'read_public',
+              dependsOnPrevious: true,
+            },
+          ],
+        }),
+      },
+    }) + '\n',
+  );
+  fs.writeFileSync(
     path.join(root, 'baseline.json'),
     JSON.stringify({
       'retrieval.recall@5': 1,
@@ -59,6 +87,13 @@ function makeProject(): string {
       'tools.riskViolationRate': 0,
       'tools.injectionResistance': 1,
       'tools.p95Latency': 0,
+      'multi-turn.exactMatch': 1,
+      'multi-turn.f1': 1,
+      'multi-turn.forbiddenRate': 0,
+      'multi-turn.riskViolationRate': 0,
+      'multi-turn.injectionResistance': 1,
+      'multi-turn.memorySafety': 1,
+      'multi-turn.p95Latency': 0,
     }),
   );
   return root;
@@ -68,6 +103,40 @@ describe('project validation', () => {
   it('passes a complete fixture project', () => {
     const issues = validateProject(makeProject(), { mode: 'fixture', strictBaseline: true });
     assert.deepEqual(issues, []);
+  });
+
+  it('passes an empty project scaffold', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'trackline-empty-'));
+    fs.mkdirSync(path.join(root, 'datasets'));
+    fs.mkdirSync(path.join(root, 'fixtures'));
+    for (const file of ['retrieval.jsonl', 'tool-selection.jsonl', 'multi-turn.jsonl', 'groundedness.jsonl']) {
+      fs.writeFileSync(path.join(root, 'datasets', file), '// add rows here\n');
+    }
+    fs.writeFileSync(path.join(root, 'fixtures', 'retrieval.fixture.json'), '{}\n');
+    fs.writeFileSync(path.join(root, 'fixtures', 'tool-selection.fixture.json'), '{}\n');
+    fs.writeFileSync(path.join(root, 'fixtures', 'multi-turn.fixture.json'), '{}\n');
+    fs.writeFileSync(path.join(root, 'baseline.json'), '{}\n');
+
+    assert.deepEqual(validateProject(root, { mode: 'fixture', strictBaseline: true }), []);
+  });
+
+  it('passes a project from before multi-turn existed, even with a strict baseline', () => {
+    const root = makeProject();
+    fs.rmSync(path.join(root, 'datasets', 'multi-turn.jsonl'));
+    fs.rmSync(path.join(root, 'fixtures', 'multi-turn.fixture.json'));
+    const baselinePath = path.join(root, 'baseline.json');
+    const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as Record<string, number>;
+    for (const key of Object.keys(baseline)) if (key.startsWith('multi-turn.')) delete baseline[key];
+    fs.writeFileSync(baselinePath, JSON.stringify(baseline));
+
+    assert.deepEqual(validateProject(root, { mode: 'fixture', strictBaseline: true }), []);
+  });
+
+  it('still requires multi-turn fixtures once the dataset exists', () => {
+    const root = makeProject();
+    fs.rmSync(path.join(root, 'fixtures', 'multi-turn.fixture.json'));
+    const issues = validateProject(root, { mode: 'fixture' });
+    assert.ok(issues.some((i) => i.level === 'error' && i.file === 'fixtures/multi-turn.fixture.json'));
   });
 
   it('fails missing fixture coverage in fixture mode', () => {
@@ -159,6 +228,20 @@ describe('fixture freshness', () => {
     );
     assert.equal(found?.level, 'error');
     assert.equal(found?.id, 'tool-1');
+  });
+
+  it('errors when a multi-turn utterance was edited after recording', () => {
+    const root = makeProject();
+    fs.writeFileSync(
+      path.join(root, 'datasets', 'multi-turn.jsonl'),
+      '{"id":"mt-1","turns":[{"utterance":"remember a different constraint","available":["kb_search"],"expected":[],"maxRisk":"read_public"},{"utterance":"now answer","available":["kb_search"],"expected":["kb_search"],"maxRisk":"read_public","dependsOnPrevious":true}]}\n',
+    );
+
+    const found = validateProject(root, { mode: 'fixture' }).find(
+      (i) => i.code === 'stale_fixture_inputs',
+    );
+    assert.equal(found?.level, 'error');
+    assert.equal(found?.id, 'mt-1');
   });
 
   it('does not fire when only the expected answers changed', () => {

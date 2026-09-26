@@ -26,6 +26,8 @@ import type {
   GroundednessCase,
   HarnessConfig,
   Metric,
+  MultiTurnCase,
+  MultiTurnFixture,
   RetrievalCase,
   RetrievalFixture,
   RunMode,
@@ -35,12 +37,15 @@ import type {
   ToolSelectionCase,
 } from './types.js';
 import { emptyRate, ndcgAtK, precisionAtK, recallAtK, reciprocalRank } from './scorers/retrieval.js';
-import { scoreToolCase } from './scorers/tool-selection.js';
-import { DEFAULT_JUDGE_MODEL, judgeAgrees, judgeGroundedness } from './scorers/judge.js';
+import { scoreMultiTurnCase, scoreToolCase } from './scorers/tool-selection.js';
+import { DEFAULT_JUDGE_MODEL, judgeAgrees, judgeConfigured, judgeGroundedness, judgeProvider } from './scorers/judge.js';
 import {
   retrievalInputHash,
+  multiTurnInputHash,
   runRetrieval,
+  runMultiTurn,
   runToolSelection,
+  saveMultiTurnFixtures,
   saveRetrievalFixtures,
   saveToolFixtures,
   toolInputHash,
@@ -141,7 +146,8 @@ const metric = (
   primary: boolean,
   higherIsBetter = true,
   unit?: Metric['unit'],
-): Metric => ({ key, value, primary, higherIsBetter, unit });
+  sampleSize?: number,
+): Metric => ({ key, value, primary, higherIsBetter, unit, sampleSize });
 
 /**
  * A metric with nothing to measure.
@@ -156,6 +162,7 @@ const unmeasured = (
   primary: boolean,
   higherIsBetter = true,
   isError = false,
+  sampleSize?: number,
 ): Metric => ({
   key,
   value: null,
@@ -163,6 +170,7 @@ const unmeasured = (
   unmeasuredIsError: isError,
   primary,
   higherIsBetter,
+  sampleSize,
 });
 
 /**
@@ -179,10 +187,31 @@ const meanOrNull = (xs: number[]): number | null =>
 
 function gitSha(): string | null {
   try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return null;
   }
+}
+
+function concurrency(): number {
+  const raw = val('concurrency') ?? process.env.TRACKLINE_EVAL_CONCURRENCY;
+  if (!raw) return mode === 'live' ? 4 : 1;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 16) : 1;
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]!, i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 // ── Suites ────────────────────────────────────────────────────────────────────
@@ -195,12 +224,9 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
   const latencies: number[] = [];
   const raw: { retrieved: string[] }[] = [];
 
-  for (const c of cases) {
+  const ran = await mapLimit(cases, concurrency(), async (c) => {
     try {
       const { retrieved, latencyMs } = await runRetrieval(c, mode, config);
-      rankings[c.id] = { retrieved, inputHash: retrievalInputHash(c) };
-      latencies.push(latencyMs);
-      raw.push({ retrieved });
 
       // A row with no relevant chunks asks the opposite question: did we
       // correctly return nothing. Scoring it with recall would hand it a free 1
@@ -222,7 +248,11 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
             ndcg10: ndcgAtK(retrieved, c.relevant, 10, c.grades),
           };
 
-      results.push({
+      return {
+        fixture: { id: c.id, value: { retrieved, inputHash: retrievalInputHash(c) } },
+        raw: { retrieved },
+        latencyMs,
+        result: {
         id: c.id,
         passed: isNegative ? retrieved.length === 0 : scores.recall5 === 1,
         scores,
@@ -236,10 +266,22 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
                 .filter((r) => !retrieved.slice(0, 5).includes(r))
                 .join(', ')}`
             : undefined,
-      });
+        },
+      };
     } catch (e) {
-      errors.push({ id: c.id, message: (e as Error).message });
+      return { error: { id: c.id, message: (e as Error).message } };
     }
+  });
+
+  for (const item of ran) {
+    if ('error' in item && item.error) {
+      errors.push(item.error);
+      continue;
+    }
+    rankings[item.fixture.id] = item.fixture.value;
+    latencies.push(item.latencyMs);
+    raw.push(item.raw);
+    results.push(item.result);
   }
 
   if (record) saveRetrievalFixtures(rankings);
@@ -251,19 +293,19 @@ async function retrievalSuite(config: HarnessConfig): Promise<SuiteResult> {
     cases: results,
     errors,
     metrics: [
-      metric('recall@5', meanOrNull(results.map((r) => r.scores.recall5)), true),
-      metric('recall@10', meanOrNull(results.map((r) => r.scores.recall10)), true),
+      metric('recall@5', meanOrNull(results.map((r) => r.scores.recall5)), true, true, undefined, results.length),
+      metric('recall@10', meanOrNull(results.map((r) => r.scores.recall10)), true, true, undefined, results.length),
       // Ranking metrics are meaningless on negative rows, so they average over
       // positives only. With no positive rows there is nothing to rank.
       positives.length === 0
         ? unmeasured('mrr', 'no dataset row has relevant chunks', true)
-        : metric('mrr', meanOrNull(positives.map((r) => r.scores.mrr)), true),
+        : metric('mrr', meanOrNull(positives.map((r) => r.scores.mrr)), true, true, undefined, positives.length),
       positives.length === 0
         ? unmeasured('ndcg@10', 'no dataset row has relevant chunks', true)
-        : metric('ndcg@10', meanOrNull(positives.map((r) => r.scores.ndcg10)), true),
-      metric('precision@5', meanOrNull(positives.map((r) => r.scores.precision5)), false),
-      metric('emptyRate', emptyRate(raw), false, false),
-      metric('p95Latency', percentile(latencies, 95), false, false, 'ms'),
+        : metric('ndcg@10', meanOrNull(positives.map((r) => r.scores.ndcg10)), true, true, undefined, positives.length),
+      metric('precision@5', meanOrNull(positives.map((r) => r.scores.precision5)), false, true, undefined, positives.length),
+      metric('emptyRate', emptyRate(raw), false, false, undefined, raw.length),
+      metric('p95Latency', percentile(latencies, 95), false, false, 'ms', latencies.length),
     ],
   };
 }
@@ -281,29 +323,45 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
   // that did not run.
   const riskResolvable = new Set<string>();
 
-  for (const c of cases) {
+  const ran = await mapLimit(cases, concurrency(), async (c) => {
     try {
       const outcome = await runToolSelection(c, mode, config);
-      fixtures[c.id] = {
-        called: outcome.called,
-        refused: outcome.refused,
-        risks: outcome.risks,
-        inputHash: toolInputHash(c),
-      };
-      if (outcome.risks !== undefined) riskResolvable.add(c.id);
-      latencies.push(outcome.latencyMs);
 
       const scored = scoreToolCase(outcome, c);
-      results.push({
-        id: c.id,
-        passed: scored.passed,
-        scores: scored.scores,
-        detail: scored.detail,
+      return {
+        riskResolvable: outcome.risks !== undefined,
+        fixture: {
+          id: c.id,
+          value: {
+            called: outcome.called,
+            refused: outcome.refused,
+            risks: outcome.risks,
+            inputHash: toolInputHash(c),
+          },
+        },
         latencyMs: outcome.latencyMs,
-      });
+        result: {
+          id: c.id,
+          passed: scored.passed,
+          scores: scored.scores,
+          detail: scored.detail,
+          latencyMs: outcome.latencyMs,
+        },
+      };
     } catch (e) {
-      errors.push({ id: c.id, message: (e as Error).message });
+      return { error: { id: c.id, message: (e as Error).message } };
     }
+  });
+
+  for (const item of ran) {
+    if ('error' in item && item.error) {
+      errors.push(item.error);
+      continue;
+    }
+    fixtures[item.fixture.id] = item.fixture.value;
+    if (item.riskResolvable) riskResolvable.add(item.fixture.id);
+    latencies.push(item.latencyMs);
+    results.push(item.result);
   }
 
   if (record) saveToolFixtures(fixtures);
@@ -318,7 +376,7 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
 
   const riskMetric = (): Metric => {
     if (riskRows.length === 0) {
-      return unmeasured('riskViolationRate', 'no dataset row declares maxRisk', true, false, false);
+      return unmeasured('riskViolationRate', 'no dataset row declares maxRisk', true, false, false, 0);
     }
     if (riskScored.length === 0) {
       // The dataset asks the question and nothing can answer it. This is the
@@ -330,6 +388,7 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
         true,
         false,
         true,
+        riskRows.length,
       );
     }
     if (riskScored.length < riskRows.length) {
@@ -341,9 +400,10 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
         unmeasured: `${riskRows.length - riskScored.length} of ${riskRows.length} maxRisk row(s) had no resolvable tiers`,
         primary: true,
         higherIsBetter: false,
+        sampleSize: riskScored.length,
       };
     }
-    return metric('riskViolationRate', meanOrNull(riskScored.map((r) => r.scores.riskViolation)), true, false);
+    return metric('riskViolationRate', meanOrNull(riskScored.map((r) => r.scores.riskViolation)), true, false, undefined, riskScored.length);
   };
 
   return {
@@ -351,15 +411,133 @@ async function toolSuite(config: HarnessConfig): Promise<SuiteResult> {
     cases: results,
     errors,
     metrics: [
-      metric('exactMatch', meanOrNull(results.map((r) => r.scores.exactMatch)), true),
-      metric('f1', meanOrNull(results.map((r) => r.scores.f1)), true),
+      metric('exactMatch', meanOrNull(results.map((r) => r.scores.exactMatch)), true, true, undefined, results.length),
+      metric('f1', meanOrNull(results.map((r) => r.scores.f1)), true, true, undefined, results.length),
       // Both of these carry a hard zero floor in the gate.
-      metric('forbiddenRate', meanOrNull(results.map((r) => r.scores.forbidden)), true, false),
+      metric('forbiddenRate', meanOrNull(results.map((r) => r.scores.forbidden)), true, false, undefined, results.length),
       riskMetric(),
       injection.length === 0
         ? unmeasured('injectionResistance', 'no dataset row sets expectRefusal', true)
-        : metric('injectionResistance', meanOrNull(injection.map((r) => r.scores.refusal)), true),
-      metric('p95Latency', percentile(latencies, 95), false, false, 'ms'),
+        : metric('injectionResistance', meanOrNull(injection.map((r) => r.scores.refusal)), true, true, undefined, injection.length),
+      metric('p95Latency', percentile(latencies, 95), false, false, 'ms', latencies.length),
+    ],
+  };
+}
+
+async function multiTurnSuite(config: HarnessConfig): Promise<SuiteResult> {
+  // Optional, unlike the others: projects set up before this suite existed
+  // have no file, and upgrading must not break their build.
+  if (!fs.existsSync(path.join(DATASET_DIR, 'multi-turn.jsonl'))) {
+    return { suite: 'multi-turn', cases: [], errors: [], metrics: [], skipped: 'no datasets/multi-turn.jsonl' };
+  }
+  const cases = readJsonl<MultiTurnCase>('multi-turn');
+  const results: CaseResult[] = [];
+  const errors: SuiteResult['errors'] = [];
+  const fixtures: Record<string, MultiTurnFixture> = {};
+  const latencies: number[] = [];
+  const riskResolvable = new Set<string>();
+
+  const ran = await mapLimit(cases, concurrency(), async (c) => {
+    try {
+      const outcome = await runMultiTurn(c, mode, config);
+      const scored = scoreMultiTurnCase(outcome, c);
+      return {
+        riskResolvable: outcome.turns.map((turn) => turn.risks !== undefined),
+        fixture: {
+          id: c.id,
+          value: {
+            turns: outcome.turns.map((turn) => ({
+              called: turn.called,
+              refused: turn.refused,
+              risks: turn.risks,
+            })),
+            inputHash: multiTurnInputHash(c),
+          },
+        },
+        latencyMs: outcome.latencyMs,
+        result: {
+          id: c.id,
+          passed: scored.passed,
+          scores: scored.scores,
+          detail: scored.detail,
+          latencyMs: outcome.latencyMs,
+        },
+      };
+    } catch (e) {
+      return { error: { id: c.id, message: (e as Error).message } };
+    }
+  });
+
+  for (const item of ran) {
+    if ('error' in item && item.error) {
+      errors.push(item.error);
+      continue;
+    }
+    fixtures[item.fixture.id] = item.fixture.value;
+    item.riskResolvable.forEach((ok, i) => {
+      if (ok) riskResolvable.add(`${item.fixture.id}.${i}`);
+    });
+    latencies.push(item.latencyMs);
+    results.push(item.result);
+  }
+
+  if (record) saveMultiTurnFixtures(fixtures);
+
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  const refusalRows = results.filter((r) => byId.get(r.id)?.turns.some((turn) => turn.expectRefusal));
+  const memoryRows = results.filter((r) => byId.get(r.id)?.turns.some((turn) => turn.dependsOnPrevious));
+  const riskRows = cases
+    .flatMap((c) => c.turns.map((turn, i) => ({ caseId: c.id, id: `${c.id}.${i}`, turn })))
+    .filter((row) => row.turn.maxRisk !== undefined);
+  const riskCaseIds = new Set(riskRows.map((row) => row.caseId));
+  const riskCases = results.filter((r) => riskCaseIds.has(r.id));
+  const riskScored = riskCases.filter((r) => {
+    const testCase = byId.get(r.id);
+    return testCase?.turns.every((turn, i) => turn.maxRisk === undefined || riskResolvable.has(`${r.id}.${i}`));
+  });
+
+  const riskMetric = (): Metric => {
+    if (riskRows.length === 0) return unmeasured('riskViolationRate', 'no multi-turn row declares maxRisk', true, false, false, 0);
+    if (riskScored.length === 0) {
+      return unmeasured(
+        'riskViolationRate',
+        `${riskRows.length} multi-turn turn(s) declare maxRisk but no risk tiers could be resolved. ` +
+          'Re-record fixtures with a toolCatalog, or add one to harness.config.ts',
+        true,
+        false,
+        true,
+        riskRows.length,
+      );
+    }
+    if (riskScored.length < riskCases.length) {
+      return {
+        key: 'riskViolationRate',
+        value: meanOrNull(riskScored.map((r) => r.scores.riskViolation)),
+        unmeasured: `${riskCases.length - riskScored.length} of ${riskCases.length} maxRisk multi-turn case(s) had no resolvable tiers`,
+        primary: true,
+        higherIsBetter: false,
+        sampleSize: riskScored.length,
+      };
+    }
+    return metric('riskViolationRate', meanOrNull(riskScored.map((r) => r.scores.riskViolation)), true, false, undefined, riskScored.length);
+  };
+
+  return {
+    suite: 'multi-turn',
+    cases: results,
+    errors,
+    metrics: [
+      metric('exactMatch', meanOrNull(results.map((r) => r.scores.exactMatch)), true, true, undefined, results.length),
+      metric('f1', meanOrNull(results.map((r) => r.scores.f1)), true, true, undefined, results.length),
+      metric('forbiddenRate', meanOrNull(results.map((r) => r.scores.forbidden)), true, false, undefined, results.length),
+      riskMetric(),
+      refusalRows.length === 0
+        ? unmeasured('injectionResistance', 'no multi-turn turn sets expectRefusal', true)
+        : metric('injectionResistance', meanOrNull(refusalRows.map((r) => r.scores.refusal).filter((n) => !Number.isNaN(n))), true, true, undefined, refusalRows.length),
+      memoryRows.length === 0
+        ? unmeasured('memorySafety', 'no multi-turn turn depends on previous context', true)
+        : metric('memorySafety', meanOrNull(memoryRows.map((r) => r.scores.memorySafety).filter((n) => !Number.isNaN(n))), true, true, undefined, memoryRows.length),
+      metric('p95Latency', percentile(latencies, 95), false, false, 'ms', latencies.length),
     ],
   };
 }
@@ -369,39 +547,50 @@ async function groundednessSuite(): Promise<SuiteResult> {
 
   // The only suite that costs money. Skipped rather than failed without a key,
   // so the free suites still gate a contributor with no judge access.
-  if (!process.env.OPENAI_API_KEY) {
-    return { suite: 'groundedness', cases: [], errors: [], metrics: [], skipped: 'no OPENAI_API_KEY' };
+  if (!judgeConfigured()) {
+    return { suite: 'groundedness', cases: [], errors: [], metrics: [], skipped: 'no judge API key' };
   }
 
   const results: CaseResult[] = [];
   const errors: SuiteResult['errors'] = [];
   let uncertain = 0;
 
-  for (const c of cases) {
+  const ran = await mapLimit(cases, concurrency(), async (c) => {
     try {
       const started = Date.now();
       const judged = await judgeGroundedness(c);
-      if (judged.verdict === 'uncertain') uncertain += 1;
 
       const agrees = judgeAgrees(judged.verdict, c.expect);
-      results.push({
-        id: c.id,
-        passed: agrees,
-        scores: {
-          agreement: agrees ? 1 : 0,
-          // Recall over the rows that are genuinely unsupported: the share of
-          // real hallucinations the judge caught. The number that matters most,
-          // because a missed hallucination reaches a customer.
-          caughtHallucination:
-            c.expect === 'unsupported' ? (judged.verdict === 'unsupported' ? 1 : 0) : Number.NaN,
-          falseAlarm: c.expect === 'grounded' ? (judged.verdict === 'unsupported' ? 1 : 0) : Number.NaN,
+      return {
+        uncertain: judged.verdict === 'uncertain',
+        result: {
+          id: c.id,
+          passed: agrees,
+          scores: {
+            agreement: agrees ? 1 : 0,
+            // Recall over the rows that are genuinely unsupported: the share of
+            // real hallucinations the judge caught. The number that matters most,
+            // because a missed hallucination reaches a customer.
+            caughtHallucination:
+              c.expect === 'unsupported' ? (judged.verdict === 'unsupported' ? 1 : 0) : Number.NaN,
+            falseAlarm: c.expect === 'grounded' ? (judged.verdict === 'unsupported' ? 1 : 0) : Number.NaN,
+          },
+          detail: agrees ? undefined : `judge said ${judged.verdict}, expected ${c.expect}. ${judged.reason}`,
+          latencyMs: Date.now() - started,
         },
-        detail: agrees ? undefined : `judge said ${judged.verdict}, expected ${c.expect}. ${judged.reason}`,
-        latencyMs: Date.now() - started,
-      });
+      };
     } catch (e) {
-      errors.push({ id: c.id, message: (e as Error).message });
+      return { error: { id: c.id, message: (e as Error).message } };
     }
+  });
+
+  for (const item of ran) {
+    if ('error' in item && item.error) {
+      errors.push(item.error);
+      continue;
+    }
+    if (item.uncertain) uncertain += 1;
+    results.push(item.result);
   }
 
   // NaN marks a score that does not apply to this row, so filtering it out is
@@ -415,16 +604,16 @@ async function groundednessSuite(): Promise<SuiteResult> {
     cases: results,
     errors,
     metrics: [
-      metric('agreement', meanOrNull(results.map((r) => r.scores.agreement)), true),
+      metric('agreement', meanOrNull(results.map((r) => r.scores.agreement)), true, true, undefined, results.length),
       caught.length === 0
         ? unmeasured('caughtHallucination', 'no dataset row expects unsupported', true)
-        : metric('caughtHallucination', meanOrNull(caught), true),
+        : metric('caughtHallucination', meanOrNull(caught), true, true, undefined, caught.length),
       falseAlarm.length === 0
         ? unmeasured('falseAlarmRate', 'no dataset row expects grounded', true, false)
-        : metric('falseAlarmRate', meanOrNull(falseAlarm), true, false),
+        : metric('falseAlarmRate', meanOrNull(falseAlarm), true, false, undefined, falseAlarm.length),
       results.length === 0
         ? unmeasured('abstainRate', 'no rows judged', false, false)
-        : metric('abstainRate', uncertain / results.length, false, false),
+        : metric('abstainRate', uncertain / results.length, false, false, undefined, results.length),
     ],
   };
 }
@@ -438,18 +627,69 @@ function copyIfMissing(from: string, to: string): boolean {
   return true;
 }
 
-function initProject(): void {
+function writeIfMissing(to: string, body: string): boolean {
+  if (fs.existsSync(to)) return false;
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.writeFileSync(to, body);
+  return true;
+}
+
+function initEmptyProject(): void {
   const copied = [
-    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'retrieval.jsonl'), path.join(DATASET_DIR, 'retrieval.jsonl')),
-    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'tool-selection.jsonl'), path.join(DATASET_DIR, 'tool-selection.jsonl')),
-    copyIfMissing(path.join(PACKAGE_ROOT, 'datasets', 'groundedness.jsonl'), path.join(DATASET_DIR, 'groundedness.jsonl')),
-    copyIfMissing(path.join(PACKAGE_ROOT, 'fixtures', 'retrieval.fixture.json'), path.join(ROOT, 'fixtures', 'retrieval.fixture.json')),
-    copyIfMissing(path.join(PACKAGE_ROOT, 'fixtures', 'tool-selection.fixture.json'), path.join(ROOT, 'fixtures', 'tool-selection.fixture.json')),
-    copyIfMissing(path.join(PACKAGE_ROOT, 'baseline.json'), BASELINE_PATH),
+    writeIfMissing(
+      path.join(DATASET_DIR, 'retrieval.jsonl'),
+      '// Add retrieval rows here, one JSON object per line.\n',
+    ),
+    writeIfMissing(
+      path.join(DATASET_DIR, 'tool-selection.jsonl'),
+      '// Add tool-selection rows here, one JSON object per line.\n',
+    ),
+    writeIfMissing(
+      path.join(DATASET_DIR, 'multi-turn.jsonl'),
+      '// Add multi-turn rows here, one JSON object per line.\n',
+    ),
+    writeIfMissing(
+      path.join(DATASET_DIR, 'groundedness.jsonl'),
+      '// Add groundedness rows here, one JSON object per line.\n',
+    ),
+    writeIfMissing(path.join(ROOT, 'fixtures', 'retrieval.fixture.json'), '{}\n'),
+    writeIfMissing(path.join(ROOT, 'fixtures', 'tool-selection.fixture.json'), '{}\n'),
+    writeIfMissing(path.join(ROOT, 'fixtures', 'multi-turn.fixture.json'), '{}\n'),
+    writeIfMissing(BASELINE_PATH, '{}\n'),
     copyIfMissing(path.join(PACKAGE_ROOT, 'harness.config.example.ts'), path.join(ROOT, 'harness.config.example.ts')),
   ].filter(Boolean).length;
 
-  console.log(copied === 0 ? 'Trackline already initialized.' : `Trackline initialized ${copied} file(s).`);
+  console.log(copied === 0 ? 'Trackline already initialized.' : `Trackline initialized ${copied} empty file(s). Add rows, record fixtures, then update the baseline.`);
+}
+
+function initExampleProject(name: string): void {
+  const dir = path.join(PACKAGE_ROOT, 'examples', name);
+  if (!fs.existsSync(dir)) {
+    console.error(`Unknown example "${name}". Available: fintech-support.`);
+    process.exit(2);
+  }
+  const copied = [
+    copyIfMissing(path.join(dir, 'datasets', 'retrieval.jsonl'), path.join(DATASET_DIR, 'retrieval.jsonl')),
+    copyIfMissing(path.join(dir, 'datasets', 'tool-selection.jsonl'), path.join(DATASET_DIR, 'tool-selection.jsonl')),
+    copyIfMissing(path.join(dir, 'datasets', 'multi-turn.jsonl'), path.join(DATASET_DIR, 'multi-turn.jsonl')),
+    copyIfMissing(path.join(dir, 'datasets', 'groundedness.jsonl'), path.join(DATASET_DIR, 'groundedness.jsonl')),
+    copyIfMissing(path.join(dir, 'fixtures', 'retrieval.fixture.json'), path.join(ROOT, 'fixtures', 'retrieval.fixture.json')),
+    copyIfMissing(path.join(dir, 'fixtures', 'tool-selection.fixture.json'), path.join(ROOT, 'fixtures', 'tool-selection.fixture.json')),
+    copyIfMissing(path.join(dir, 'fixtures', 'multi-turn.fixture.json'), path.join(ROOT, 'fixtures', 'multi-turn.fixture.json')),
+    copyIfMissing(path.join(dir, 'baseline.json'), BASELINE_PATH),
+    copyIfMissing(path.join(dir, 'harness.config.example.ts'), path.join(ROOT, 'harness.config.example.ts')),
+  ].filter(Boolean).length;
+
+  console.log(copied === 0 ? 'Trackline already initialized.' : `Trackline initialized ${copied} file(s) from ${name}.`);
+}
+
+function initProject(): void {
+  const example = val('example');
+  if (example) {
+    initExampleProject(example);
+    return;
+  }
+  initEmptyProject();
 }
 
 function runDoctor(opts: { quiet?: boolean } = {}): void {
@@ -502,11 +742,12 @@ async function main() {
   const all = [
     { name: 'retrieval', run: () => retrievalSuite(config) },
     { name: 'tools', run: () => toolSuite(config) },
+    { name: 'multi-turn', run: () => multiTurnSuite(config) },
     { name: 'groundedness', run: () => groundednessSuite() },
   ].filter((s) => !only || s.name === only);
 
   if (all.length === 0) {
-    console.error(`Unknown suite "${only}". Available: retrieval, tools, groundedness.`);
+    console.error(`Unknown suite "${only}". Available: retrieval, tools, multi-turn, groundedness.`);
     process.exit(2);
   }
 
@@ -517,7 +758,7 @@ async function main() {
     startedAt: new Date().toISOString(),
     gitSha: gitSha(),
     mode,
-    judgeModel: process.env.OPENAI_API_KEY ? (process.env.EVAL_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL) : null,
+    judgeModel: judgeConfigured() ? `${judgeProvider()}:${process.env.EVAL_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL}` : null,
     suites,
   };
 

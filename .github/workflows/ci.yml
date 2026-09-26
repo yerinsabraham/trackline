@@ -144,3 +144,20 @@ jobs:
               || { echo "::error::$pair failed to build"; exit 1; }
             echo "  $pair ok"
           done
+
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - name: Install from packed tarballs and run
+        run: ./scripts/smoke-install.sh

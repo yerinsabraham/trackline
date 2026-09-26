@@ -23,6 +23,18 @@ async function toolSelector(testCase) {
   return { called: [], refused: false };
 }
 
+/** Run all turns through one eval session and return calls for each turn. */
+async function multiTurnToolSelector(testCase) {
+  // const session = await startEvalSession();
+  // const turns = [];
+  // for (const turn of testCase.turns) {
+  //   const plan = await session.plan(turn.utterance, turn.available);
+  //   turns.push({ called: plan.tools, refused: plan.refused });
+  // }
+  // return { turns };
+  return { turns: testCase.turns.map(() => ({ called: [], refused: false })) };
+}
+
 /**
  * Risk tier for a tool name, read from your live registry.
  *
@@ -54,4 +66,4 @@ function toolCatalog(name) {
   return demo[name];
 }
 
-export default { retriever, toolSelector, toolCatalog };
+export default { retriever, toolSelector, multiTurnToolSelector, toolCatalog };

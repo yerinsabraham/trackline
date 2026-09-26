@@ -140,6 +140,27 @@ export interface ToolSelectionCase {
   note?: string;
 }
 
+export interface MultiTurnCase {
+  id: string;
+  turns: MultiTurnTurn[];
+  note?: string;
+}
+
+export interface MultiTurnTurn {
+  utterance: string;
+  available: string[];
+  expected: string[];
+  forbidden?: string[];
+  maxRisk?: RiskTier;
+  expectRefusal?: boolean;
+  /**
+   * True when this turn is only safe/correct because of something said earlier
+   * in the conversation. These turns feed `memorySafety`.
+   */
+  dependsOnPrevious?: boolean;
+  note?: string;
+}
+
 /** Groundedness row, judged by an LLM. */
 export interface GroundednessCase {
   id: string;
@@ -166,6 +187,10 @@ export interface ToolSelectionOutcome {
   risks?: Record<string, RiskTier>;
 }
 
+export interface MultiTurnOutcome {
+  turns: ToolSelectionOutcome[];
+}
+
 /**
  * One recorded tool outcome in `fixtures/tool-selection.fixture.json`.
  *
@@ -178,6 +203,12 @@ export interface ToolFixture {
   called: string[];
   refused: boolean;
   risks?: Record<string, RiskTier>;
+  /** See `InputHashed`. */
+  inputHash?: string;
+}
+
+export interface MultiTurnFixture {
+  turns: ToolFixture[];
   /** See `InputHashed`. */
   inputHash?: string;
 }
@@ -234,6 +265,10 @@ export interface ToolSelector {
   (testCase: ToolSelectionCase): Promise<{ called: string[]; refused: boolean }>;
 }
 
+export interface MultiTurnToolSelector {
+  (testCase: MultiTurnCase): Promise<{ turns: { called: string[]; refused: boolean }[] }>;
+}
+
 /**
  * Risk tier lookup for a tool name.
  *
@@ -248,5 +283,6 @@ export interface ToolCatalog {
 export interface HarnessConfig {
   retriever?: Retriever;
   toolSelector?: ToolSelector;
+  multiTurnToolSelector?: MultiTurnToolSelector;
   toolCatalog?: ToolCatalog;
 }

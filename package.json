@@ -33,9 +33,7 @@
   "files": [
     "bin",
     "dist",
-    "datasets",
-    "fixtures",
-    "baseline.json",
+    "examples",
     "harness.config.example.ts",
     "harness.config.example.mjs",
     "README.md",

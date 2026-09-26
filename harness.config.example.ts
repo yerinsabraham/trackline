@@ -63,6 +63,27 @@ async function toolSelector(testCase: {
 }
 
 /**
+ * Your agent over a whole conversation.
+ *
+ * This is deliberately separate from `toolSelector`: evaluating memory by
+ * replaying turns independently would miss the bug this suite exists to catch.
+ * Run the turns through the same session and record what the agent would call
+ * on each turn.
+ */
+async function multiTurnToolSelector(testCase: {
+  turns: { utterance: string; available: string[] }[];
+}): Promise<{ turns: { called: string[]; refused: boolean }[] }> {
+  // const session = await startEvalSession();
+  // const turns = [];
+  // for (const turn of testCase.turns) {
+  //   const response = await session.plan(turn.utterance, turn.available);
+  //   turns.push({ called: response.tools, refused: response.refused });
+  // }
+  // return { turns };
+  throw new Error('Wire up your multi-turn agent here.');
+}
+
+/**
  * Risk tier for a tool name, read from your live registry rather than carried
  * in the dataset, so retiering a tool is reflected here immediately instead of
  * silently disagreeing with production.
@@ -94,6 +115,6 @@ function toolCatalog(name: string): RiskTier | undefined {
   return demo[name];
 }
 
-const config: HarnessConfig = { retriever, toolSelector, toolCatalog };
+const config: HarnessConfig = { retriever, toolSelector, multiTurnToolSelector, toolCatalog };
 
 export default config;
