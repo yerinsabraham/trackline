@@ -12,10 +12,15 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // Mode is how far trackline is allowed to go when a check fires.
@@ -163,7 +168,80 @@ func (c Config) ForRemote() Config {
 		modes[name] = ModeAuto
 	}
 	c.Modes, c.Disabled = modes, disabled
+	// The agent may not edit what watches it. Guard catches it after the
+	// fact whatever the route; this tells the agent at the first attempt.
+	var limits []string
+	for _, p := range c.OffLimits {
+		if strings.HasPrefix(p, "!") && exemptsGuarded(strings.TrimPrefix(p, "!")) {
+			continue
+		}
+		limits = append(limits, p)
+	}
+	c.OffLimits = append(limits, guarded...)
 	return c
+}
+
+// Where a remote session reads the fingerprint of its guarded files, and the
+// approvals made from the phone. Both are set by the runner on the agent's
+// environment, which the agent cannot change for the hook: the host starts
+// the hook, not the agent's shell.
+const (
+	RemoteGuardEnv  = "TRACKLINE_REMOTE_GUARD"
+	RemoteGrantsEnv = "TRACKLINE_REMOTE_GRANTS"
+)
+
+// guarded are the files that decide how an agent is watched: trackline's
+// configuration, and the host settings that wire its hook in. They live in the
+// project, which is exactly where a remote agent is allowed to write, so a
+// prompt-injected agent could switch its own checks off or wire the hook out
+// for the next run (found in the R6 review).
+var guarded = []string{
+	".trackline.json", ".trackline/config.json",
+	".claude/settings.json", ".codex/hooks.json", ".codex/config.toml",
+}
+
+// Not guarded, on purpose: .trackline/overrides.json, which a phone session
+// does not read (the runner keeps its approvals elsewhere), and
+// .claude/settings.local.json, which a phone session does not load. Both
+// change during ordinary local work, and guarding them would pause remote
+// every time someone clicked "always allow" at the desk.
+
+func exemptsGuarded(pattern string) bool {
+	for _, g := range guarded {
+		if ok, _ := filepath.Match(pattern, g); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(pattern, filepath.Base(g)); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Guard fingerprints the guarded files in root, present or not. The runner
+// records it when remote is enabled, refuses a job when it has changed since,
+// and the hook refuses every action in a remote session once it no longer
+// matches what the job started with.
+func Guard(root string) string {
+	h := sha256.New()
+	for _, name := range guarded {
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		b, err := os.ReadFile(filepath.Join(root, name))
+		switch {
+		case err == nil:
+			h.Write([]byte{1})
+			h.Write(b)
+		case errors.Is(err, fs.ErrNotExist):
+			h.Write([]byte{0})
+		default:
+			// Unreadable is not the same as absent, and must not match it.
+			h.Write([]byte{2})
+			h.Write([]byte(err.Error()))
+		}
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // IsDisabled reports whether a check has been switched off.

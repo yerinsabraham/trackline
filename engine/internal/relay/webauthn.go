@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/pbkdf2"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -61,7 +62,7 @@ func decodeB64(s string) ([]byte, error) {
 // signed could offer that job's hash as a sign-in challenge.
 const (
 	jobPurpose  = "trackline job v1\n"
-	pairPurpose = "trackline pair v1\n"
+	pairPurpose = "trackline pair v2\n"
 )
 
 func challenge(purpose string, parts ...[]byte) []byte {
@@ -79,10 +80,26 @@ func challenge(purpose string, parts ...[]byte) []byte {
 // JobChallenge is what the phone asks its passkey to sign for a job.
 func JobChallenge(job []byte) []byte { return challenge(jobPurpose, job) }
 
+// PairRounds is how slow the code is made before it is signed.
+//
+// The signed answer passes through the server, and its clientDataJSON carries
+// the challenge. With a plain hash of a 40-bit code, a compromised server
+// could hold the answer, try every code in minutes on one GPU, and send its
+// own key signed over the code it found (v1 had exactly this flaw, found in
+// the R6 review). At this many rounds the same search takes years on one GPU,
+// and the laptop gives up on a pairing after PairWindow whatever the server
+// says. A phone spends a fraction of a second on it, once.
+const PairRounds = 600_000
+
 // PairChallenge is what the phone signs to prove it saw the code on this
 // laptop's screen.
 func PairChallenge(deviceID, code string) []byte {
-	return challenge(pairPurpose, []byte(deviceID), []byte(code))
+	slow, err := pbkdf2.Key(sha256.New, code, []byte(pairPurpose+deviceID), PairRounds, 32)
+	if err != nil {
+		// Only reachable with invalid parameters, which these are not.
+		panic(err)
+	}
+	return challenge(pairPurpose, slow)
 }
 
 const (

@@ -1,10 +1,13 @@
 package relay
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
@@ -44,6 +47,28 @@ type Enabled struct {
 	Name      string    `json:"name"`
 	EnabledAt time.Time `json:"enabledAt"`
 	LastJobAt time.Time `json:"lastJobAt,omitzero"`
+	// Guard is config.Guard of the project when remote was enabled: what the
+	// person agreed to be watched by. A job is refused once it differs.
+	Guard string `json:"guard,omitempty"`
+	// Sessions are the agent sessions remote jobs started here, newest last,
+	// so one can be continued even if it never took an action trackline saw.
+	Sessions []string `json:"sessions,omitempty"`
+}
+
+// sessionsKept bounds Enabled.Sessions.
+const sessionsKept = 100
+
+// Ran records that a remote job in project started or continued session.
+func (s *State) Ran(project, session string) {
+	p, ok := s.Projects[project]
+	if !ok || session == "" {
+		return
+	}
+	p.Sessions = append(slices.DeleteFunc(p.Sessions, func(x string) bool { return x == session }), session)
+	if len(p.Sessions) > sessionsKept {
+		p.Sessions = p.Sessions[len(p.Sessions)-sessionsKept:]
+	}
+	s.Projects[project] = p
 }
 
 func (s *State) rp() RP {
@@ -84,8 +109,20 @@ func (s *State) AddKey(k Key) {
 
 // Enable lets remote jobs run in a project. Enabling again restarts the idle
 // clock.
-func (s *State) Enable(id, root, name string, now time.Time) {
-	s.Projects[id] = Enabled{Root: root, Name: name, EnabledAt: now}
+func (s *State) Enable(id, root, name, guard string, now time.Time) {
+	s.Projects[id] = Enabled{Root: root, Name: name, EnabledAt: now, Guard: guard}
+}
+
+// GrantsPath is where approvals made from the phone for a project are kept:
+// beside remote.json, outside the project, where an agent working in the
+// project cannot write one for itself.
+func GrantsPath(project string) (string, error) {
+	d, err := account.Dir()
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(project))
+	return filepath.Join(d, "remote-grants", hex.EncodeToString(sum[:8])+".json"), nil
 }
 
 // ProjectAt finds the enabled project whose folder is root.

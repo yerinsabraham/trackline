@@ -55,8 +55,7 @@ to `toBeDefined()`).
 
 It reads the change to the test itself, so it catches the two-line edit that
 scope and diff size cannot see. It stays quiet when your request asked for a
-test to be skipped or removed, and when a test file is written whole, since
-there is no earlier version to compare.
+test to be skipped or removed, and on a new test file.
 
 ## repetition
 

@@ -61,6 +61,10 @@ const NextLife = time.Hour
 // Store holds grants for a project.
 type Store struct {
 	Path string
+	// Root is the project the grants are for. Empty means the folder above
+	// .trackline, which is right for NewStore and wrong for a store kept
+	// outside the project.
+	Root string
 
 	loaded bool
 	grants []Grant
@@ -113,7 +117,10 @@ func (s *Store) Allows(signal, target, session, turn string) (Grant, bool) {
 // an approval made there (which never sees absolute paths) matches the
 // absolute path the check reports. Anything else is returned unchanged.
 func (s *Store) relative(target string) string {
-	root := filepath.Dir(filepath.Dir(s.Path))
+	root := s.Root
+	if root == "" {
+		root = filepath.Dir(filepath.Dir(s.Path))
+	}
 	if !filepath.IsAbs(target) || root == "." {
 		return target
 	}

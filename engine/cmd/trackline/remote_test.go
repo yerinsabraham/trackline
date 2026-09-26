@@ -341,6 +341,9 @@ func promptEnv(t *testing.T, f *fakeAccount) (root, out string, phone *relaytest
 	t.Setenv("FAKE_OUT", out)
 	os.MkdirAll(filepath.Join(root, ".claude"), 0o755)
 	os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"/bin/trackline-hook"}]}]}}`), 0o644)
+	// sess-1 is a session trackline's hook has seen here, so it may be continued.
+	os.MkdirAll(filepath.Join(root, ".trackline"), 0o755)
+	os.WriteFile(filepath.Join(root, ".trackline", "events.jsonl"), []byte(`{"id":"a","sessionId":"sess-1"}`+"\n"), 0o644)
 	flushEvery = 10 * time.Millisecond
 	if err := captureCode(t, f, func() error { return remoteEnable([]string{"--root", root, "--no-start"}) }); err != nil {
 		t.Fatal(err)
@@ -452,6 +455,44 @@ func TestAPromptIsRefusedWhereTracklineIsNotWatching(t *testing.T) {
 
 // Codex runs a project's hook only once trusted there. Wired but never heard
 // from, it would run unwatched, so it does not run.
+// trackline's settings live in the project, where a remote agent writes. A
+// change since remote was enabled could be the agent switching off its own
+// checks, so nothing runs until the person accepts it on the laptop.
+func TestAPromptIsRefusedWhenTracklineSettingsChanged(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	os.WriteFile(filepath.Join(root, ".trackline.json"), []byte(`{"disabled":["off-limits"]}`), 0o644)
+	f.queue = []remote.Delivery{prompt(phone, "job_changed", proj, "hello")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_changed"]; r.Status != "refused" || r.Code != "changed" {
+		t.Fatalf("result: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(out, "prompt")); err == nil {
+		t.Fatal("the agent ran under changed settings")
+	}
+}
+
+// A session id comes from the server. One that never ran in this project is
+// not continued here, or another project's conversation would come with it.
+func TestASessionFromElsewhereIsNotContinued(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	d := decisionJob(phone, "job_foreign", proj, "deny")
+	now := time.Now()
+	d.Envelope = phone.Send(relay.Job{V: 1, ID: "job_foreign", Machine: "dev_laptop", Project: proj, Kind: "prompt", Agent: "claude",
+		Text: "hello", Session: "sess-other", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})
+	f.queue = []remote.Delivery{d}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_foreign"]; r.Status != "refused" || r.Code != "unknown-session" {
+		t.Fatalf("result: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(out, "prompt")); err == nil {
+		t.Fatal("the agent resumed a session from elsewhere")
+	}
+}
+
 func TestCodexIsRefusedUntilItsHookHasFired(t *testing.T) {
 	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
 	root, _, phone, proj := promptEnv(t, f)
@@ -543,8 +584,13 @@ func TestAllowOnceRecordsTheApprovalAndResumes(t *testing.T) {
 	if r := f.results["job_allow"]; r.Status != "done" {
 		t.Fatalf("result: %+v", r)
 	}
-	if _, ok := override.NewStore(root).Allows("off-limits", filepath.Join(root, ".env"), "sess-1", "any"); !ok {
+	grants, _ := relay.GrantsPath(proj)
+	if _, ok := (&override.Store{Path: grants, Root: root}).Allows("off-limits", filepath.Join(root, ".env"), "sess-1", "any"); !ok {
 		t.Fatal("the approval was not recorded")
+	}
+	// Not in the project, where the agent could have written it itself.
+	if len(override.NewStore(root).List()) != 0 {
+		t.Fatal("the approval was written into the project")
 	}
 	if !strings.Contains(read(t, filepath.Join(out, "argv")), "--resume sess-1") || !strings.Contains(read(t, filepath.Join(out, "prompt")), "Retry the same action now") {
 		t.Fatalf("argv %q prompt %q", read(t, filepath.Join(out, "argv")), read(t, filepath.Join(out, "prompt")))
@@ -557,7 +603,8 @@ func TestKeepBlockedRecordsNothing(t *testing.T) {
 	f.queue = []remote.Delivery{decisionJob(phone, "job_deny", proj, "deny")}
 	f.stopAfter = 1
 	runUntilStopped(t)
-	if len(override.NewStore(root).List()) != 0 {
+	grants, _ := relay.GrantsPath(proj)
+	if len(override.NewStore(root).List()) != 0 || len((&override.Store{Path: grants}).List()) != 0 {
 		t.Fatal("keeping it blocked recorded an approval")
 	}
 	if !strings.Contains(read(t, filepath.Join(out, "prompt")), "keep this blocked") {

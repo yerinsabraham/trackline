@@ -18,11 +18,16 @@ import (
 // server) fails. It is the same idea as pairing a Bluetooth keyboard.
 //
 // The laptop takes the first answer only. A server trying keys of its own
-// gets one guess at a code with 40 bits in it.
+// gets one guess at a code with 40 bits in it, and cannot search for the code
+// in the real answer in the time the laptop waits (PairRounds, PairWindow).
 
 // codeAlphabet is Crockford's base32: no I, L, O or U, so the code survives
 // being read off one screen and typed on another.
 const codeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+// PairWindow is the longest the laptop waits for an answer, from when the
+// code is shown, whatever the server says. See PairRounds.
+const PairWindow = 5 * time.Minute
 
 // CodeLength characters of 5 bits each: 40 bits.
 const CodeLength = 8

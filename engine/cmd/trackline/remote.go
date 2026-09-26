@@ -10,15 +10,18 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
+	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 )
 
@@ -116,7 +119,7 @@ func remoteEnable(args []string) error {
 
 	found := findAgents()
 	if err := relay.Update(func(s *relay.State) error {
-		s.Enable(proj.ID, projRoot, name, time.Now())
+		s.Enable(proj.ID, projRoot, name, config.Guard(projRoot), time.Now())
 		s.Agents, s.Path = found, os.Getenv("PATH")
 		return nil
 	}); err != nil {
@@ -152,7 +155,10 @@ func pairPasskey(client remote.Client, creds account.Credentials, s *relay.State
 	fmt.Printf("\nOn your phone, open %s/remote and enter:\n\n    %s\n\n", rp.Origin, relay.ShowCode(code))
 	fmt.Print("Waiting")
 
-	deadline := time.Now().Add(time.Duration(p.ExpiresIn) * time.Second)
+	// The server's deadline is only ever shortened here. A server allowed to
+	// keep a pairing open indefinitely has all the time it wants to search
+	// for the code in an answer it is holding back.
+	deadline := time.Now().Add(min(time.Duration(p.ExpiresIn)*time.Second, relay.PairWindow))
 	for {
 		if time.Now().After(deadline) {
 			fmt.Println()
@@ -173,6 +179,10 @@ func pairPasskey(client remote.Client, creds account.Credentials, s *relay.State
 			continue
 		}
 		fmt.Println()
+		if time.Now().After(deadline) {
+			client.PairingResult(p.ID, false, "the answer arrived after the code expired")
+			return errors.New("the code expired. Run trackline remote enable again")
+		}
 		key, err := relay.VerifyPair(rp, creds.DeviceID, code, *st.Answer, time.Now())
 		if err != nil {
 			client.PairingResult(p.ID, false, err.Error())
@@ -368,6 +378,17 @@ func remoteRun() error {
 	logf("runner started for %d project(s)", len(s.Projects))
 	writeStatus(runnerStatus{PID: os.Getpid()})
 	r := newRuns()
+	// launchd stops the runner with SIGTERM, when remote is turned off or the
+	// person logs out. Agents run in their own process groups, so they would
+	// outlive it, with no one left to enforce the time limit.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, os.Interrupt)
+	go func() {
+		<-sig
+		logf("runner stopped on this laptop; stopping its agents")
+		r.stopAll(errors.New("the runner was stopped on the laptop"))
+		os.Exit(0)
+	}()
 
 	backoff := time.Second
 	for {
@@ -397,12 +418,36 @@ func remoteRun() error {
 		if next.Job != nil {
 			handle(client, creds, *next.Job, r)
 		}
-		if s, err := relay.Load(); err == nil && len(s.Projects) == 0 {
-			logf("remote was turned off for every project; stopping")
-			r.stopAll(errors.New("remote was turned off"))
-			return nil
+		if s, err := relay.Load(); err == nil {
+			if len(s.Projects) == 0 {
+				logf("remote was turned off for every project; stopping")
+				r.stopAll(errors.New("remote was turned off"))
+				return nil
+			}
+			// Turned off for one project while its agent is still working.
+			r.stopUnless(func(project string) bool { _, ok := s.Projects[project]; return ok },
+				errors.New("remote was turned off for this project"))
 		}
 	}
+}
+
+// refusalNotices allows one refusal notification a minute.
+var refusalNotices = &every{gap: time.Minute}
+
+type every struct {
+	mu   sync.Mutex
+	gap  time.Duration
+	last time.Time
+}
+
+func (e *every) Allow() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if time.Since(e.last) < e.gap {
+		return false
+	}
+	e.last = time.Now()
+	return true
 }
 
 func handle(client remote.Client, creds account.Credentials, d remote.Delivery, running *runs) {
@@ -415,7 +460,11 @@ func handle(client remote.Client, creds account.Credentials, d remote.Delivery, 
 	var r *relay.Refusal
 	if errors.As(err, &r) {
 		logf("refused job %s: %s (%s)", d.ID, r.Reason, r.Code)
-		notify("trackline refused a remote job", r.Reason)
+		// Refusals come from whoever sent the job, which may be a hostile
+		// server; it should not be able to fill the screen with them.
+		if refusalNotices.Allow() {
+			notify("trackline refused a remote job", r.Reason)
+		}
 		client.JobResult(d.ID, remote.Result{Status: "refused", Code: r.Code, Reason: r.Reason})
 		return
 	}

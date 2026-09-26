@@ -76,10 +76,10 @@ func (s Signal) Check(in signal.Input) verdict.Result {
 
 	before, after, ok := sides(a)
 	if !ok {
-		// A whole-file write with nothing to compare against. A new test file
-		// with a skip in it is not a weakened test, so this stays silent.
+		// A new file: nothing to compare against, and a new test file with a
+		// skip in it is not a weakened test, so this stays silent.
 		return verdict.NotApplicable(Name, fmt.Sprintf(
-			"%s is being written whole, so there is no earlier version to compare", filepath.Base(file)))
+			"%s is new, so there is no earlier version to compare", filepath.Base(file)))
 	}
 
 	var found []string
@@ -135,7 +135,9 @@ func sides(a event.Action) (before, after string, ok bool) {
 		}
 		return b.String(), n.String(), true
 	}
-	if a.Type == event.ActionEditFile && a.PriorBody != "" {
+	// An edit's replaced text, or, for a whole-file write, what the hook read
+	// from disk just before it (runner.fillPriorBody).
+	if a.PriorBody != "" {
 		return a.PriorBody, a.Body, true
 	}
 	return "", "", false

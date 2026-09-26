@@ -97,7 +97,7 @@ func TestCommandsStaySafe(t *testing.T) {
 		}
 	}
 	claude, _ := agent.Command("claude", "claude", "/work/app", "")
-	for _, need := range []string{"acceptEdits", "--permission-prompts none", "--setting-sources project,local"} {
+	for _, need := range []string{"acceptEdits", "--permission-prompts none", "--setting-sources project"} {
 		if !strings.Contains(strings.Join(claude, " "), need) {
 			t.Errorf("claude is missing %s", need)
 		}
@@ -130,7 +130,7 @@ func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "�") == s }
 func TestResumingKeepsTheSafeguards(t *testing.T) {
 	claude, _ := agent.Command("claude", "claude", "/work/app", "sess-1")
 	line := strings.Join(claude, " ")
-	for _, need := range []string{"--resume sess-1", "acceptEdits", "--permission-prompts none", "--setting-sources project,local"} {
+	for _, need := range []string{"--resume sess-1", "acceptEdits", "--permission-prompts none", "--setting-sources project"} {
 		if !strings.Contains(line, need) {
 			t.Errorf("claude resume is missing %s: %s", need, line)
 		}

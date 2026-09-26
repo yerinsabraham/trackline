@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,6 +104,17 @@ func (r *runs) finish(project string) {
 	r.wg.Done()
 }
 
+// stopUnless stops the agents whose project keep rejects.
+func (r *runs) stopUnless(keep func(project string) bool, why error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for p, c := range r.cancel {
+		if !keep(p) {
+			c(why)
+		}
+	}
+}
+
 // stopAll stops every agent and waits, briefly, for each to report how it
 // ended.
 func (r *runs) stopAll(why error) {
@@ -150,6 +163,26 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("not-watched", fmt.Sprintf("trackline has never heard from %s in %s, so it would run unwatched. %s", name, filepath.Base(got.Root), install.Unsilence(h)))
 		return
 	}
+	// What watches the agent is what the person agreed to when they turned
+	// remote on. An earlier run could have rewritten it: the files live in the
+	// project, where the agent writes.
+	guard := config.Guard(got.Root)
+	if p, ok := s.Projects[j.Project]; !ok || p.Guard != guard {
+		refuse("changed", fmt.Sprintf("trackline's settings or hook wiring in %s changed since remote was turned on. Check them on the laptop, then run trackline remote enable there", filepath.Base(got.Root)))
+		return
+	}
+	grants, err := relay.GrantsPath(j.Project)
+	if err != nil {
+		refuse("failed", "the laptop could not find where approvals are kept")
+		return
+	}
+	// A session to continue must be one that ran in this project. The id
+	// comes from the server, and resuming another project's conversation here
+	// would bring its context with it (Codex looks sessions up globally).
+	if j.Session != "" && !knownSession(got.Root, s.Projects[j.Project].Sessions, j.Session) {
+		refuse("unknown-session", fmt.Sprintf("that conversation did not happen in %s, so it cannot be continued there. Start a new task instead", filepath.Base(got.Root)))
+		return
+	}
 	binary := s.Agents[j.Agent]
 	if binary == "" {
 		refuse("agent-missing", fmt.Sprintf("%s was not found on this laptop. Install it, then run trackline remote enable again", name))
@@ -167,7 +200,7 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		return
 	}
 	if j.Kind == "allow" || j.Kind == "deny" {
-		if err := decide(got); err != nil {
+		if err := decide(got, grants); err != nil {
 			r.finish(j.Project)
 			cancel(nil)
 			refuse("failed", "the laptop could not record the decision: "+err.Error())
@@ -180,7 +213,10 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	go func() {
 		defer r.finish(j.Project)
 		defer cancel(nil)
-		res := runAgent(ctx, cancel, client, d.ID, j, got.Root, argv, s.Path)
+		res := runAgent(ctx, cancel, client, d.ID, j, got.Root, argv, s.Path, guard, grants)
+		if res.Session != "" {
+			_ = relay.Update(func(s *relay.State) error { s.Ran(j.Project, res.Session); return nil })
+		}
 		if err := client.JobResult(d.ID, res); err != nil {
 			logf("could not report job %s: %v", d.ID, err)
 		}
@@ -191,12 +227,12 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 // decide records "allow once" where trackline's hook will find it: the next
 // matching action in this session passes, once. "Keep blocked" records
 // nothing; the check already blocks.
-func decide(got relay.Accepted) error {
+func decide(got relay.Accepted, grants string) error {
 	j := got.Job
 	if j.Kind != "allow" {
 		return nil
 	}
-	return override.NewStore(got.Root).Add(override.Grant{
+	return (&override.Store{Path: grants, Root: got.Root}).Add(override.Grant{
 		Signal: j.Check, Target: j.Target, Scope: override.ScopeNext, Session: j.Session,
 		Reason: "allowed from your phone",
 	})
@@ -289,13 +325,13 @@ func permissionPromptEvent(e agent.Event) (agent.Event, bool) {
 // agentEnv is the environment an agent runs in: the person's own, with the
 // PATH it was found on, and the mark that tells trackline's hook this session
 // was started from the phone.
-func agentEnv(base []string, path, job string) []string {
+func agentEnv(base []string, path, job, guard, grants string) []string {
 	var env []string
 	for _, kv := range base {
 		k, _, _ := strings.Cut(kv, "=")
 		// CLAUDECODE marks a shell inside Claude Code, where claude declines
 		// to start another session.
-		if k == "PATH" && path != "" || k == config.RemoteEnv || k == "CLAUDECODE" {
+		if k == "PATH" && path != "" || k == config.RemoteEnv || k == config.RemoteGuardEnv || k == config.RemoteGrantsEnv || k == "CLAUDECODE" {
 			continue
 		}
 		env = append(env, kv)
@@ -303,17 +339,17 @@ func agentEnv(base []string, path, job string) []string {
 	if path != "" {
 		env = append(env, "PATH="+path)
 	}
-	return append(env, config.RemoteEnv+"="+job)
+	return append(env, config.RemoteEnv+"="+job, config.RemoteGuardEnv+"="+guard, config.RemoteGrantsEnv+"="+grants)
 }
 
 // runAgent runs one prompt to the end and says how it ended.
-func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote.Client, id string, j relay.Job, root string, argv []string, path string) remote.Result {
+func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote.Client, id string, j relay.Job, root string, argv []string, path, guard, grants string) remote.Result {
 	ctx, stopTimer := context.WithTimeoutCause(ctx, jobLimit, errTimeout)
 	defer stopTimer()
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = root
-	cmd.Env = agentEnv(os.Environ(), path, id)
+	cmd.Env = agentEnv(os.Environ(), path, id, guard, grants)
 	// On stdin, never in argv: an instruction that looks like a flag is text.
 	cmd.Stdin = strings.NewReader(j.Text)
 	var stderr tail
@@ -339,6 +375,9 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 				lines <- e
 			}
 		}
+		// A line past the buffer ends the scan. Stop reading and the agent
+		// blocks on a full pipe until the time limit, holding the project.
+		_, _ = io.Copy(io.Discard, stdout)
 	}()
 
 	var res remote.Result
@@ -435,4 +474,26 @@ func (t *tail) String() string { return string(t.b) }
 // statusAgents is the line `trackline remote status` shows for agents.
 func statusAgents(s *relay.State) string {
 	return "Agents it can start: " + agentList(s.Agents)
+}
+
+// knownSession reports whether session ran in the project at root: started
+// by a remote job there, or seen by trackline's hook there.
+func knownSession(root string, remote []string, session string) bool {
+	if slices.Contains(remote, session) {
+		return true
+	}
+	f, err := os.Open(filepath.Join(root, ".trackline", "events.jsonl"))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	want := []byte(`"sessionId":"` + session + `"`)
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	for sc.Scan() {
+		if bytes.Contains(sc.Bytes(), want) {
+			return true
+		}
+	}
+	return false
 }

@@ -33,6 +33,8 @@ var ErrNotYet = errors.New("remote does not start this agent yet")
 // project's settings load, so an allow rule written for local work in the
 // user's global settings (an ssh to a server, a deploy) does not reach a
 // remote job. trackline's hook lives in the project's settings, so it runs.
+// Not the local settings either: an agent can write that file, and the next
+// remote run would load whatever it put there.
 // Not --restricted: that skips project settings, and with them the hook.
 //
 // Codex: the workspace-write sandbox, set here so no config can widen it,
@@ -49,7 +51,7 @@ func Command(name, binary, root, session string) ([]string, error) {
 			"--output-format", "stream-json", "--verbose",
 			"--permission-mode", "acceptEdits",
 			"--permission-prompts", "none",
-			"--setting-sources", "project,local",
+			"--setting-sources", "project",
 		}
 		if session != "" {
 			argv = append(argv, "--resume", session)

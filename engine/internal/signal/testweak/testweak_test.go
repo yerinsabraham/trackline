@@ -108,9 +108,22 @@ func TestStaysQuiet(t *testing.T) {
 	}
 }
 
-// A test file written whole has no before to compare, and a new file with a
-// skip in it has not weakened anything.
-func TestWholeFileWriteIsNotJudged(t *testing.T) {
+// Overwriting a test whole is judged against what was on disk before.
+func TestAnOverwriteIsJudged(t *testing.T) {
+	in := signal.Input{Event: event.Event{Action: event.Action{
+		Type: event.ActionWriteFile, Paths: []string{"/w/src/cart.test.ts"},
+		PriorBody: `it("adds tax", () => { expect(total(10)).toBe(11) })`,
+		Body:      `it.skip("adds tax", () => { expect(total(10)).toBe(11) })`,
+	}}}
+	in.Intent.Add("t1", time.Unix(0, 0), fixBug)
+	if res := run(t, in); res.Outcome != verdict.OutcomeFinding {
+		t.Fatalf("outcome = %s (%s), want a finding", res.Outcome, res.Reason)
+	}
+}
+
+// A new test file has no before to compare, and a skip in it has not
+// weakened anything.
+func TestANewTestFileIsNotJudged(t *testing.T) {
 	in := signal.Input{Event: event.Event{Action: event.Action{
 		Type: event.ActionWriteFile, Paths: []string{"/w/src/cart.test.ts"}, Body: `it.skip("todo", () => {})`,
 	}}}

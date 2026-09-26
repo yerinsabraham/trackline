@@ -168,7 +168,8 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	// A configuration that cannot be read is worth saying out loud, but it must
 	// never stop the user working. Defaults carry on.
 	cfg, cfgErr := config.Load(root)
-	if os.Getenv(config.RemoteEnv) != "" {
+	remote := os.Getenv(config.RemoteEnv) != ""
+	if remote {
 		cfg = cfg.ForRemote()
 	}
 	rules, rulesErr := config.LoadRules(root, cfg)
@@ -215,7 +216,20 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	// already said yes should not be asked again, and being asked repeatedly
 	// about something already settled is how a tool gets switched off.
 	grants := override.NewStore(root)
+	if remote {
+		// Approvals in the project folder could have been written by the agent
+		// itself. A phone session honours only the ones the runner recorded,
+		// outside the project, from a signed decision.
+		grants = &override.Store{Path: os.Getenv(config.RemoteGrantsEnv), Root: root}
+	}
 	d := Decision{Mode: cfg.Mode}
+	if remote && (os.Getenv(config.RemoteGuardEnv) == "" || config.Guard(root) != os.Getenv(config.RemoteGuardEnv)) {
+		d.Report = rep
+		d.Block = true
+		d.Message = "BLOCKED by trackline.\ntrackline's settings or hook wiring in this project changed during this task started from the phone, " +
+			"so nothing more runs in it. Stop here and tell the person what you changed; they can review it on the laptop."
+		return d
+	}
 	rep, d.Overridden = applyOverrides(rep, grants, ev)
 	d.Report = rep
 	if cfgErr != nil {

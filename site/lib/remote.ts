@@ -3,7 +3,7 @@
 // A job is signed here, by a passkey, over exactly the bytes that are sent.
 // The laptop checks that signature against keys it paired itself, so the
 // server that carries the job cannot write one. Every signature is over a
-// hash with its purpose in front ("trackline job v1", "trackline pair v1"),
+// hash with its purpose in front ("trackline job v1", "trackline pair v2"),
 // so a signature made for one purpose can never pass as another; the laptop
 // accepts only its own two.
 
@@ -100,13 +100,26 @@ async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promis
   };
 }
 
+const PAIR = "trackline pair v2\n";
+
+/**
+ * The code, made slow before it is signed. The answer passes through the
+ * server, and a plain hash of an 8-character code could be searched in
+ * minutes; this takes years (engine/internal/relay/webauthn.go, PairRounds).
+ */
+export async function pairChallenge(machineId: string, code: string): Promise<Uint8Array<ArrayBuffer>> {
+  const base = await crypto.subtle.importKey("raw", utf8(normalizeCode(code)), "PBKDF2", false, ["deriveBits"]);
+  const slow = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: utf8(PAIR + machineId), iterations: 600_000 }, base, 256);
+  return sha256(utf8(PAIR), new Uint8Array(slow));
+}
+
 /**
  * Pairs a passkey with a laptop by signing the code on its screen. Only
  * someone who can see that screen can sign the right code, which is how the
  * laptop knows the key is the person's and not one the server slipped in.
  */
 export async function signPairing(machineId: string, code: string, keys: Passkey[]) {
-  const challenge = await sha256(utf8(`trackline pair v1\n${machineId}\n${normalizeCode(code)}`));
+  const challenge = await pairChallenge(machineId, code);
   const { key, assertion } = await sign(challenge, keys);
   return { key: { id: key.id, publicKey: key.publicKey, name: key.name }, ...assertion };
 }

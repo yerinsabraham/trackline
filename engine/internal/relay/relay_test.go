@@ -31,7 +31,7 @@ func setup(t *testing.T) fixture {
 	s := &relay.State{Projects: map[string]relay.Enabled{}, Seen: map[string]int64{}}
 	s.AddKey(phone.Trusted())
 	root := t.TempDir()
-	s.Enable("proj_enabled", root, "app", now.Add(-time.Hour))
+	s.Enable("proj_enabled", root, "app", "", now.Add(-time.Hour))
 	return fixture{s, phone, root}
 }
 
@@ -216,7 +216,7 @@ func TestARefusedJobStaysRefused(t *testing.T) {
 	f := setup(t)
 	env := f.phone.Send(job(func(j *relay.Job) { j.Project = "proj_later" }))
 	relay.Check(f.state, env, machine, now)
-	f.state.Enable("proj_later", t.TempDir(), "later", now)
+	f.state.Enable("proj_later", t.TempDir(), "later", "", now)
 	if got := code(func() error { _, err := relay.Check(f.state, env, machine, now); return err }()); got != "replayed" {
 		t.Fatalf("got %s", got)
 	}
@@ -249,7 +249,7 @@ func TestAProjectUnusedForAMonthIsTurnedOff(t *testing.T) {
 
 func TestAProjectWhoseFolderIsGoneIsRefused(t *testing.T) {
 	f := setup(t)
-	f.state.Enable("proj_enabled", f.root+"/gone", "app", now)
+	f.state.Enable("proj_enabled", f.root+"/gone", "app", "", now)
 	if got := code(func() error { _, err := relay.Check(f.state, f.phone.Send(job()), machine, now); return err }()); got != "project-missing" {
 		t.Fatalf("got %s", got)
 	}
@@ -331,7 +331,7 @@ func TestEveryKindOfPasskeySignsJobs(t *testing.T) {
 				t.Fatalf("pairing: %v", err)
 			}
 			s.AddKey(k)
-			s.Enable("proj_enabled", t.TempDir(), "app", now)
+			s.Enable("proj_enabled", t.TempDir(), "app", "", now)
 			if _, err := relay.Check(s, phone.Send(job()), machine, now); err != nil {
 				t.Fatalf("refused: %v", err)
 			}

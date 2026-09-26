@@ -3,6 +3,23 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.7.0 · 2026-09-26
+
+- **A new check: `test-weakened`.** A test skipped, or its assertions removed
+  or loosened, instead of the code being fixed. It reads the change to the
+  test itself, so it catches the two-line edit that scope and diff size miss.
+- **Remote, hardened after a security review.** Pairing a phone can no longer
+  be attacked by a compromised server, which could have found the code in the
+  answer it relays. The laptop now records trackline's settings and hook
+  wiring when you turn remote on, and refuses a task from your phone if they
+  have changed since; an agent started from your phone cannot edit them, and
+  approvals from your phone are kept outside the project. A conversation can
+  only be continued in the project it happened in. Turning remote off stops
+  any agent it started.
+- **After updating, run `trackline remote enable` again** in each project
+  that takes tasks from your phone, and pair again if asked. Earlier
+  versions cannot pair with the site any more.
+
 ## 0.6.0 · 2026-09-26
 
 - **Multi-turn evals.** `trackline-gate` gains a fourth suite: conversations

@@ -3,25 +3,67 @@
   "routes": [
     {
       "src": "/(.*)",
-      "has": [{ "type": "host", "value": "trackline-iota.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "trackline-iota.vercel.app"
+        }
+      ],
       "status": 308,
-      "headers": { "Location": "https://trackline.dev/$1" }
+      "headers": {
+        "Location": "https://trackline.dev/$1"
+      }
     },
-    { "src": "/docs/([\\w-]+)\\.md", "dest": "/md/docs/$1.md" },
-    { "src": "/evidence/([\\w-]+)\\.md", "dest": "/md/evidence/$1.md" },
+    {
+      "src": "/(.*)",
+      "continue": true,
+      "headers": {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.creovine.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+      }
+    },
+    {
+      "src": "/docs/([\\w-]+)\\.md",
+      "dest": "/md/docs/$1.md"
+    },
+    {
+      "src": "/evidence/([\\w-]+)\\.md",
+      "dest": "/md/evidence/$1.md"
+    },
     {
       "src": "/docs/([\\w-]+)",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
       "dest": "/md/docs/$1.md"
     },
     {
       "src": "/evidence/([\\w-]+)",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
       "dest": "/md/evidence/$1.md"
     },
     {
       "src": "/",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/markdown.*" }],
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
       "dest": "/llms.txt"
     }
   ]

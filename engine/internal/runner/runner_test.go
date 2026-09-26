@@ -250,7 +250,10 @@ func TestUnreadableRulesAreCannotMeasure(t *testing.T) {
 func TestAllowOnceFromThePhoneLetsOneActionThrough(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.RemoteEnv, "job_1")
-	override.NewStore(root).Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeNext, Session: "s"})
+	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
+	grants := filepath.Join(t.TempDir(), "grants.json")
+	t.Setenv(config.RemoteGrantsEnv, grants)
+	(&override.Store{Path: grants, Root: root}).Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeNext, Session: "s"})
 	first, err := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
 	if err != nil {
 		t.Fatal(err)
@@ -261,5 +264,44 @@ func TestAllowOnceFromThePhoneLetsOneActionThrough(t *testing.T) {
 	second, _ := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
 	if !second.Block {
 		t.Fatal("an approval for one action let a second one through")
+	}
+}
+
+// In a phone session, an approval in the project folder is ignored: the agent
+// could have written it for itself.
+func TestARemoteSessionIgnoresApprovalsInTheProject(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.RemoteEnv, "job_1")
+	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
+	t.Setenv(config.RemoteGrantsEnv, filepath.Join(t.TempDir(), "grants.json"))
+	override.NewStore(root).Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeProject})
+	d, _ := runner.Run(payload(root, ".env"), runner.Options{Root: root, Now: time.Now()})
+	if !d.Block {
+		t.Fatal("an approval the agent could have written let the action through")
+	}
+}
+
+// Once the settings change mid-task, nothing more runs in a phone session.
+func TestARemoteSessionStopsWhenItsSettingsChange(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.RemoteEnv, "job_1")
+	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
+	os.WriteFile(filepath.Join(root, ".trackline.json"), []byte(`{"disabled":["off-limits"]}`), 0o644)
+	d, _ := runner.Run(payload(root, "src/app.ts"), runner.Options{Root: root, Now: time.Now()})
+	if !d.Block || !strings.Contains(d.Message, "changed") {
+		t.Fatalf("block=%v message=%q", d.Block, d.Message)
+	}
+}
+
+// And the agent is told at the first attempt to edit them.
+func TestARemoteSessionMayNotEditItsOwnSettings(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.RemoteEnv, "job_1")
+	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
+	for _, f := range []string{".trackline.json", ".claude/settings.json", ".codex/hooks.json"} {
+		d, _ := runner.Run(payload(root, f), runner.Options{Root: root, Now: time.Now()})
+		if !d.Block {
+			t.Errorf("%s: an agent started from the phone could edit what watches it", f)
+		}
 	}
 }
