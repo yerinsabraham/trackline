@@ -36,6 +36,10 @@ export interface JudgeResult {
   reason: string;
 }
 
+export interface JudgeProvider {
+  groundedness(testCase: GroundednessCase, model: string): Promise<JudgeResult>;
+}
+
 const SYSTEM = `You check whether an answer is supported by the context it was given.
 
 You are NOT judging whether the answer is helpful, well written, or correct in
@@ -62,47 +66,67 @@ const SCHEMA = {
   },
 } as const;
 
+const JUDGE_RETRIES = 4;
+
 let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
   if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('OPENAI_API_KEY is required to run the groundedness suite');
-    client = new OpenAI({ apiKey });
+    const apiKey = process.env.EVAL_JUDGE_API_KEY || process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error('OPENAI_API_KEY or EVAL_JUDGE_API_KEY is required to run the groundedness suite');
+    const baseURL = process.env.EVAL_JUDGE_BASE_URL;
+    // The SDK retries 429, 5xx and dropped connections with backoff and honours
+    // retry-after. One judge row failing a transient error fails the whole run,
+    // so allow a few more attempts than its default of two. Do not wrap this in
+    // a second retry loop: the attempts multiply.
+    client = new OpenAI({ apiKey, maxRetries: JUDGE_RETRIES, ...(baseURL ? { baseURL } : {}) });
   }
   return client;
+}
+
+export function judgeConfigured(): boolean {
+  return Boolean(process.env.EVAL_JUDGE_API_KEY || process.env.OPENAI_API_KEY);
+}
+
+export function judgeProvider(): string {
+  return process.env.EVAL_JUDGE_BASE_URL ? 'openai-compatible' : 'openai';
 }
 
 export async function judgeGroundedness(
   testCase: GroundednessCase,
   model = process.env.EVAL_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL,
 ): Promise<JudgeResult> {
-  const context = testCase.context.map((c, i) => `[${i + 1}] ${c}`).join('\n\n');
-
-  const response = await getClient().chat.completions.create({
-    model,
-    // Deterministic as the API allows. A judge that scores differently on a
-    // rerun makes every regression unreadable.
-    temperature: 0,
-    messages: [
-      { role: 'system', content: SYSTEM },
-      {
-        role: 'user',
-        content: `CONTEXT\n${context}\n\nQUESTION\n${testCase.question}\n\nANSWER\n${testCase.answer}`,
-      },
-    ],
-    response_format: {
-      type: 'json_schema',
-      json_schema: { name: 'groundedness', strict: true, schema: SCHEMA },
-    },
-  });
-
-  const raw = response.choices[0]?.message?.content;
-  if (!raw) throw new Error(`judge returned no content for ${testCase.id}`);
-
-  const parsed = JSON.parse(raw) as JudgeResult;
-  return parsed;
+  return openAICompatibleJudge.groundedness(testCase, model);
 }
+
+const openAICompatibleJudge: JudgeProvider = {
+  async groundedness(testCase, model) {
+    const context = testCase.context.map((c, i) => `[${i + 1}] ${c}`).join('\n\n');
+
+    const response = await getClient().chat.completions.create({
+      model,
+      // Deterministic as the API allows. A judge that scores differently on a
+      // rerun makes every regression unreadable.
+      temperature: 0,
+      messages: [
+        { role: 'system', content: SYSTEM },
+        {
+          role: 'user',
+          content: `CONTEXT\n${context}\n\nQUESTION\n${testCase.question}\n\nANSWER\n${testCase.answer}`,
+        },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'groundedness', strict: true, schema: SCHEMA },
+      },
+    });
+
+    const raw = response.choices[0]?.message?.content;
+    if (!raw) throw new Error(`judge returned no content for ${testCase.id}`);
+
+    return JSON.parse(raw) as JudgeResult;
+  },
+};
 
 /**
  * Agreement between the judge and the dataset label.
