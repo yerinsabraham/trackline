@@ -21,3 +21,4 @@ export const IconFace = () => <svg {...base}><path d="M3 7V5a2 2 0 0 1 2-2h2M17 
 export const IconKey = () => <svg {...base}><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.3-9.3M17 6l3 3" /></svg>;
 export const IconClock = () => <svg {...base}><path d="M21 12a9 9 0 1 1-9-9" /><path d="M12 7v5l3 2" /></svg>;
 export const IconPhone = () => <svg {...base}><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>;
+export const IconTarget = () => <svg {...base}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /></svg>;

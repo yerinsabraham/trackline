@@ -17,7 +17,12 @@ export default function Sessions() {
   const [agent, setAgent] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
-  useEffect(() => { setAgent(new URLSearchParams(window.location.search).get("agent") ?? ""); }, []);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    setAgent(q.get("agent") ?? "");
+    const st = q.get("status");
+    if (st === "working" || st === "needs-you" || st === "done") setFilter(st);
+  }, []);
   const pick = (a: string) => {
     setAgent(a);
     window.history.replaceState(null, "", a ? `/app/sessions?agent=${a}` : "/app/sessions");

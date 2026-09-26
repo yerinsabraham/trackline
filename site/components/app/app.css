@@ -399,3 +399,73 @@ body:has(.app-shell) > footer.dark { display: none; }
 .install-hint a { color: #fff; text-decoration: underline; font-weight: 600; }
 .install-hint button { margin-left: auto; background: none; border: 0; color: #b4b4b8; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; flex: none; }
 @media (min-width: 900px) { .install-hint { display: none; } }
+
+/* ── On track ──────────────────────────────────────────────────────────── */
+
+.band-good { --band: #1f9d52; --band-ink: #1a7f43; --band-tint: #e3f4e8; }
+.band-fair { --band: #e8a317; --band-ink: #8a5d00; --band-tint: #fdf1d8; }
+.band-poor { --band: #e5341b; --band-ink: #b3290f; --band-tint: #fde4df; }
+.band-none { --band: #b4b4b8; --band-ink: #6b6b70; --band-tint: #ececea; }
+
+.ring { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ring svg { position: absolute; inset: 0; }
+.ring-track { stroke: #ececea; }
+.ring-good .ring-value { stroke: #1f9d52; } .ring-fair .ring-value { stroke: #e8a317; }
+.ring-poor .ring-value { stroke: #e5341b; } .ring-none .ring-value { stroke: transparent; }
+.ring-value { transition: stroke-dashoffset 1s cubic-bezier(0.2, 0.8, 0.2, 1); animation: ring-draw 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes ring-draw { from { stroke-dashoffset: var(--ring-c); } }
+.ring-num { position: relative; font-weight: 700; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; animation: app-fade 0.6s 0.3s both; }
+
+.ot { display: flex; flex-direction: column; gap: 20px; max-width: 1100px; }
+.ot-head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.ot-range { margin-left: auto; min-width: 280px; }
+@media (max-width: 640px) { .ot-range { margin-left: 0; width: 100%; } }
+.ot-hero { display: flex; align-items: center; gap: 28px; padding: 26px 28px; background: linear-gradient(0deg, #fff, #fff); box-shadow: inset 0 4px 0 var(--band); }
+@media (max-width: 640px) { .ot-hero { flex-direction: column; text-align: center; padding: 24px 18px; gap: 18px; } }
+.ot-hero-text { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1; }
+.ot-verdict { align-self: flex-start; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--band-ink); background: var(--band-tint); padding: 5px 11px; border-radius: 999px; }
+@media (max-width: 640px) { .ot-verdict { align-self: center; } }
+.ot-lead { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ink); }
+.ot-lead strong { font-variant-numeric: tabular-nums; }
+.ot-note { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+
+.ot-trend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; align-items: end; height: 150px; padding: 16px 18px 30px; }
+.ot-bar { position: relative; height: 100%; display: flex; align-items: flex-end; }
+.ot-bar-fill { width: 100%; border-radius: 5px 5px 2px 2px; background: var(--band); transform-origin: bottom; animation: bar-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes bar-grow { from { transform: scaleY(0); } }
+.ot-bar-day { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+.ot-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 1000px) { .ot-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; } }
+.ot-check { display: flex; flex-direction: column; gap: 5px; padding: 14px 18px; border-bottom: 1px solid var(--line-2); }
+.ot-check:last-child { border-bottom: 0; }
+.ot-check-top { display: flex; align-items: center; gap: 10px; }
+.ot-check-top strong { font-size: 15px; }
+.ot-count { margin-left: auto; min-width: 30px; height: 26px; padding: 0 9px; border-radius: 13px; background: #fde4df; color: #b3290f; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.ot-example { font: 12.5px/1.45 var(--mono); color: var(--ink-2); background: #f5f5f3; border-radius: 7px; padding: 6px 9px; overflow-wrap: anywhere; }
+
+.ot-row { display: grid; grid-template-columns: minmax(0, 1fr) 46px; grid-template-areas: "label pct" "track sub"; gap: 6px 12px; align-items: center; }
+.ot-row-label { grid-area: label; display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ot-track { grid-area: track; height: 8px; border-radius: 4px; background: #ececea; overflow: hidden; }
+.ot-fill { display: block; height: 100%; border-radius: 4px; background: var(--band); transform-origin: left; animation: fill-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes fill-grow { from { transform: scaleX(0); } }
+.ot-pct { grid-area: pct; justify-self: end; font-weight: 700; font-size: 14px; color: var(--band-ink); font-variant-numeric: tabular-nums; }
+.ot-row-sub { grid-area: sub; justify-self: end; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.row-top .ot-pct { margin-left: auto; }
+.ot-go { width: 18px; color: var(--muted); display: flex; align-self: center; flex: none; }
+.ot-how { font-size: 14px; color: var(--ink-2); padding: 0 4px; }
+.ot-how summary { cursor: pointer; font-weight: 600; color: var(--ink); padding: 6px 0; }
+.ot-how p { margin: 8px 0 0; line-height: 1.55; max-width: 720px; }
+
+/* The home page's numbers: each one a way in. */
+a.metric { color: inherit; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+a.metric:hover { border-color: #cfcfca; color: inherit; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
+a.metric:active { transform: scale(0.98); }
+.metric-primary { box-shadow: inset 0 3px 0 var(--band); }
+.metric-primary .stat-num { color: var(--band-ink); }
+.metric-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+@media (max-width: 899px) { .metric-primary .ring { display: none; } }
+
+/* Nothing matched is not the same as nothing checked: 0% keeps a red ring. */
+.ring-poor .ring-track { stroke: #fbd5cc; }
+.ot .row-top strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

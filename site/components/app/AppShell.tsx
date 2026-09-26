@@ -8,14 +8,14 @@ import Mark from "@/components/Mark";
 import AgentLogo from "./AgentLogo";
 import InstallHint from "./InstallHint";
 import PairingPrompt from "./PairingPrompt";
-import { IconBell, IconChat, IconHome, IconLaptop, IconPlus, IconSignOut, IconUser } from "./icons";
+import { IconBell, IconChat, IconHome, IconLaptop, IconPlus, IconSignOut, IconTarget, IconUser } from "./icons";
 import "./app.css";
 
 // The frame every signed-in page sits in, and what they share: who is signed
 // in, their projects and sessions, and their laptops. Fetched here once and
 // kept fresh, so moving between pages is instant.
 
-export type Section = "overview" | "sessions" | "machines" | "alerts" | "account" | "new";
+export type Section = "overview" | "ontrack" | "sessions" | "machines" | "alerts" | "account" | "new";
 
 type AppData = {
   user: User | null;
@@ -113,6 +113,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
           <a href="/app/remote" className="app-new"><IconPlus />New task</a>
           <div className="app-nav">
             <a className="app-link" href="/app" aria-current={here("overview")}><IconHome />Overview</a>
+            <a className="app-link" href="/app/ontrack" aria-current={here("ontrack")}><IconTarget />On track</a>
             <a className="app-link" href="/app/sessions" aria-current={here("sessions")}><IconChat />All sessions<span className="count">{sessions.length || ""}</span></a>
             <a className="app-link" href="/app/machines" aria-current={here("machines")}><IconLaptop />Machines</a>
             <a className="app-link" href="/app/alerts" aria-current={here("alerts")}><IconBell />Alerts{needsYou > 0 && <span className="badge">{needsYou}</span>}</a>
@@ -145,7 +146,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
         <main className={`app-main ${flush || chat ? "flush" : ""}`}>{!chat && <InstallHint />}{children}</main>
 
         <nav className="app-tabs" aria-label="Main">
-          <a className="app-tab" href="/app" aria-current={section === "overview" ? "page" : undefined}><IconHome />Home</a>
+          <a className="app-tab" href="/app" aria-current={section === "overview" || section === "ontrack" ? "page" : undefined}><IconHome />Home</a>
           <a className="app-tab" href="/app/sessions" aria-current={section === "sessions" ? "page" : undefined}><IconChat />Sessions</a>
           <a className="app-tab-new" href="/app/remote" aria-label="New task"><IconPlus /></a>
           <a className="app-tab" href="/app/alerts" aria-current={section === "alerts" ? "page" : undefined}><IconBell />Alerts</a>

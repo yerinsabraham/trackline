@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/account";
 import { ago, LIGHT_LABEL, requestLabel, type SessionSummary } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { IconAlert, IconLaptop } from "@/components/app/icons";
+import Ring, { band } from "@/components/app/Ring";
 
 type Filter = "all" | "working" | "needs-you" | "done";
 const FILTERS: [Filter, string][] = [["all", "All"], ["working", "Working"], ["needs-you", "Needs you"], ["done", "Done"]];
@@ -29,9 +31,11 @@ export default function Overview() {
   const doneToday = today.filter((s) => s.light === "done" || s.light === "idle").length;
   // On track: of the actions checked in the last day, how many matched the
   // request. Nothing checked is said as such, never shown as a number.
-  const checked = today.reduce((n, s) => n + s.score.session.checked, 0);
-  const aligned = today.reduce((n, s) => n + s.score.session.aligned, 0);
-  const onTrack = checked ? Math.round((aligned / checked) * 100) : null;
+  // The same number as the On track page: its own endpoint, today's actions.
+  const [onTrack, setOnTrack] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    api<{ score: { percent: number | null } }>("/app/ontrack?days=1").then((r) => setOnTrack(r.score.percent)).catch(() => setOnTrack(null));
+  }, [projects]);
 
   const shown = sessions.filter((s) =>
     filter === "all" ? true : filter === "done" ? s.light === "done" || s.light === "idle" : s.light === filter).slice(0, 12);
@@ -59,10 +63,10 @@ export default function Overview() {
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
 
       <section className="metrics rise rise-1" aria-label="Today">
-        <Stat dot="needs-you" label="Needs you" value={projects ? needsYou.length : null} note={needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
-        <Stat dot="working" label="Working" value={projects ? working.length : null} note={working.length ? [...new Set(working.map((s) => agentName(s.host)))].join(", ") : "No agent running"} />
-        <Stat dot="done" label="Done today" value={projects ? doneToday : null} note={`Across ${new Set(today.map((s) => s.project)).size} project${new Set(today.map((s) => s.project)).size === 1 ? "" : "s"}`} desktopOnly />
-        <Stat dot="on-track" label="On track" value={projects ? (onTrack === null ? "—" : `${onTrack}%`) : null} note={onTrack === null ? "Nothing checked today" : "of actions matched the request"} />
+        <Stat href="/app/ontrack" primary percent={onTrack} dot="on-track" label="On track" value={onTrack === undefined ? null : onTrack === null ? "—" : `${onTrack}%`} note={onTrack === null ? "Nothing checked today" : "of today's actions matched the request"} />
+        <Stat href="/app/sessions?status=needs-you" dot="needs-you" label="Needs you" value={projects ? needsYou.length : null} note={needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
+        <Stat href="/app/sessions?status=working" dot="working" label="Working" value={projects ? working.length : null} note={working.length ? [...new Set(working.map((s) => agentName(s.host)))].join(", ") : "No agent running"} />
+        <Stat href="/app/sessions?status=done" dot="done" label="Done today" value={projects ? doneToday : null} note={`Across ${new Set(today.map((s) => s.project)).size} project${new Set(today.map((s) => s.project)).size === 1 ? "" : "s"}`} desktopOnly />
       </section>
 
       <div className="ov-grid">
@@ -154,13 +158,19 @@ export default function Overview() {
   );
 }
 
-function Stat({ dot, label, value, note, desktopOnly }: { dot: string; label: string; value: number | string | null; note: string; desktopOnly?: boolean }) {
+function Stat({ dot, label, value, note, desktopOnly, href, primary, percent }: {
+  dot: string; label: string; value: number | string | null; note: string; desktopOnly?: boolean;
+  href: string; primary?: boolean; percent?: number | null;
+}) {
   return (
-    <div className={`metric ${desktopOnly ? "desktop-only" : ""}`}>
+    <a href={href} className={`metric ${desktopOnly ? "desktop-only" : ""} ${primary ? `metric-primary band-${band(percent ?? null)}` : ""}`}>
       <span className="stat-label"><span className={`dot ${dot}`} style={dot === "working" ? { animation: "none" } : undefined} />{label}</span>
-      {value === null ? <span className="skel" style={{ height: 30, width: 48 }} /> : <span className="stat-num">{value}</span>}
+      <span className="metric-row">
+        {value === null ? <span className="skel" style={{ height: 30, width: 48 }} /> : <span className="stat-num">{value}</span>}
+        {primary && percent !== undefined && <Ring percent={percent ?? null} size={46} stroke={5} label={false} />}
+      </span>
       <span className="stat-note">{note}</span>
-    </div>
+    </a>
   );
 }
 
