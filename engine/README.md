@@ -15,8 +15,8 @@ seconds and runs once per merge.
 
 Working, and published as the `trackline` npm package.
 
-- **Five checks** on every action, all arithmetic, none a model: `off-limits`,
-  `dependency-added`, `scope`, `diff-size`, `repetition`. Warn mode by default;
+- **Six checks** on every action, all arithmetic, none a model: `off-limits`,
+  `dependency-added`, `scope`, `diff-size`, `repetition`, `test-weakened`. Warn mode by default;
   each can be set to ask or auto.
 - **Three hosts through hooks** (Claude Code, Codex, Cursor) and **any MCP
   client** through `trackline mcp`, which advises and cannot block.

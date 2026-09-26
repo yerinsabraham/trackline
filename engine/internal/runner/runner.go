@@ -28,6 +28,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/signal/offlimits"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/repetition"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/testweak"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
 
@@ -347,6 +348,9 @@ func build(cfg config.Config, root string, counter *session.TurnCounter) []signa
 	}
 	if !cfg.IsDisabled(dependency.Name) {
 		out = append(out, dependency.New())
+	}
+	if !cfg.IsDisabled(testweak.Name) {
+		out = append(out, testweak.New())
 	}
 	if !cfg.IsDisabled(scope.Name) {
 		out = append(out, scope.New(root))

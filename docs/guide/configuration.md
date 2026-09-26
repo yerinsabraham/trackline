@@ -35,7 +35,7 @@ optional; anything you leave out keeps its default.
 | `judge` | off | `provider` (`cli` or `http`), and `binary`, or `baseUrl`, `model` and `apiKeyEnv` |
 
 Check names: `off-limits`, `dependency-added`, `scope`, `diff-size`,
-`repetition`, `tool-policy`.
+`repetition`, `test-weakened`, `tool-policy`.
 
 For the http judge, `apiKeyEnv` names an environment variable that holds the
 key, so a key is never written into a file that gets committed.

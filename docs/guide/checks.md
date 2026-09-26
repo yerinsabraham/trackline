@@ -46,6 +46,18 @@ More distinct files written under one request than it plausibly needed: over
 5 for a request that sounds small, over 15 otherwise. It fires late on purpose,
 because a refactor is exactly the work people hand an agent.
 
+## test-weakened
+
+A test made easier to pass instead of the code being fixed: a skip or focus
+marker added (`it.skip`, `test.only`, `@pytest.mark.skip`, `t.Skip`), an
+assertion removed, or an exact assertion swapped for a loose one (`toBe(11)`
+to `toBeDefined()`).
+
+It reads the change to the test itself, so it catches the two-line edit that
+scope and diff size cannot see. It stays quiet when your request asked for a
+test to be skipped or removed, and when a test file is written whole, since
+there is no earlier version to compare.
+
 ## repetition
 
 The same action, with the same content, four or more times in one request.

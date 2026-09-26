@@ -112,7 +112,7 @@
       "additionalProperties": false,
       "required": ["check", "outcome"],
       "properties": {
-        "check": { "enum": ["off-limits", "dependency-added", "scope", "diff-size", "repetition", "tool-policy", "config", "rules"] },
+        "check": { "enum": ["off-limits", "dependency-added", "scope", "diff-size", "repetition", "test-weakened", "tool-policy", "config", "rules"] },
         "outcome": { "enum": ["clean", "finding", "not-applicable", "cannot-measure"] },
         "reason": { "type": "string", "maxLength": 300 },
         "findings": {

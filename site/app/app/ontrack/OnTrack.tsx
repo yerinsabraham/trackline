@@ -29,6 +29,7 @@ const RANGES: [number, string][] = [[1, "Today"], [7, "7 days"], [30, "30 days"]
 const CHECK: Record<string, { name: string; means: string }> = {
   "off-limits": { name: "Off-limits files", means: "Writes to files that should never change, like .env and keys." },
   "dependency-added": { name: "New dependencies", means: "Packages added that the request did not ask for." },
+  "test-weakened": { name: "Weakened tests", means: "A test skipped or loosened instead of the code being fixed." },
   scope: { name: "Outside the request", means: "Changes to parts of the project the request was not about." },
   "diff-size": { name: "Size of change", means: "Changes far larger than the request called for." },
   repetition: { name: "Going in circles", means: "The same action tried again and again." },

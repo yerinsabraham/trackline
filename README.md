@@ -26,7 +26,7 @@ govern all of them the same way.
 
 ## What it actually catches
 
-Five checks, each of which stays quiet unless it has something specific to say:
+Six checks, each of which stays quiet unless it has something specific to say:
 
 | | |
 |---|---|
@@ -34,6 +34,7 @@ Five checks, each of which stays quiet unless it has something specific to say:
 | **dependency-added** | a package added to a manifest, or installed by a command, that you never named |
 | **scope** | a write into an area your request did not mention |
 | **diff-size** | a change far larger than the request implied |
+| **test-weakened** | a test skipped, or its assertions removed or loosened, instead of the code being fixed |
 | **repetition** | the same action attempted over and over, which usually means stuck |
 
 When one fires, it says what it saw:
