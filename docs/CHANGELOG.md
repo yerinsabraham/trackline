@@ -3,6 +3,16 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.5.0 · 2026-09-26
+
+- **Allow once, or keep it blocked, from your phone.** When trackline stops
+  something in a session started from your phone, the app offers Allow once
+  and Keep blocked. Allow once lets that one action through, in that session,
+  once, and the agent retries it; Keep blocked tells the agent not to try
+  again. Both are signed with your passkey.
+- **Fix:** turning remote off with a test or development config folder no
+  longer stops the real runner.
+
 ## 0.4.0 · 2026-09-25
 
 - **Reply from your phone.** A task or a session can be continued from the
