@@ -82,6 +82,8 @@ trackline review          # ask a model whether the work served the request
 trackline mcp             # let any MCP agent ask before it acts (advisory)
 trackline traces DIR      # check exported production traces (OTLP)
 trackline serve           # receive a deployed agent's traces live
+trackline connect         # optional: link to an account and a live dashboard
+trackline remote enable   # optional: run and approve tasks from your phone
 ```
 
 ### What it can do in each agent
@@ -111,6 +113,15 @@ trackline review --json ...                        # one line per turn, for scri
 It also speaks to any OpenAI-compatible endpoint, including a local model. For a
 tool whose subject is what an agent may do, nobody should have to send their
 code to a third party to use it.
+
+### From your phone
+
+Optional, and off until you turn it on. `trackline remote enable` pairs your
+phone with a passkey. From the app you can send a task to Claude Code or Codex
+on your own laptop, watch it run, reply to it, and answer **Allow once** or
+**Keep blocked** when trackline stops something. Every message is signed by your
+passkey and checked on the laptop, so the server that carries it cannot write
+one. `trackline remote disable --all` turns it off everywhere.
 
 ---
 
