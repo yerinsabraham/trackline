@@ -13,9 +13,8 @@ cd your-project
 trackline init
 ```
 
-That is it. It runs beside Claude Code or Codex, notices things, and writes them
-down. Cursor support is on `main` and arrives in the next release
-(`trackline init --host cursor`). **In its default mode it cannot interrupt you.**
+That is it. It runs beside Claude Code, Codex or Cursor, notices things, and
+writes them down. **In its default mode it cannot interrupt you.**
 
 **It is not tied to any one agent.** The same rules apply whether a task runs
 through Claude Code, Codex or Cursor, and the same findings come out, because each
