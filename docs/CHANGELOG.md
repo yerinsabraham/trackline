@@ -3,6 +3,17 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.10.0 · 2026-09-26
+
+- **Cursor from your phone.** Tasks, replies, and Allow once or Keep blocked
+  now work with Cursor as they do with Claude Code and Codex. It runs headless
+  with its sandbox on and never with `--force`.
+- **A task from your phone cannot write outside its project**, whatever the
+  agent. Measured: Cursor's file editor, unlike its shell, is not confined by
+  its sandbox, and a mistyped path wrote a file elsewhere on the laptop.
+- **Fix:** an approval now matches a project reached through a symbolic link,
+  such as `/tmp` on macOS.
+
 ## 0.9.0 · 2026-09-26
 
 - **Deployed agents on the dashboard.** `trackline serve --connect` sends

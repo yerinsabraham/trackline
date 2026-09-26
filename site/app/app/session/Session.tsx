@@ -123,7 +123,7 @@ export default function Session() {
   const working = s?.light === "working" || sent.some((x) => active(x.status));
 
   const blocked = !s ? "Loading…"
-    : !cont ? (s.host === "cursor" ? "Replying to Cursor from here is not available yet." : "To reply from here, turn on remote for this project on your laptop: trackline remote enable")
+    : !cont ? "To reply from here, turn on remote for this project on your laptop: trackline remote enable"
     : cont.machine.stopped ? `Remote is stopped on ${cont.machine.name}. Turn it on again on the laptop.`
     : undefined;
 

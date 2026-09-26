@@ -195,7 +195,7 @@ export default function Home() {
         </div>
         <div className="feature-grid">
           <ul className="feature-points">
-            <li><span className="n">01</span><div><b>Send a task</b><p>Pick the project and the agent, Claude Code or Codex, and type what you want. It runs on your laptop, never on a server.</p></div></li>
+            <li><span className="n">01</span><div><b>Send a task</b><p>Pick the project and the agent, Claude Code, Codex or Cursor, and type what you want. It runs on your laptop, never on a server.</p></div></li>
             <li><span className="n">02</span><div><b>Watch it work</b><p>Each step as it happens, the agent&apos;s reply when it finishes, and a push when it is done. Reply, and it carries on in the same session.</p></div></li>
             <li><span className="n">03</span><div><b>Decide what it may do</b><p>Secrets and new dependencies are stopped before they happen, and the agent is told why. You choose: Allow once, or Keep blocked.</p></div></li>
             <li><span className="n">04</span><div><b>Stop it at any time</b><p>One task, or every laptop at once. Turning remote on again takes the laptop itself.</p></div></li>

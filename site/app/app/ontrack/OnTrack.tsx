@@ -30,6 +30,7 @@ const CHECK: Record<string, { name: string; means: string }> = {
   "off-limits": { name: "Off-limits files", means: "Writes to files that should never change, like .env and keys." },
   "dependency-added": { name: "New dependencies", means: "Packages added that the request did not ask for." },
   "test-weakened": { name: "Weakened tests", means: "A test skipped or loosened instead of the code being fixed." },
+  "outside-project": { name: "Outside the project", means: "A task from your phone writing a file outside its project." },
   "workaround": { name: "Ways round a block", means: "A blocked file reached another way: a script, a build step, a command." },
   scope: { name: "Outside the request", means: "Changes to parts of the project the request was not about." },
   "diff-size": { name: "Size of change", means: "Changes far larger than the request called for." },

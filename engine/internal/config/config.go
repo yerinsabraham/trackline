@@ -49,6 +49,10 @@ type Config struct {
 	// Mode is the fallback for any check without its own setting.
 	Mode Mode `json:"mode,omitempty"`
 
+	// Remote is set by ForRemote, never read from a file: a project cannot
+	// declare itself a phone session, or stop being one.
+	Remote bool `json:"-"`
+
 	// Modes overrides Mode for a named check, so "never touch .env" can be
 	// automatic while "this looks out of scope" still asks.
 	Modes map[string]Mode `json:"modes,omitempty"`
@@ -148,7 +152,7 @@ const RemoteEnv = "TRACKLINE_REMOTE_JOB"
 // remoteBlocks are the checks that block in a remote session whatever the
 // project says: with nobody at the keyboard, writing a secret or pulling in a
 // new dependency is not something to find out about afterwards.
-var remoteBlocks = []string{"off-limits", "dependency-added"}
+var remoteBlocks = []string{"off-limits", "dependency-added", "outside-project"}
 
 // ForRemote is the configuration for a session started from the phone. It
 // only ever tightens: an agent that sets RemoteEnv on itself gains nothing,
@@ -178,6 +182,7 @@ func (c Config) ForRemote() Config {
 		limits = append(limits, p)
 	}
 	c.OffLimits = append(limits, guarded...)
+	c.Remote = true
 	return c
 }
 
@@ -198,6 +203,7 @@ const (
 var guarded = []string{
 	".trackline.json", ".trackline/config.json",
 	".claude/settings.json", ".codex/hooks.json", ".codex/config.toml",
+	".cursor/hooks.json", ".cursor/cli.json",
 }
 
 // Not guarded, on purpose: .trackline/overrides.json, which a phone session

@@ -138,7 +138,7 @@ var modes = map[string]bool{"warn": true, "ask": true, "auto": true}
 
 var checks = map[string]bool{
 	"off-limits": true, "dependency-added": true, "scope": true, "diff-size": true,
-	"repetition": true, "test-weakened": true, "workaround": true, "tool-policy": true, "config": true, "rules": true,
+	"repetition": true, "test-weakened": true, "workaround": true, "outside-project": true, "tool-policy": true, "config": true, "rules": true,
 }
 
 var hosts = map[event.Host]string{

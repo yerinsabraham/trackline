@@ -26,6 +26,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/signal/dependency"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/diffsize"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/offlimits"
+	"github.com/yerinsabraham/trackline/engine/internal/signal/outside"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/repetition"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/scope"
 	"github.com/yerinsabraham/trackline/engine/internal/signal/testweak"
@@ -371,6 +372,11 @@ func build(cfg config.Config, root string, counter *session.TurnCounter) []signa
 	}
 	if !cfg.IsDisabled(dependency.Name) {
 		out = append(out, dependency.New())
+	}
+	// Only from the phone: at the desk, writing elsewhere is the person's own
+	// business. ForRemote makes sure it cannot be switched off there.
+	if cfg.Remote {
+		out = append(out, outside.New(root))
 	}
 	if !cfg.IsDisabled(workaround.Name) {
 		out = append(out, workaround.New(counter, root))

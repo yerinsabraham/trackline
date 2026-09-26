@@ -21,10 +21,6 @@ var Binaries = map[string]string{"claude": "claude", "codex": "codex", "cursor":
 // to check the hook is wired before an agent runs unwatched.
 var Hosts = map[string]string{"claude": "claude-code", "codex": "codex", "cursor": "cursor"}
 
-// ErrNotYet is an agent the phone can name that the runner does not start
-// yet. Cursor waits on R0: its own worker may serve better than wrapping it.
-var ErrNotYet = errors.New("remote does not start this agent yet")
-
 // Command is the argv for one run, in the project at root. The prompt is not
 // in it; it goes on stdin.
 //
@@ -39,6 +35,14 @@ var ErrNotYet = errors.New("remote does not start this agent yet")
 //
 // Codex: the workspace-write sandbox, set here so no config can widen it,
 // and never asking. User config still loads, because hook trust lives there.
+//
+// Cursor: print mode with its sandbox on, so a shell command cannot write
+// outside the project or reach the network, and never --force, so a command
+// asking for more is refused rather than run (measured: both refused). Its
+// file edit tool is not sandboxed: measured, a mistyped path wrote a file
+// outside the project. A phone session blocks that in trackline itself
+// (config.ForRemote, outside-project). --trust loads the project's hooks,
+// trackline's among them, without an interactive prompt nobody would answer.
 //
 // session, when set, continues that session of the agent rather than
 // starting one. `codex exec resume` takes no --sandbox or -C, so the sandbox
@@ -72,7 +76,16 @@ func Command(name, binary, root, session string) ([]string, error) {
 			"-",
 		}, nil
 	case "cursor":
-		return nil, ErrNotYet
+		argv := []string{binary, "-p",
+			"--output-format", "stream-json",
+			"--sandbox", "enabled",
+			"--trust",
+			"--workspace", root,
+		}
+		if session != "" {
+			argv = append(argv, "--resume", session)
+		}
+		return argv, nil
 	}
 	return nil, errors.New("unknown agent: " + name)
 }
@@ -113,8 +126,11 @@ type Parser interface {
 // NewParser returns the parser for an agent. root makes paths relative, so
 // the phone shows src/app.ts, not the laptop's home folder.
 func NewParser(name, root string) Parser {
-	if name == "codex" {
+	switch name {
+	case "codex":
 		return &codex{root: root}
+	case "cursor":
+		return &cursor{root: root}
 	}
 	return &claude{root: root}
 }
@@ -252,6 +268,116 @@ func (p *codex) Line(line []byte) []Event {
 			msg = e.Message
 		}
 		return []Event{{Kind: "error", Text: clip(msg)}}
+	}
+	return nil
+}
+
+type cursor struct {
+	root string
+	last string
+	// targets remembers what each call was aimed at: a refused call's
+	// completion does not repeat its arguments.
+	targets map[string]string
+}
+
+// cursorTools names Cursor's tool calls the way the phone shows them.
+var cursorTools = map[string]string{
+	"editToolCall": "edit", "writeToolCall": "write", "deleteToolCall": "delete",
+	"shellToolCall": "shell", "readToolCall": "read", "grepToolCall": "grep",
+	"globToolCall": "glob", "lsToolCall": "ls",
+}
+
+func (p *cursor) Line(line []byte) []Event {
+	var e struct {
+		Type      string `json:"type"`
+		Subtype   string `json:"subtype"`
+		SessionID string `json:"session_id"`
+		CallID    string `json:"call_id"`
+		Message   struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"message"`
+		// The call sits under a key naming its tool (editToolCall), beside
+		// plain fields such as toolCallId, so it is read in two steps.
+		ToolCall map[string]json.RawMessage `json:"tool_call"`
+		IsError  bool                       `json:"is_error"`
+		Result   string                     `json:"result"`
+	}
+	if json.Unmarshal(line, &e) != nil {
+		return nil
+	}
+	switch e.Type {
+	case "system":
+		if e.Subtype == "init" && e.SessionID != "" {
+			return []Event{{Kind: "session", Text: e.SessionID}}
+		}
+	case "assistant":
+		var out []Event
+		for _, c := range e.Message.Content {
+			if t := clip(c.Text); c.Type == "text" && t != "" {
+				p.last = t
+				out = append(out, Event{Kind: "say", Text: t})
+			}
+		}
+		return out
+	case "tool_call":
+		for key, raw := range e.ToolCall {
+			if !strings.HasSuffix(key, "ToolCall") {
+				continue
+			}
+			var call struct {
+				Args   map[string]any `json:"args"`
+				Result struct {
+					Error *struct {
+						Error string `json:"error"`
+					} `json:"error"`
+					Rejected *struct {
+						Command string `json:"command"`
+					} `json:"rejected"`
+				} `json:"result"`
+			}
+			if json.Unmarshal(raw, &call) != nil {
+				continue
+			}
+			name := cursorTools[key]
+			if name == "" {
+				name = strings.TrimSuffix(key, "ToolCall")
+			}
+			target := clip(on(p.root, call.Args))
+			if target == "" && call.Result.Rejected != nil {
+				target = clip(call.Result.Rejected.Command)
+			}
+			if target == "" {
+				target = p.targets[e.CallID]
+			}
+			switch e.Subtype {
+			case "started":
+				if p.targets == nil {
+					p.targets = map[string]string{}
+				}
+				p.targets[e.CallID] = target
+				return []Event{{Kind: "tool", Tool: name, Text: target}}
+			case "completed":
+				// Refused by trackline's hook, or by Cursor for want of
+				// permission: either way the phone should see it was stopped.
+				if call.Result.Rejected != nil || call.Result.Error != nil && strings.Contains(call.Result.Error.Error, "BLOCKED by trackline") {
+					return []Event{{Kind: "denied", Tool: name, Text: target}}
+				}
+			}
+		}
+	case "result":
+		// Cursor's result joins every message of the turn into one string;
+		// the last message on its own is the answer.
+		text := p.last
+		if text == "" {
+			text = clip(e.Result)
+		}
+		if e.IsError {
+			return []Event{{Kind: "error", Text: clip(e.Result)}}
+		}
+		return []Event{{Kind: "done", Text: text}}
 	}
 	return nil
 }

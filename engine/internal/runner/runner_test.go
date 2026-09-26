@@ -299,7 +299,7 @@ func TestARemoteSessionMayNotEditItsOwnSettings(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.RemoteEnv, "job_1")
 	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
-	for _, f := range []string{".trackline.json", ".claude/settings.json", ".codex/hooks.json"} {
+	for _, f := range []string{".trackline.json", ".claude/settings.json", ".codex/hooks.json", ".cursor/hooks.json", ".cursor/cli.json"} {
 		d, _ := runner.Run(payload(root, f), runner.Options{Root: root, Now: time.Now()})
 		if !d.Block {
 			t.Errorf("%s: an agent started from the phone could edit what watches it", f)
@@ -367,5 +367,24 @@ func TestAWayRoundABlockIsReported(t *testing.T) {
 	}
 	if finding(run(bash(`python3 -c "open('.env','w').write('API_KEY=test123')"`))) == nil {
 		t.Fatal("a command that writes the blocked file indirectly was not reported")
+	}
+}
+
+// From the phone, a write outside the project is refused, whatever the agent;
+// at the desk it is left alone.
+func TestARemoteWriteOutsideTheProjectIsBlocked(t *testing.T) {
+	root := t.TempDir()
+	elsewhere := filepath.Join(t.TempDir(), "hello.txt")
+	if d, _ := runner.Run(payload(root, elsewhere), runner.Options{Root: root, Now: time.Now()}); d.Block {
+		t.Fatal("blocked at the desk")
+	}
+	t.Setenv(config.RemoteEnv, "job_1")
+	t.Setenv(config.RemoteGuardEnv, config.Guard(root))
+	d, _ := runner.Run(payload(root, elsewhere), runner.Options{Root: root, Now: time.Now()})
+	if !d.Block || !strings.Contains(d.Message, "outside the project") {
+		t.Fatalf("block=%v message=%q", d.Block, d.Message)
+	}
+	if d, _ := runner.Run(payload(root, "src/app.ts"), runner.Options{Root: root, Now: time.Now()}); d.Block {
+		t.Fatal("a write inside the project was blocked")
 	}
 }

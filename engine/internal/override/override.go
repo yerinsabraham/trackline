@@ -124,11 +124,27 @@ func (s *Store) relative(target string) string {
 	if !filepath.IsAbs(target) || root == "." {
 		return target
 	}
+	if r, ok := inside(root, target); ok {
+		return r
+	}
+	// The same folder by another name: on macOS /tmp is /private/tmp, and an
+	// agent may report either.
+	rr, err1 := filepath.EvalSymlinks(root)
+	td, err2 := filepath.EvalSymlinks(filepath.Dir(target))
+	if err1 == nil && err2 == nil {
+		if r, ok := inside(rr, filepath.Join(td, filepath.Base(target))); ok {
+			return r
+		}
+	}
+	return target
+}
+
+func inside(root, target string) (string, bool) {
 	r, err := filepath.Rel(root, target)
 	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
-		return target
+		return "", false
 	}
-	return filepath.ToSlash(r)
+	return filepath.ToSlash(r), true
 }
 
 // Consume removes a "next" grant once it has been used: allowed once means

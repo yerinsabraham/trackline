@@ -140,3 +140,21 @@ func TestNextLapsesUnused(t *testing.T) {
 		t.Fatal("an approval unused for over an hour still held")
 	}
 }
+
+// A project reached through a link matches the approval made for it.
+func TestAnApprovalMatchesThroughALink(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	os.MkdirAll(real, 0o755)
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	s := &override.Store{Path: filepath.Join(t.TempDir(), "grants.json"), Root: link}
+	if err := s.Add(override.Grant{Signal: "off-limits", Target: ".env", Scope: override.ScopeNext, Session: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Allows("off-limits", filepath.Join(real, ".env"), "s", "t"); !ok {
+		t.Fatal("the same file by its real path was not matched")
+	}
+}

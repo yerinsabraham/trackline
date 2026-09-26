@@ -120,8 +120,8 @@ code to a third party to use it.
 ### From your phone
 
 Optional, and off until you turn it on. `trackline remote enable` pairs your
-phone with a passkey. From the app you can send a task to Claude Code or Codex
-on your own laptop, watch it run, reply to it, and answer **Allow once** or
+phone with a passkey. From the app you can send a task to Claude Code, Codex or
+Cursor on your own laptop, watch it run, reply to it, and answer **Allow once** or
 **Keep blocked** when trackline stops something. Every message is signed by your
 passkey and checked on the laptop, so the server that carries it cannot write
 one. `trackline remote disable --all` turns it off everywhere.

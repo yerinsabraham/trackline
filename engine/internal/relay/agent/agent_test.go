@@ -69,8 +69,43 @@ func TestCodexWritingAFile(t *testing.T) {
 	}
 }
 
+// Cursor, headless: one file written, the .env write refused by trackline's
+// hook, and the last message as the answer (Cursor's own result joins every
+// message of the turn).
+func TestCursorBlockedByTheHook(t *testing.T) {
+	got := parse(t, "cursor", "cursor-blocked.jsonl")
+	if got[0] != (agent.Event{Kind: "session", Text: "fc51dc5d-674f-4a1d-aec4-616bd893b5ef"}) {
+		t.Fatalf("session: %+v", got[0])
+	}
+	i := slices.IndexFunc(got, func(e agent.Event) bool { return e.Kind == "denied" })
+	// The model mistyped the project's path, so the write aimed outside it;
+	// the hook refused it on the file name all the same.
+	if i < 0 || got[i].Tool != "edit" || !strings.HasSuffix(got[i].Text, "/.env") {
+		t.Fatalf("the block was not reported: %+v", got)
+	}
+	last := got[len(got)-1]
+	if last.Kind != "done" || !strings.HasPrefix(last.Text, "Done:") {
+		t.Fatalf("answer: %+v", last)
+	}
+}
+
+// Its sandbox refuses a write outside the project and the network; the phone
+// sees both refusals.
+func TestCursorShellRefusals(t *testing.T) {
+	got := parse(t, "cursor", "cursor-shell.jsonl")
+	var denied []string
+	for _, e := range got {
+		if e.Kind == "denied" {
+			denied = append(denied, e.Text)
+		}
+	}
+	if len(denied) < 2 || !strings.Contains(strings.Join(denied, "|"), "curl") {
+		t.Fatalf("denied: %q", denied)
+	}
+}
+
 func TestParsersIgnoreWhatTheyCannotRead(t *testing.T) {
-	for _, name := range []string{"claude", "codex"} {
+	for _, name := range []string{"claude", "codex", "cursor"} {
 		p := agent.NewParser(name, "/work/app")
 		for _, line := range []string{"", "not json", `{"type":"something new"}`, `[1,2]`} {
 			if ev := p.Line([]byte(line)); len(ev) != 0 {
@@ -84,7 +119,7 @@ func TestParsersIgnoreWhatTheyCannotRead(t *testing.T) {
 // carries the prompt: it goes on stdin, where "--dangerously-skip-permissions"
 // is only text.
 func TestCommandsStaySafe(t *testing.T) {
-	for _, name := range []string{"claude", "codex"} {
+	for _, name := range []string{"claude", "codex", "cursor"} {
 		argv, err := agent.Command(name, "/bin/"+name, "/work/app", "")
 		if err != nil {
 			t.Fatal(err)
@@ -106,8 +141,13 @@ func TestCommandsStaySafe(t *testing.T) {
 	if !strings.Contains(strings.Join(codex, " "), "--sandbox workspace-write") || codex[len(codex)-1] != "-" {
 		t.Errorf("codex: %v", codex)
 	}
-	if _, err := agent.Command("cursor", "cursor-agent", "/work/app", ""); err != agent.ErrNotYet {
-		t.Errorf("cursor: %v", err)
+	cursor, _ := agent.Command("cursor", "cursor-agent", "/work/app", "")
+	if line := strings.Join(cursor, " "); !strings.Contains(line, "--sandbox enabled") || !strings.Contains(line, "--workspace /work/app") || !strings.Contains(line, "-p ") {
+		t.Errorf("cursor: %v", cursor)
+	}
+	resumed, _ := agent.Command("cursor", "cursor-agent", "/work/app", "sess-1")
+	if line := strings.Join(resumed, " "); !strings.Contains(line, "--resume sess-1") || !strings.Contains(line, "--sandbox enabled") {
+		t.Errorf("cursor resume: %v", resumed)
 	}
 }
 
