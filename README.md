@@ -165,7 +165,7 @@ The code, the raw data and the numbers are in
 
 | | Question | Answer |
 |---|---|---|
-| [1](docs/experiments/01-do-agents-self-correct.md) | When a hook blocks an agent and explains why, does it correct itself? | **11 of 11**, across two agents |
+| [1](docs/experiments/01-do-agents-self-correct.md) | When a hook blocks an agent and explains why, does it correct itself? | **11 of 11**, one scenario on two agents |
 | [2](docs/experiments/02-hook-latency.md) | What does a check before every tool call cost? | **88ms in Node, 6.5ms in Go** — which is why the hook is compiled |
 | [3](docs/experiments/03-otel-traces.md) | Can this work from production traces? | only with content capture on, but it survives PII redaction |
 | [4](docs/experiments/04-false-alarms.md) | Does it cry wolf on ordinary work? | **0 false alarms in 23 actions** |

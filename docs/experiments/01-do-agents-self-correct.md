@@ -1,6 +1,8 @@
 # Do agents correct themselves when blocked?
 
-**Answer: yes. 11 of 11, on two different agents.**
+**Answer: yes. 11 of 11, on two different agents.** One scenario, run 16
+times; the block fired in 11 of them (5 Claude Code, 6 Codex), and all 11
+corrected. It is one result repeated, not eleven different cases.
 
 This is the experiment the whole product rests on. Trackline can block an
 action and hand the reason back to the agent. If agents ignore that feedback,

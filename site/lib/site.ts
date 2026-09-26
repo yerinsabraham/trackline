@@ -33,7 +33,7 @@ export const evidence = [
     file: "01-do-agents-self-correct.md",
     question: "When an agent is blocked and told why, does it correct itself?",
     answer: "Yes, 11 times out of 11",
-    method: "Claude Code and Codex, blocked from a protected file with a concrete alternative named.",
+    method: "One scenario, 16 runs on Claude Code and Codex; the block fired in 11, and all 11 corrected. A protected file, with a concrete alternative named.",
   },
   {
     n: 2,
