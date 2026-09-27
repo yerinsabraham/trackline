@@ -41,18 +41,24 @@ git tag "v$v"
 # 2. The tag alone: the Release workflow publishes with provenance.
 git push -q origin "v$v"
 echo "tag v$v pushed; waiting for npm to have it (the Release workflow publishes)"
-for _ in $(seq 1 60); do
-  [ "$(npm view "@trackline/linux-x64@$v" version 2>/dev/null)" = "$v" ] \
-    && [ "$(npm view "trackline@$v" version 2>/dev/null)" = "$v" ] && break
-  sleep 15
-done
-[ "$(npm view "trackline@$v" version 2>/dev/null)" = "$v" ] || {
-  echo "trackline@$v is not on npm after 15 minutes. Check the Release workflow; main was not pushed." >&2
+# Every package, not a sample: npm leaves an optional package it cannot find
+# yet out of the lockfile without a word (0.11.0 lost darwin-x64 that way).
+pkgs="trackline $(node -p "Object.keys(require('./package.json').optionalDependencies).join(' ')")"
+published() { for p in $pkgs; do [ "$(npm view "$p@$v" version 2>/dev/null)" = "$v" ] || return 1; done; }
+for _ in $(seq 1 60); do published && break; sleep 15; done
+published || {
+  echo "not every package of $v is on npm after 15 minutes. Check the Release workflow; main was not pushed." >&2
   exit 1
 }
 
 # 3. The lockfile, now that there is something to record, then main.
 npm install --package-lock-only --ignore-scripts >/dev/null
+node - "$v" <<'EOF2'
+const lock = require('./package-lock.json');
+const want = Object.keys(require('./package.json').optionalDependencies);
+const missing = want.filter((p) => lock.packages[`node_modules/${p}`]?.version !== process.argv[2]);
+if (missing.length) { console.error(`the lockfile is missing ${missing.join(', ')}; main was not pushed`); process.exit(1); }
+EOF2
 git add package-lock.json
 git commit -q -m "Record the published $v platform packages in the lockfile"
 git push -q origin main
