@@ -85,6 +85,30 @@ export function Question({ host, question, options, onAnswer }: {
   );
 }
 
+/**
+ * Said before anything is sent, where the eye is: a laptop that is asleep,
+ * offline or stopped will not get the message, and silence afterwards is
+ * the worst way to find out.
+ */
+export function LaptopNotice({ machine }: { machine: { name: string; online: boolean; stopped: boolean; lastSeenAt?: string | null } | null | undefined }) {
+  if (!machine || (machine.online && !machine.stopped)) return null;
+  return (
+    <div className="laptop-notice" role="status">
+      <span style={{ width: 16, display: "flex", flex: "none" }}><IconAlert /></span>
+      <span>
+        {machine.stopped
+          ? <>Remote is stopped on <strong>{machine.name}</strong>. Nothing sent now will run until you turn it on there: <code>trackline remote enable</code></>
+          : <><strong>{machine.name}</strong> is asleep or offline{machine.lastSeenAt ? ` (last seen ${seen(machine.lastSeenAt)})` : ""}. A message waits 3 minutes for it, then is not delivered. Wake the laptop first.</>}
+      </span>
+    </div>
+  );
+}
+
+function seen(iso: string): string {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+}
+
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
 export function AgentReply({ host, text }: { host: string | null; text: string }) {
   return (

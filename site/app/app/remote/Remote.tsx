@@ -4,20 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { whileVisible } from "@/lib/dashboard";
 import {
-  active, type AgentEvent, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, signPrompt,
+  active, type AgentEvent, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, recall, remember, signPrompt,
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, type Line, MyMessage, Question } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
+import { Cmd } from "@/components/app/FirstRun";
+
+const RESUME: Record<string, string> = { claude: "claude --resume", codex: "codex resume", cursor: "cursor-agent --resume" };
 
 // A task for an agent on your laptop: choose where, say what, sign and send.
 // Then the same conversation view as a session, fed by the laptop as it goes.
 
-const ASKED = "trackline.asked.";
-const remember = (job: string, text: string) => { try { sessionStorage.setItem(ASKED + job, text); } catch { /* private mode */ } };
-const recall = (job: string) => { try { return sessionStorage.getItem(ASKED + job) ?? undefined; } catch { return undefined; } };
 
 export default function Remote() {
   const [job, setJob] = useState<string | null | undefined>(undefined);
@@ -147,6 +147,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                 </p>
               )}
               {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
+              <LaptopNotice machine={machine} />
               <button type="submit" className="btn-act nt-send" disabled={busy || !text.trim() || !chosen || !keys?.length || machine.stopped}>
                 <span style={{ width: 18, display: "flex" }}><IconFace /></span>{busy ? "Waiting for your passkey…" : "Sign and send"}
               </button>
@@ -230,16 +231,19 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [events.length, job?.status]);
 
-  const machineName = remote?.machines.find((m) => m.id === job?.machine)?.name ?? "your laptop";
+  const machine = remote?.machines.find((m) => m.id === job?.machine);
+  const machineName = machine?.name ?? "your laptop";
   const live = !!job && active(job.status);
   const list = items(events);
   const canContinue = job?.agent && job.session && job.machine && job.project;
 
-  const send = async (text: string) => {
-    if (!job || !canContinue) return;
+  const send = async (text: string, again = false) => {
+    if (!job || !(canContinue || again)) return;
     if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
     if (!keys.current.length) throw new Error("Add a passkey on your account page first.");
-    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session!);
+    // Sending again goes where the first one was meant to: the same
+    // conversation if it had one, a new one if not.
+    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session ?? undefined);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     open(r.id);
@@ -268,7 +272,11 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {missing && <p className="composer-note error">This task does not exist, or is not yours.</p>}
             {asked && <MyMessage text={asked} note={job ? `Sent to ${machineName}` : undefined} />}
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}
-            {job?.status === "queued" && <p className="chat-divider">Waiting for {machineName} to pick it up…</p>}
+            {job?.status === "queued" && (
+              <p className="chat-divider">{machine && !machine.online
+                ? `Waiting for ${machineName}, which is asleep or offline. This waits 3 minutes for it.`
+                : `Waiting for ${machineName} to pick it up…`}</p>
+            )}
             {list.map((it, i) => it.kind === "activity"
               ? <Activity key={`a${i}`} lines={it.lines} live={live && i === list.length - 1} />
               : it.kind === "permission" ? <Finding key={it.key} tone="block" title="Action needed on Mac">{it.text}</Finding>
@@ -276,13 +284,27 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
               : it.kind === "say" ? (job?.asked && !live && i === list.length - 1 && plain(it.text) === job.asked.question ? null : <AgentReply key={it.key} host={job?.agent ?? null} text={it.text} />)
               : <Finding key={it.key} tone="block" title="The agent stopped with an error">{it.text}</Finding>)}
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
-            {job && !live && job.status !== "done" && (
+            {job?.status === "expired" && (
+              <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, true)} /> : undefined}>
+                {machineName} was asleep or offline for 3 minutes, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
+              </Finding>
+            )}
+            {job && !live && job.status !== "done" && job.status !== "expired" && (
               <Finding tone={job.status === "refused" ? "block" : "warn"} title={jobState(job)}>
                 {job.reason && job.reason !== jobState(job) && job.status !== "refused" ? job.reason : undefined}
               </Finding>
             )}
             {job?.asked && !live && canContinue && (
               <Question host={job.agent} question={job.asked.question} options={job.asked.options} onAnswer={send} />
+            )}
+            {job?.session && !live && RESUME[job.agent ?? ""] && (
+              // The VS Code panels of Claude Code and Codex list only
+              // sessions started there, by design, so a conversation started
+              // here is picked up on the laptop from a terminal.
+              <div className="resume-here">
+                <span>Carry on at your laptop, in a terminal in this project:</span>
+                <Cmd text={`${RESUME[job.agent!]} ${job.session}`} />
+              </div>
             )}
             {job?.dashboardSession && !live && (
               <a className="chat-divider" href={`/app/session?id=${encodeURIComponent(job.dashboardSession)}`} style={{ textDecoration: "underline" }}>Open the full session</a>
@@ -291,6 +313,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         </div>
 
         <div className="chat-compose">
+          <LaptopNotice machine={machine} />
           <Composer
             placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}
             blocked={!job ? "Loading…" : live ? `${agentName(job.agent)} is still working. Reply when it has finished.` : !canContinue ? "This task has no session to continue." : undefined}
@@ -300,5 +323,19 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         </div>
       </section>
     </div>
+  );
+}
+
+function SendAgain({ onSend }: { onSend: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <>
+      <button type="button" className="btn-act" disabled={busy} onClick={async () => {
+        setBusy(true); setError("");
+        try { await onSend(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      }}>{busy ? "Waiting for your passkey…" : "Send again"}</button>
+      {error && <span className="composer-note error">{error}</span>}
+    </>
   );
 }

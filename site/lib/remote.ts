@@ -19,6 +19,8 @@ export type JobSummary = {
   status: string; code: string | null; reason: string | null; createdAt: string; finishedAt: string | null;
   /** It stopped to ask the person something, and nothing has answered it yet. */
   asking?: boolean;
+  /** The agent's session it continues, when it continues one. */
+  session?: string | null;
 };
 export type Overview = { machines: Machine[]; pairings: Pairing[]; jobs: JobSummary[] };
 export type Job = {
@@ -171,7 +173,7 @@ export function jobState(j: { status: string; code: string | null; reason: strin
     case "queued": return "Waiting for the laptop";
     case "delivered": return "Working";
     case "done": return "Done";
-    case "expired": return "The laptop did not pick it up in time";
+    case "expired": return "Not delivered: the laptop was asleep or offline";
     case "cancelled": return "Stopped before it started";
     case "refused": return `The laptop refused it: ${j.reason ?? j.code}`;
     case "failed": return j.code === "stopped" ? "Stopped" : `Failed: ${j.reason ?? "no reason given"}`;
@@ -180,3 +182,21 @@ export function jobState(j: { status: string; code: string | null; reason: strin
 }
 
 export const active = (status: string) => status === "queued" || status === "delivered";
+
+// What was sent, by job id, on this device: the server keeps a job's text
+// only until the laptop has it, and a page that closed before then would
+// otherwise have nothing to show. The last 50 are kept.
+const SENT = "trackline.sent";
+
+export function remember(job: string, text: string) {
+  try {
+    const all = JSON.parse(localStorage.getItem(SENT) ?? "[]") as [string, string][];
+    localStorage.setItem(SENT, JSON.stringify([...all.filter(([id]) => id !== job), [job, text]].slice(-50)));
+  } catch { /* private mode: the page shows it while open */ }
+}
+
+export function recall(job: string): string | undefined {
+  try {
+    return (JSON.parse(localStorage.getItem(SENT) ?? "[]") as [string, string][]).find(([id]) => id === job)?.[1];
+  } catch { return undefined; }
+}

@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, jobState, type Job, type Passkey, signDecision, signPrompt } from "@/lib/remote";
+import { active, jobState, type Job, type Passkey, recall, remember, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, type Line, MyMessage } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage } from "@/components/app/Chat";
 import { IconBack } from "@/components/app/icons";
 import { SessionRow } from "../Overview";
 
@@ -55,7 +55,7 @@ function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
 type Sent = { job: string; text: string; status: string; code: string | null; reason: string | null };
 
 export default function Session() {
-  const { projects } = useApp();
+  const { projects, remote } = useApp();
   const [id, setId] = useState("");
   const [view, setView] = useState<SessionView | null>(null);
   const [events, setEvents] = useState<FeedEvent[]>([]);
@@ -155,8 +155,16 @@ export default function Session() {
     if (!cont) return;
     const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
+    remember(r.id, text);
     setSent((x) => [...x, { job: r.id, text, status: "queued", code: null, reason: null }]);
   };
+  // Replies sent from here before, perhaps from a page since closed, that
+  // have not become part of the conversation: still on their way, or never
+  // delivered. The server has them; the words are kept on this device.
+  const earlier: Sent[] = (remote?.jobs ?? [])
+    .filter((j) => cont && j.session === cont.session && j.status !== "done" && j.status !== "cancelled" && !sent.some((x) => x.job === j.id))
+    .map((j) => ({ job: j.id, text: recall(j.id) ?? "A message you sent", status: j.status, code: j.code, reason: j.reason }))
+    .reverse();
 
   return (
     <div className="chat-page">
@@ -218,17 +226,25 @@ export default function Session() {
             })}
             {/* Once the laptop has done it, the conversation above shows it;
                 only what is still on its way, or went wrong, stays here. */}
-            {sent.filter((x) => active(x.status) || x.status !== "done").map((x) => (
-              <MyMessage key={x.job} text={x.text} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
+            {[...earlier, ...sent].filter((x) => active(x.status) || x.status !== "done").map((x) => (
+              <div key={x.job} style={{ display: "contents" }}>
+                <MyMessage text={x.text} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
+                {x.status === "expired" && (
+                  <Finding tone="warn" title="Not delivered" actions={x.text !== "A message you sent" ? <button type="button" className="btn-act" onClick={() => send(x.text)}>Send again</button> : undefined}>
+                    {cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.
+                  </Finding>
+                )}
+              </div>
             ))}
           </div>
         </div>
 
         <div className="chat-compose">
+          <LaptopNotice machine={cont?.machine} />
           <Composer
             placeholder={`Reply to ${agentName(s?.host)}…`}
             blocked={blocked}
-            note={cont ? `Signed with your passkey · continues this session on ${cont.machine.name}${cont.machine.online ? "" : " (asleep: it waits 3 minutes)"}` : undefined}
+            note={cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
             onSend={send}
           />
         </div>
