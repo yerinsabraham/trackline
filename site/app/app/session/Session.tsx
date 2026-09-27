@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, jobState, type Job, type Passkey, recall, remember, signDecision, signPrompt } from "@/lib/remote";
+import { active, type Attachment, jobState, type Job, type Passkey, previewsFor, recall, remember, rememberPreviews, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage } from "@/components/app/Chat";
@@ -151,11 +151,12 @@ export default function Session() {
     }
   };
 
-  const send = async (text: string) => {
+  const send = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session);
+    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
+    rememberPreviews(r.id, images.map((i) => i.preview));
     setSent((x) => [...x, { job: r.id, text, status: "queued", code: null, reason: null }]);
   };
   // Replies sent from here before, perhaps from a page since closed, that
@@ -228,7 +229,7 @@ export default function Session() {
                 only what is still on its way, or went wrong, stays here. */}
             {[...earlier, ...sent].filter((x) => active(x.status) || x.status !== "done").map((x) => (
               <div key={x.job} style={{ display: "contents" }}>
-                <MyMessage text={x.text} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
+                <MyMessage text={x.text} images={previewsFor(x.job)} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
                 {x.status === "expired" && (
                   <Finding tone="warn" title="Not delivered" actions={x.text !== "A message you sent" ? <button type="button" className="btn-act" onClick={() => send(x.text)}>Send again</button> : undefined}>
                     {cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.

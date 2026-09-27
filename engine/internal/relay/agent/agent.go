@@ -48,7 +48,11 @@ var Hosts = map[string]string{"claude": "claude-code", "codex": "codex", "cursor
 // starting one. `codex exec resume` takes no --sandbox or -C, so the sandbox
 // is pinned by -c there and the folder is where the runner starts it.
 // Measured: resumed that way, a write to the home folder was refused.
-func Command(name, binary, root, session string) ([]string, error) {
+//
+// images are files the person attached, already saved in the project. Codex
+// takes them with -i; Claude Code and Cursor read them from the path the
+// prompt names (measured: all three read an attached image correctly).
+func Command(name, binary, root, session string, images ...string) ([]string, error) {
 	switch name {
 	case "claude":
 		argv := []string{binary, "-p",
@@ -62,19 +66,23 @@ func Command(name, binary, root, session string) ([]string, error) {
 		}
 		return argv, nil
 	case "codex":
+		var attach []string
+		for _, im := range images {
+			attach = append(attach, "-i", im)
+		}
 		if session != "" {
-			return []string{binary, "exec", "resume", "--json",
+			argv := []string{binary, "exec", "resume", "--json",
 				"-c", `sandbox_mode="workspace-write"`,
 				"-c", `approval_policy="never"`,
-				session, "-",
-			}, nil
+			}
+			return append(append(argv, attach...), session, "-"), nil
 		}
-		return []string{binary, "exec", "--json",
+		argv := []string{binary, "exec", "--json",
 			"--sandbox", "workspace-write",
 			"-c", `approval_policy="never"`,
 			"-C", root,
-			"-",
-		}, nil
+		}
+		return append(append(argv, attach...), "-"), nil
 	case "cursor":
 		argv := []string{binary, "-p",
 			"--output-format", "stream-json",

@@ -3,16 +3,20 @@
 import { useRef, useState, type ReactNode } from "react";
 import ReplyText from "@/components/ReplyText";
 import AgentLogo from "./AgentLogo";
-import { IconAlert, IconShield, IconTerminal, IconUp } from "./icons";
+import { IconAlert, IconClip, IconClose, IconShield, IconTerminal, IconUp } from "./icons";
+import { type Attachment, MAX_ATTACHMENTS, prepareImage } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
 // arrived: from trackline's hook in the terminal, or from a task sent here.
 
 export type Line = { key: string; time?: string; verb: string; text: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
 
-export function MyMessage({ text, note }: { text: string; note?: string }) {
+export function MyMessage({ text, note, images }: { text: string; note?: string; images?: string[] }) {
   return (
     <div className="bubble-me rise">
+      {images && images.length > 0 && (
+        <div className="bubble-images">{images.map((u) => <img key={u} src={u} alt="Attached image" />)}</div>
+      )}
       <div>{text}</div>
       {note && <span>{note}</span>}
     </div>
@@ -120,15 +124,67 @@ export function AgentReply({ host, text }: { host: string | null; text: string }
 }
 
 /**
+ * Images to send with a message: the button that picks them, and what was
+ * picked, each removable. Shrunk and hashed as they are chosen, so sending
+ * is not held up by it.
+ */
+export function useAttachments() {
+  const [items, setItems] = useState<Attachment[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError("");
+    const room = MAX_ATTACHMENTS - items.length;
+    if (files.length > room) setError(`Up to ${MAX_ATTACHMENTS} images a message.`);
+    setBusy(true);
+    try {
+      const ready: Attachment[] = [];
+      for (const f of [...files].slice(0, Math.max(0, room))) ready.push(await prepareImage(f));
+      setItems((x) => [...x, ...ready].slice(0, MAX_ATTACHMENTS));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const button = (disabled?: boolean) => (
+    <>
+      <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => add(e.target.files)} />
+      <button type="button" className="composer-attach" aria-label="Attach images" disabled={disabled || busy || items.length >= MAX_ATTACHMENTS} onClick={() => input.current?.click()}>
+        <span style={{ width: 20, display: "flex" }}><IconClip /></span>
+      </button>
+    </>
+  );
+  const strip = items.length > 0 || busy ? (
+    <div className="attach-strip">
+      {items.map((it) => (
+        <span key={it.sha256} className="attach-thumb">
+          <img src={it.preview} alt="Attached image" />
+          <button type="button" aria-label="Remove image" onClick={() => setItems((x) => x.filter((y) => y.sha256 !== it.sha256))}>
+            <span style={{ width: 12, display: "flex" }}><IconClose /></span>
+          </button>
+        </span>
+      ))}
+      {busy && <span className="attach-thumb skel" />}
+    </div>
+  ) : null;
+  return { items, clear: () => setItems([]), button, strip, error };
+}
+
+/**
  * Where you type to the agent. When nothing can be sent, the box says why
  * rather than taking text that goes nowhere.
  */
 export function Composer({ placeholder, onSend, blocked, note }: {
   placeholder: string;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, images: Attachment[]) => Promise<void>;
   blocked?: string;
   note?: string;
 }) {
+  const attach = useAttachments();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -142,12 +198,14 @@ export function Composer({ placeholder, onSend, blocked, note }: {
   };
 
   const send = async () => {
-    const t = text.trim();
+    // A picture alone is a message too; the agent is told to look at it.
+    const t = text.trim() || (attach.items.length ? "See the attached image." : "");
     if (!t || busy || blocked) return;
     setBusy(true); setError("");
     try {
-      await onSend(t);
+      await onSend(t, attach.items);
       setText("");
+      attach.clear();
       requestAnimationFrame(grow);
     } catch (e) {
       setError((e as Error).message);
@@ -158,7 +216,9 @@ export function Composer({ placeholder, onSend, blocked, note }: {
 
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+      {attach.strip}
       <div className="composer-box">
+        {attach.button(!!blocked || busy)}
         <label htmlFor="composer" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{placeholder}</label>
         <textarea
           id="composer" ref={box} rows={1} value={text} placeholder={blocked ? "Replying is not available here" : placeholder}
@@ -169,12 +229,12 @@ export function Composer({ placeholder, onSend, blocked, note }: {
             if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 900px)").matches) { e.preventDefault(); send(); }
           }}
         />
-        <button type="submit" className="composer-send" aria-label="Sign and send" disabled={!text.trim() || busy || !!blocked}>
+        <button type="submit" className="composer-send" aria-label="Sign and send" disabled={(!text.trim() && !attach.items.length) || busy || !!blocked}>
           <span style={{ width: 18, display: "flex" }}><IconUp /></span>
         </button>
       </div>
       <span className={`composer-note ${error || blocked ? "error" : ""}`}>
-        {error || blocked || (busy ? "Waiting for your passkey…" : note)}
+        {error || attach.error || blocked || (busy ? "Waiting for your passkey…" : note)}
       </span>
     </form>
   );

@@ -186,3 +186,15 @@ func TestResumingKeepsTheSafeguards(t *testing.T) {
 		t.Errorf("codex resume: %s", line)
 	}
 }
+
+// Codex takes attached images as -i, new or resumed; the paths are the
+// runner's own, never the job's.
+func TestCodexAttachesImages(t *testing.T) {
+	for _, session := range []string{"", "sess-1"} {
+		argv, _ := agent.Command("codex", "codex", "/work/app", session, ".trackline/attachments/job_x/1.png")
+		line := strings.Join(argv, " ")
+		if !strings.Contains(line, "-i .trackline/attachments/job_x/1.png") || argv[len(argv)-1] != "-" {
+			t.Errorf("%q: %s", session, line)
+		}
+	}
+}

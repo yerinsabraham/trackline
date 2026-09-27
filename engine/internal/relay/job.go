@@ -38,11 +38,34 @@ type Job struct {
 	Session string `json:"session,omitempty"`
 	// Check and Target name what an allow or deny job decides: the check
 	// that stopped an action, and what it stopped.
-	Check     string `json:"check,omitempty"`
-	Target    string `json:"target,omitempty"`
-	IssuedAt  int64  `json:"issuedAt"`
-	ExpiresAt int64  `json:"expiresAt"`
+	Check  string `json:"check,omitempty"`
+	Target string `json:"target,omitempty"`
+	// Images attached on the phone. The bytes travel separately; what is
+	// signed is each one's hash, so the laptop takes only the exact images
+	// the person chose, whatever the server hands it.
+	Images    []Image `json:"images,omitempty"`
+	IssuedAt  int64   `json:"issuedAt"`
+	ExpiresAt int64   `json:"expiresAt"`
 }
+
+// Image is one attachment, as signed.
+type Image struct {
+	Type   string `json:"type"`
+	Size   int    `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
+// Attachment limits. A phone shrinks a photo well below these first.
+const (
+	MaxImages    = 4
+	MaxImageSize = 3 << 20
+)
+
+// ImageTypes are the formats every agent reads, by media type, with the
+// extension a saved file gets.
+var ImageTypes = map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
+
+var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Envelope is a job as the server delivers it: the signed bytes, which key
 // signed them, and the signature.
@@ -157,6 +180,14 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	}
 	if len(j.Text) > MaxText || strings.ContainsRune(j.Text, 0) {
 		return Accepted{}, refuse("unsupported", "the instruction is too long or not text")
+	}
+	if len(j.Images) > 0 && j.Kind != "prompt" || len(j.Images) > MaxImages {
+		return Accepted{}, refuse("unsupported", "too many images, or images on a job that takes none")
+	}
+	for _, im := range j.Images {
+		if _, ok := ImageTypes[im.Type]; !ok || im.Size <= 0 || im.Size > MaxImageSize || !hex64.MatchString(im.SHA256) {
+			return Accepted{}, refuse("unsupported", "an attached image is not one this runner takes")
+		}
 	}
 	if j.Kind == "prompt" && (j.Agent == "" || strings.TrimSpace(j.Text) == "") {
 		return Accepted{}, refuse("unsupported", "a prompt needs an agent and an instruction")

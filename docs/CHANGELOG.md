@@ -3,6 +3,15 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.11.0 · 2026-09-27
+
+- **Send images from your phone.** Attach up to four screenshots or photos to
+  a task or a reply; the agent on your laptop looks at them first. Each
+  image's hash is signed with your passkey, and the laptop takes only images
+  that match, so the server that carries them cannot swap one. They are saved
+  in the project under `.trackline/attachments/`, out of git, and the server
+  keeps them only until the laptop has them.
+
 ## 0.10.0 · 2026-09-26
 
 - **Cursor from your phone.** Tasks, replies, and Allow once or Keep blocked

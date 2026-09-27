@@ -138,15 +138,67 @@ function jobId(): string {
  * Builds and signs a prompt for one project on one laptop. With a session,
  * the agent continues that conversation instead of starting one.
  */
-export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string) {
+export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = []) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
     v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}),
+    // The hashes are signed; the bytes travel beside the job, and the laptop
+    // takes only images that match.
+    ...(images.length ? { images: images.map((i) => ({ type: i.type, size: i.size, sha256: i.sha256 })) } : {}),
     issuedAt: now, expiresAt: now + JOB_LIFE_MS,
   }));
   const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
-  return { machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
+  return {
+    machine, envelope: { job: b64u(bytes), key: key.id, ...assertion },
+    ...(images.length ? { images: images.map((i) => ({ sha256: i.sha256, data: i.data })) } : {}),
+  };
 }
+
+/** An image ready to send: shrunk, hashed, and a preview for the page. */
+export type Attachment = { type: string; size: number; sha256: string; data: string; preview: string };
+
+export const MAX_ATTACHMENTS = 4;
+const MAX_SIDE = 2048;
+const MAX_BYTES = 3 * 1024 * 1024;
+
+/**
+ * A photo as it will be sent: at most 2048 pixels on its longest side, as
+ * JPEG, which every agent reads and which keeps a phone photo to a few
+ * hundred kilobytes. Screenshots stay legible at this size.
+ */
+export async function prepareImage(file: File): Promise<Attachment> {
+  if (!file.type.startsWith("image/")) throw new Error(`${file.name} is not an image.`);
+  const bitmap = await createImageBitmap(file).catch(() => { throw new Error(`${file.name} could not be read as an image.`); });
+  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  let blob: Blob | null = null;
+  for (const q of [0.88, 0.75, 0.6]) {
+    blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
+    if (blob && blob.size <= MAX_BYTES) break;
+  }
+  if (!blob || blob.size > MAX_BYTES) throw new Error(`${file.name} is too large to send, even shrunk.`);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return {
+    type: "image/jpeg", size: bytes.length,
+    sha256: [...hash].map((b) => b.toString(16).padStart(2, "0")).join(""),
+    data: btoa(bin), preview: URL.createObjectURL(blob),
+  };
+}
+
+// Previews of what was sent, for this page only: the images themselves are
+// not kept anywhere once the laptop has them.
+const sentPreviews = new Map<string, string[]>();
+export const rememberPreviews = (job: string, urls: string[]) => { if (urls.length) sentPreviews.set(job, urls); };
+export const previewsFor = (job: string) => sentPreviews.get(job) ?? [];
 
 /**
  * Signs a decision about something trackline stopped: allow it once, or keep

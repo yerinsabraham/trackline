@@ -86,6 +86,20 @@ func TestRefusals(t *testing.T) {
 			other.ID = f.phone.ID
 			return other.Send(job())
 		}, now},
+		{"five images, one more than a job takes", "unsupported", func(f fixture) relay.Envelope {
+			im := relay.Image{Type: "image/png", Size: 10, SHA256: strings.Repeat("a", 64)}
+			return f.phone.Send(job(func(j *relay.Job) { j.Images = []relay.Image{im, im, im, im, im} }))
+		}, now},
+		{"an attachment that is not an image", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) {
+				j.Images = []relay.Image{{Type: "application/x-sh", Size: 10, SHA256: strings.Repeat("a", 64)}}
+			}))
+		}, now},
+		{"an image larger than a job takes", "unsupported", func(f fixture) relay.Envelope {
+			return f.phone.Send(job(func(j *relay.Job) {
+				j.Images = []relay.Image{{Type: "image/png", Size: relay.MaxImageSize + 1, SHA256: strings.Repeat("a", 64)}}
+			}))
+		}, now},
 		{"signed by a key never paired", "unknown-key", func(f fixture) relay.Envelope {
 			return relaytest.New("stranger").Send(job())
 		}, now},

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,6 +41,8 @@ type fakeAccount struct {
 	results   map[string]remote.Result
 	events    map[string][]agent.Event
 	cancel    map[string]bool
+	// images the server hands out, by hash: honest or not.
+	images map[string][]byte
 }
 
 func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +55,13 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	send := func(v any) { json.NewEncoder(w).Encode(v) }
 	p := r.URL.Path
 	switch {
+	case r.Method == "GET" && strings.Contains(p, "/images/"):
+		b, ok := f.images[p[strings.LastIndex(p, "/")+1:]]
+		if !ok {
+			w.WriteHeader(404)
+			return
+		}
+		w.Write(b)
 	case r.Method == "POST" && p == "/remote/pairings":
 		send(remote.Pairing{ID: "pair_1", ExpiresIn: 60})
 	case r.Method == "GET" && p == "/remote/pairings/pair_1":
@@ -621,5 +633,64 @@ func TestAnInstallInAGuardedFolderIsWarnedAbout(t *testing.T) {
 	}
 	if protectedInstall("/usr/local/lib/node_modules/trackline/bin/trackline") != "" {
 		t.Error("an ordinary install was warned about")
+	}
+}
+
+// A tiny valid PNG: the signature and enough after it to be a file.
+var png = append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{1}, 40)...)
+
+func imageJob(phone *relaytest.Phone, id, project string, b []byte) remote.Delivery {
+	sum := sha256.Sum256(b)
+	now := time.Now()
+	return remote.Delivery{ID: id, Envelope: phone.Send(relay.Job{V: 1, ID: id, Machine: "dev_laptop", Project: project,
+		Kind: "prompt", Agent: "claude", Text: "what is in the picture?",
+		Images:   []relay.Image{{Type: "image/png", Size: len(b), SHA256: hex.EncodeToString(sum[:])}},
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}
+}
+
+// An image attached on the phone reaches the agent: saved in the project,
+// out of git's way, and named in the prompt.
+func TestAnAttachedImageReachesTheAgent(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	sum := sha256.Sum256(png)
+	f.images = map[string][]byte{hex.EncodeToString(sum[:]): png}
+	f.queue = []remote.Delivery{imageJob(phone, "job_withanimage000001", proj, png)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_withanimage000001"]; r.Status != "done" {
+		t.Fatalf("result: %+v", r)
+	}
+	saved := filepath.Join(root, ".trackline", "attachments", "job_withanimage000001", "1.png")
+	if b, err := os.ReadFile(saved); err != nil || !bytes.Equal(b, png) {
+		t.Fatalf("image not saved: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, ".trackline", "attachments", ".gitignore")); string(b) != "*\n" {
+		t.Error("attachments are not kept out of git")
+	}
+	if p := read(t, filepath.Join(out, "prompt")); !strings.Contains(p, ".trackline/attachments/job_withanimage000001/1.png") || !strings.Contains(p, "what is in the picture?") {
+		t.Fatalf("prompt: %q", p)
+	}
+}
+
+// The server hands over a different picture than the one signed for: the
+// laptop takes nothing and runs nothing.
+func TestASwappedImageIsRefused(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	sum := sha256.Sum256(png)
+	other := append(append([]byte{}, png[:8]...), bytes.Repeat([]byte{2}, 40)...)
+	f.images = map[string][]byte{hex.EncodeToString(sum[:]): other}
+	f.queue = []remote.Delivery{imageJob(phone, "job_swappedimage000001", proj, png)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if r := f.results["job_swappedimage000001"]; r.Status != "refused" || r.Code != "images" {
+		t.Fatalf("result: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(out, "prompt")); err == nil {
+		t.Fatal("the agent ran with an image nobody signed for")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".trackline", "attachments", "job_swappedimage000001", "1.png")); err == nil {
+		t.Fatal("the swapped image was kept")
 	}
 }

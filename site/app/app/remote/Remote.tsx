@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { whileVisible } from "@/lib/dashboard";
 import {
-  active, type AgentEvent, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, recall, remember, signPrompt,
+  active, type AgentEvent, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberPreviews, signPrompt, type Attachment,
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, useAttachments } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 import { Cmd } from "@/components/app/FirstRun";
@@ -42,6 +42,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
   const [projectId, setProjectId] = useState("");
   const [agent, setAgent] = useState("");
   const [text, setText] = useState("");
+  const attach = useAttachments();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -55,12 +56,14 @@ function NewTask({ open }: { open: (id: string) => void }) {
   const protectedArea = protectedMacArea(text);
 
   const send = async () => {
-    if (!machine || !project || !chosen || !keys?.length || !text.trim()) return;
+    const said = text.trim() || (attach.items.length ? "See the attached image." : "");
+    if (!machine || !project || !chosen || !keys?.length || !said) return;
     setBusy(true); setError("");
     try {
-      const body = await signPrompt(machine.id, project.id, chosen, text.trim(), keys);
+      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items);
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
-      remember(r.id, text.trim());
+      remember(r.id, said);
+      rememberPreviews(r.id, attach.items.map((i) => i.preview));
       open(r.id);
     } catch (e) {
       setError((e as Error).message);
@@ -140,6 +143,8 @@ function NewTask({ open }: { open: (id: string) => void }) {
                 <label htmlFor="task">What should {agentName(chosen)} do?</label>
                 <textarea id="task" className="nt-text" value={text} onChange={(e) => setText(e.target.value)}
                   placeholder="Make the contact form's email required and show the error under the field." />
+                {attach.strip}
+                <div className="nt-attach">{attach.button(busy)}<span>{attach.error || "Add screenshots or photos: up to 4, and the agent looks at them first."}</span></div>
               </div>
               {protectedArea && (
                 <p className="composer-note warn" style={{ textAlign: "left" }}>
@@ -148,7 +153,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
               )}
               {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
               <LaptopNotice machine={machine} />
-              <button type="submit" className="btn-act nt-send" disabled={busy || !text.trim() || !chosen || !keys?.length || machine.stopped}>
+              <button type="submit" className="btn-act nt-send" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || !keys?.length || machine.stopped}>
                 <span style={{ width: 18, display: "flex" }}><IconFace /></span>{busy ? "Waiting for your passkey…" : "Sign and send"}
               </button>
               <p className="composer-note">Secrets and new dependencies stay blocked in tasks sent from here. For unattended work, keep files inside this project when you can.</p>
@@ -237,15 +242,16 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
   const list = items(events);
   const canContinue = job?.agent && job.session && job.machine && job.project;
 
-  const send = async (text: string, again = false) => {
+  const send = async (text: string, images: Attachment[] = [], again = false) => {
     if (!job || !(canContinue || again)) return;
     if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
     if (!keys.current.length) throw new Error("Add a passkey on your account page first.");
     // Sending again goes where the first one was meant to: the same
     // conversation if it had one, a new one if not.
-    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session ?? undefined);
+    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session ?? undefined, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
+    rememberPreviews(r.id, images.map((i) => i.preview));
     open(r.id);
   };
 
@@ -270,7 +276,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         <div className="chat-scroll" ref={scroller}>
           <div className="convo">
             {missing && <p className="composer-note error">This task does not exist, or is not yours.</p>}
-            {asked && <MyMessage text={asked} note={job ? `Sent to ${machineName}` : undefined} />}
+            {asked && <MyMessage text={asked} images={previewsFor(id)} note={job ? `Sent to ${machineName}` : undefined} />}
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}
             {job?.status === "queued" && (
               <p className="chat-divider">{machine && !machine.online
@@ -285,7 +291,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
               : <Finding key={it.key} tone="block" title="The agent stopped with an error">{it.text}</Finding>)}
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
             {job?.status === "expired" && (
-              <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, true)} /> : undefined}>
+              <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, [], true)} /> : undefined}>
                 {machineName} was asleep or offline for 3 minutes, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
               </Finding>
             )}

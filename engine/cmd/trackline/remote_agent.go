@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -188,7 +191,16 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("agent-missing", fmt.Sprintf("%s was not found on this laptop. Install it, then run trackline remote enable again", name))
 		return
 	}
-	argv, err := agent.Command(j.Agent, binary, got.Root, j.Session)
+	var images []string
+	if len(j.Images) > 0 {
+		images, err = saveImages(client, j, got.Root)
+		if err != nil {
+			refuse("images", "the attached images could not be taken: "+err.Error())
+			return
+		}
+		j.Text = imagesNote(images) + "\n\n" + j.Text
+	}
+	argv, err := agent.Command(j.Agent, binary, got.Root, j.Session, images...)
 	if err != nil {
 		refuse("unsupported", fmt.Sprintf("%s: %v", name, err))
 		return
@@ -496,4 +508,64 @@ func knownSession(root string, remote []string, session string) bool {
 		}
 	}
 	return false
+}
+
+// saveImages fetches a job's images and keeps each only if it is exactly the
+// one the person signed for: its size, its hash, and bytes that begin like
+// the format it claims. They go in the project, where every agent can read
+// them, under a folder that tells git to leave it alone.
+func saveImages(client remote.Client, j relay.Job, root string) ([]string, error) {
+	if !jobName.MatchString(j.ID) {
+		return nil, errors.New("the job id cannot name a folder")
+	}
+	base := filepath.Join(".trackline", "attachments")
+	dir := filepath.Join(base, j.ID)
+	if err := os.MkdirAll(filepath.Join(root, dir), 0o700); err != nil {
+		return nil, err
+	}
+	_ = os.WriteFile(filepath.Join(root, base, ".gitignore"), []byte("*\n"), 0o600)
+	var out []string
+	for i, im := range j.Images {
+		b, err := client.JobImage(j.ID, im.SHA256, im.Size)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(b)
+		if len(b) != im.Size || hex.EncodeToString(sum[:]) != im.SHA256 {
+			return nil, errors.New("an image is not the one that was signed")
+		}
+		if !looksLike(im.Type, b) {
+			return nil, errors.New("an image is not the format it claims")
+		}
+		name := filepath.Join(dir, fmt.Sprintf("%d%s", i+1, relay.ImageTypes[im.Type]))
+		if err := os.WriteFile(filepath.Join(root, name), b, 0o600); err != nil {
+			return nil, err
+		}
+		out = append(out, filepath.ToSlash(name))
+	}
+	return out, nil
+}
+
+var jobName = regexp.MustCompile(`^job_[A-Za-z0-9_-]{16,64}$`)
+
+func looksLike(typ string, b []byte) bool {
+	switch typ {
+	case "image/png":
+		return bytes.HasPrefix(b, []byte("\x89PNG\r\n\x1a\n"))
+	case "image/jpeg":
+		return bytes.HasPrefix(b, []byte{0xFF, 0xD8, 0xFF})
+	case "image/gif":
+		return bytes.HasPrefix(b, []byte("GIF8"))
+	case "image/webp":
+		return len(b) > 12 && string(b[:4]) == "RIFF" && string(b[8:12]) == "WEBP"
+	}
+	return false
+}
+
+// imagesNote tells the agent, in words written here, where the images are.
+func imagesNote(paths []string) string {
+	if len(paths) == 1 {
+		return "The person attached an image to this message, saved in this project at " + paths[0] + ". Look at it before you start."
+	}
+	return "The person attached " + fmt.Sprint(len(paths)) + " images to this message, saved in this project at " + strings.Join(paths, ", ") + ". Look at them before you start."
 }

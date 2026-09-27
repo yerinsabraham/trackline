@@ -2,6 +2,7 @@ package remote
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -104,4 +105,35 @@ func (c Client) JobEvents(id string, from int, events []agent.Event) (cancel boo
 
 func (c Client) JobResult(id string, r Result) error {
 	return c.do("POST", "/remote/jobs/"+url.PathEscape(id)+"/result", r, nil)
+}
+
+// JobImage fetches one image attached to a job, by the hash the job signed.
+// Checking the bytes against that hash is the caller's job: this only
+// fetches, with a size cap so a hostile server cannot fill the disk.
+func (c Client) JobImage(id, sha256 string, max int) ([]byte, error) {
+	req, err := http.NewRequest("GET", c.Base+"/remote/jobs/"+url.PathEscape(id)+"/images/"+url.PathEscape(sha256), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("authorization", "Bearer "+c.Token)
+	h := c.HTTP
+	if h == nil {
+		h = &http.Client{Timeout: 60 * time.Second}
+	}
+	res, err := h.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("could not reach %s: %w", c.Base, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 400 {
+		return nil, &Error{Status: res.StatusCode, Message: res.Status}
+	}
+	b, err := io.ReadAll(io.LimitReader(res.Body, int64(max)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > max {
+		return nil, fmt.Errorf("the image is larger than it was signed as")
+	}
+	return b, nil
 }
