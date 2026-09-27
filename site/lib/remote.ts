@@ -17,12 +17,16 @@ export type Pairing = { id: string; machineId: string; machine: string; expiresA
 export type JobSummary = {
   id: string; machine: string | null; clientId: string; kind: string; agent: string | null;
   status: string; code: string | null; reason: string | null; createdAt: string; finishedAt: string | null;
+  /** It stopped to ask the person something, and nothing has answered it yet. */
+  asking?: boolean;
 };
 export type Overview = { machines: Machine[]; pairings: Pairing[]; jobs: JobSummary[] };
 export type Job = {
   id: string; kind: string; agent: string | null; status: string; code: string | null; reason: string | null;
   output: string | null; session: string | null; createdAt: string; finishedAt: string | null;
   machine?: string; project?: string; dashboardSession?: string | null;
+  /** What the agent asked at the end of its turn, with the answers it offered. */
+  asked?: { question: string; options: string[] } | null;
 };
 
 /** Where a reply goes: the laptop, project and agent, and the session to continue. */
@@ -161,7 +165,8 @@ export async function signDecision(
 }
 
 /** What a job's status means, in words. */
-export function jobState(j: { status: string; code: string | null; reason: string | null }): string {
+export function jobState(j: { status: string; code: string | null; reason: string | null; asked?: unknown; asking?: boolean }): string {
+  if (j.status === "done" && (j.asked || j.asking)) return "Waiting for your answer";
   switch (j.status) {
     case "queued": return "Waiting for the laptop";
     case "delivered": return "Working";

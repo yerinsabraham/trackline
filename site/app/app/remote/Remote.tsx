@@ -8,8 +8,9 @@ import {
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, type Line, MyMessage } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, type Line, MyMessage, Question } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
+import { plain } from "@/components/ReplyText";
 
 // A task for an agent on your laptop: choose where, say what, sign and send.
 // Then the same conversation view as a session, fed by the laptop as it goes.
@@ -271,13 +272,17 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {list.map((it, i) => it.kind === "activity"
               ? <Activity key={`a${i}`} lines={it.lines} live={live && i === list.length - 1} />
               : it.kind === "permission" ? <Finding key={it.key} tone="block" title="Action needed on Mac">{it.text}</Finding>
-              : it.kind === "say" ? <AgentReply key={it.key} host={job?.agent ?? null} text={it.text} />
+              // A reply that is only the question is shown once, in the card below.
+              : it.kind === "say" ? (job?.asked && !live && i === list.length - 1 && plain(it.text) === job.asked.question ? null : <AgentReply key={it.key} host={job?.agent ?? null} text={it.text} />)
               : <Finding key={it.key} tone="block" title="The agent stopped with an error">{it.text}</Finding>)}
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
             {job && !live && job.status !== "done" && (
               <Finding tone={job.status === "refused" ? "block" : "warn"} title={jobState(job)}>
                 {job.reason && job.reason !== jobState(job) && job.status !== "refused" ? job.reason : undefined}
               </Finding>
+            )}
+            {job?.asked && !live && canContinue && (
+              <Question host={job.agent} question={job.asked.question} options={job.asked.options} onAnswer={send} />
             )}
             {job?.dashboardSession && !live && (
               <a className="chat-divider" href={`/app/session?id=${encodeURIComponent(job.dashboardSession)}`} style={{ textDecoration: "underline" }}>Open the full session</a>
@@ -287,7 +292,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
 
         <div className="chat-compose">
           <Composer
-            placeholder={`Reply to ${agentName(job?.agent)}…`}
+            placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}
             blocked={!job ? "Loading…" : live ? `${agentName(job.agent)} is still working. Reply when it has finished.` : !canContinue ? "This task has no session to continue." : undefined}
             note={`Signed with your passkey · continues this session on ${machineName}`}
             onSend={send}

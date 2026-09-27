@@ -57,6 +57,34 @@ export function Finding({ tone, title, children, actions }: { tone: "block" | "w
   );
 }
 
+/**
+ * The agent stopped to ask something. Its answers are one tap each; anything
+ * else goes in the box below. Either way the reply resumes the same session.
+ */
+export function Question({ host, question, options, onAnswer }: {
+  host: string | null; question: string; options: string[]; onAnswer: (text: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <div className="ask rise" role="group" aria-label="The agent is asking you">
+      <div className="ask-head"><AgentLogo host={host} size={24} /><strong>Asking you</strong></div>
+      <p className="ask-q">{question}</p>
+      {options.length > 0 && (
+        <div className="ask-options">
+          {options.map((o) => (
+            <button key={o} type="button" className="btn-plain" disabled={!!busy} onClick={async () => {
+              setBusy(o); setError("");
+              try { await onAnswer(o); } catch (e) { setError((e as Error).message); } finally { setBusy(""); }
+            }}>{busy === o ? "Sending…" : o}</button>
+          ))}
+        </div>
+      )}
+      <span className={`ask-note ${error ? "error" : ""}`}>{error || (options.length ? "Or write your own answer below." : "Answer below.")}</span>
+    </div>
+  );
+}
+
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
 export function AgentReply({ host, text }: { host: string | null; text: string }) {
   return (

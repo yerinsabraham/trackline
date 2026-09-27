@@ -27,6 +27,8 @@ export default function Overview() {
     .flatMap((p) => p.sessions.map((s) => ({ ...s, project: p.name })))
     .sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
   const needsYou = sessions.filter((s) => s.light === "needs-you");
+  // Tasks from the phone that stopped to ask, and are waiting on an answer.
+  const asking = (remote?.jobs ?? []).filter((j) => j.asking);
   const working = sessions.filter((s) => s.light === "working");
   const today = sessions.filter((s) => Date.now() - +new Date(s.lastAt) < DAY);
   const doneToday = today.filter((s) => s.light === "done" || s.light === "idle").length;
@@ -44,8 +46,8 @@ export default function Overview() {
   const first = user?.name?.split(/\s+/)[0];
   const fresh = !!projects && sessions.length === 0;
   const summary = !projects ? "" : fresh ? "Three steps and your agents show up here." :
-    working.length || needsYou.length
-      ? [working.length && `${working.length} ${working.length === 1 ? "agent is" : "agents are"} working`, needsYou.length && `${needsYou.length} ${needsYou.length === 1 ? "needs" : "need"} you`].filter(Boolean).join(". ") + "."
+    working.length || needsYou.length + asking.length
+      ? [working.length && `${working.length} ${working.length === 1 ? "agent is" : "agents are"} working`, needsYou.length + asking.length && `${needsYou.length + asking.length} ${needsYou.length + asking.length === 1 ? "needs" : "need"} you`].filter(Boolean).join(". ") + "."
       : "Nothing is running right now.";
 
   const hosts = ["claude-code", "codex", "cursor"];
@@ -68,7 +70,7 @@ export default function Overview() {
 
       <section className="metrics rise rise-1" aria-label="Today">
         <Stat href="/app/ontrack" primary percent={onTrack} dot="on-track" label="On track" value={onTrack === undefined ? null : onTrack === null ? "—" : `${onTrack}%`} note={onTrack === null ? "Nothing checked today" : "of today's actions matched the request"} />
-        <Stat href="/app/sessions?status=needs-you" dot="needs-you" label="Needs you" value={projects ? needsYou.length : null} note={needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
+        <Stat href={asking.length && !needsYou.length ? `/app/remote?job=${encodeURIComponent(asking[0].id)}` : "/app/sessions?status=needs-you"} dot="needs-you" label="Needs you" value={projects ? needsYou.length + asking.length : null} note={asking[0] ? `${agentName(asking[0].agent)} is asking you` : needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
         <Stat href="/app/sessions?status=working" dot="working" label="Working" value={projects ? working.length : null} note={working.length ? [...new Set(working.map((s) => agentName(s.host)))].join(", ") : "No agent running"} />
         <Stat href="/app/sessions?status=done" dot="done" label="Done today" value={projects ? doneToday : null} note={`Across ${new Set(today.map((s) => s.project)).size} project${new Set(today.map((s) => s.project)).size === 1 ? "" : "s"}`} desktopOnly />
       </section>
@@ -92,12 +94,21 @@ export default function Overview() {
         </section>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {needsYou.length > 0 && (
+          {(needsYou.length > 0 || asking.length > 0) && (
             <section className="card rise rise-3" aria-labelledby="needs" style={{ borderColor: "#f3c9bd" }}>
               <div className="card-head">
                 <span style={{ width: 18, color: "#c8321a", display: "flex" }}><IconAlert /></span>
                 <h2 id="needs">Needs you</h2>
               </div>
+              {asking.slice(0, 3).map((j) => (
+                <a key={j.id} href={`/app/remote?job=${encodeURIComponent(j.id)}`} className="row-link">
+                  <AgentLogo host={j.agent} size={30} />
+                  <span className="row-main">
+                    <span className="row-top"><strong>{agentName(j.agent)} is asking you</strong><span className="when">{ago(j.finishedAt ?? j.createdAt)}</span></span>
+                    <span className="row-note">Open it to answer. Your answer continues the same conversation.</span>
+                  </span>
+                </a>
+              ))}
               {needsYou.slice(0, 3).map((s) => (
                 <a key={s.id} href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link">
                   <AgentLogo host={s.host} size={30} />
