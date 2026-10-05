@@ -30,12 +30,14 @@ checks it against what the user asked. Do the steps below, then report back.
 6. Put the project on the user's dashboard at ${SITE}/app. Without this step
    the app stays empty. First ask the user one question, and wait for the
    answer; never answer it for them:
-   "Should your trackline dashboard include your messages to me and my
-   replies, or only what trackline finds?"
-   Then run \`trackline connect --share\` if they said include them, or
-   \`trackline connect --no-requests\` if not. If this computer is not linked
-   to their account yet, connect prints a link and a code: show both to the
-   user and wait while they approve it in their browser. If the user does not
+   "Should your trackline dashboard (at ${SITE}) include our conversation,
+   meaning your messages to me and my replies, or only trackline's findings
+   about what I did?"
+   Then run \`trackline connect --share\` if they want the conversation
+   included, or \`trackline connect --no-requests\` if not. If this computer
+   is not linked to their account yet, connect prints a link and a code and
+   exits: show both to the user, and once they say they have approved it in
+   their browser, run the same command again to finish. If the user does not
    want a dashboard, skip this step; trackline works fully without one.
 7. Tell the user, in plain words:
    - It starts in warn mode: it writes things down and never interrupts.

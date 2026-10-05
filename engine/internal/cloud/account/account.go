@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Dir is where trackline keeps account state for this user.
@@ -112,7 +113,7 @@ func Forget() error {
 	if err != nil {
 		return err
 	}
-	for _, f := range []string{"credentials.json", "projects.json", "sync.backoff"} {
+	for _, f := range []string{"credentials.json", "projects.json", "sync.backoff", "pending-link.json"} {
 		if err := os.Remove(filepath.Join(d, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -179,6 +180,57 @@ func PreviousShare(except string) (share, ok bool) {
 		seen++
 	}
 	return share, seen > 0
+}
+
+// PendingLink is a browser approval started for this computer and not yet
+// finished. An agent's command is usually stopped long before a person gets
+// to the browser, so the approval is kept, and the next connect picks it up
+// rather than asking the person to approve a code that no longer exists.
+type PendingLink struct {
+	API        string    `json:"api"`
+	DeviceCode string    `json:"deviceCode"`
+	UserCode   string    `json:"userCode"`
+	URL        string    `json:"url"`
+	Interval   int       `json:"interval"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+}
+
+func pendingPath() (string, error) {
+	d, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "pending-link.json"), nil
+}
+
+// SavePending keeps an approval in progress.
+func SavePending(p PendingLink) error {
+	path, err := pendingPath()
+	if err != nil {
+		return err
+	}
+	return write(path, p)
+}
+
+// LoadPending returns the approval in progress for api, if one is still
+// valid.
+func LoadPending(api string, now time.Time) (PendingLink, bool) {
+	path, err := pendingPath()
+	if err != nil {
+		return PendingLink{}, false
+	}
+	var p PendingLink
+	if read(path, &p) != nil || p.API != api || p.DeviceCode == "" || !now.Before(p.ExpiresAt) {
+		return PendingLink{}, false
+	}
+	return p, true
+}
+
+// ClearPending forgets the approval in progress.
+func ClearPending() {
+	if path, err := pendingPath(); err == nil {
+		os.Remove(path)
+	}
 }
 
 // SaveProject replaces what is kept for one connected project.

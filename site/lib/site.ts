@@ -20,8 +20,9 @@ Read them first if you can fetch URLs. If you cannot:
    Codex:       trackline init --host codex
    Cursor:      trackline init --host cursor
 3. Run trackline doctor --host <claude|codex|cursor> and show me what it reports.
-4. Ask me whether my trackline dashboard should include my messages, then run
-   trackline connect --share or trackline connect --no-requests.
+4. Ask me whether my trackline dashboard should include our conversation or only
+   its findings, then run trackline connect --share or trackline connect --no-requests.
+   If it prints a link, show it to me, and run it again once I have approved.
 
 Then tell me anything I have to do by hand. Do not use sudo, and do not change trackline's settings unless I ask.`;
 

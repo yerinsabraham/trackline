@@ -20,20 +20,32 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 )
 
+// connectOptions are connect's answers given up front, by flag or by init.
+type connectOptions struct {
+	api        string
+	noRequests bool
+	share      bool
+	yes        bool
+	noBrowser  bool
+	// asked is set by init, which has just asked whether to show the project
+	// on the dashboard, so the same question is not put twice.
+	asked bool
+}
+
 // cmdConnect asks about the project first, then links this machine to an
 // account if it is not linked yet. The questions come before the browser so
 // that approving there is the last step, not the first of two.
 //
-//	trackline connect [--api URL] [--root DIR] [--no-requests] [--yes] [--no-browser]
+//	trackline connect [--api URL] [--root DIR] [--share | --no-requests] [--yes] [--no-browser]
 func cmdConnect(args []string) error {
-	var apiFlag, root string
-	noRequests, shareFlag, yes, noBrowser, asked := false, false, false, false, false
+	var o connectOptions
+	var root string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--api":
 			if i+1 < len(args) {
 				i++
-				apiFlag = args[i]
+				o.api = args[i]
 			}
 		case "--root", "-root":
 			if i+1 < len(args) {
@@ -41,31 +53,32 @@ func cmdConnect(args []string) error {
 				root = args[i]
 			}
 		case "--no-requests":
-			noRequests = true
+			o.noRequests = true
 		case "--share":
-			shareFlag = true
-		case "--yes-dashboard":
-			// From init, which has just asked the same question.
-			asked = true
+			o.share = true
 		case "--yes", "-y":
-			yes = true
+			o.yes = true
 		case "--no-browser":
-			noBrowser = true
+			o.noBrowser = true
 		}
 	}
 	if root == "" {
 		root, _ = os.Getwd()
 	}
+	return connect(root, o)
+}
+
+func connect(root string, o connectOptions) error {
 	root, _ = filepath.Abs(root)
-	api := remote.Base(apiFlag)
-	ask := prompter(yes)
+	api := remote.Base(o.api)
+	ask := prompter(o.yes)
 
 	var who string
 	creds, err := account.LoadCredentials()
 	// A machine already connected stays with the account it is connected to,
 	// unless told otherwise. Falling back to the default instead sent a second
 	// project's connect to a different server.
-	if err == nil && apiFlag == "" && os.Getenv("TRACKLINE_API") == "" {
+	if err == nil && o.api == "" && os.Getenv("TRACKLINE_API") == "" {
 		api = creds.API
 	}
 	if err == nil && creds.API == api {
@@ -75,17 +88,23 @@ func cmdConnect(args []string) error {
 	}
 
 	name := filepath.Base(root)
-	if !asked && !ask(fmt.Sprintf("Show %s's findings on your dashboard?", name), true) {
+	if !o.asked && !ask(fmt.Sprintf("Show %s's findings on your dashboard?", name), true) {
 		fmt.Println("Nothing connected.")
 		return nil
 	}
-	share, err := shareChoice(root, noRequests, shareFlag, yes, ask)
+	share, err := shareChoice(root, o.noRequests, o.share, o.yes, ask)
 	if err != nil {
 		return err
 	}
 
 	if who == "" {
-		if who, err = linkMachine(api, noBrowser); err != nil {
+		who, err = linkMachine(api, o.noBrowser, interactive())
+		if errors.Is(err, errApprovalPending) {
+			// Not a failure: the person has a link to approve, and running
+			// connect again, with the same answers, finishes the job.
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -104,10 +123,10 @@ func cmdConnect(args []string) error {
 //
 // That is the person's call, never an agent's. Run by an agent there is no
 // terminal, and the old default of yes meant an agent following the install
-// guide opted the person in without asking. So without a terminal it takes
-// an explicit flag, or the choice already made for the person's other
-// projects, or no; and in a terminal that earlier choice is the default
-// offered, rather than the same question from scratch every time.
+// guide opted the person in without asking. So without a terminal it shares
+// only on an explicit --share; at a terminal the choice already made for the
+// person's other projects is the default offered, rather than the same
+// question from scratch every time.
 func shareChoice(root string, no, yesShare, assumeDefaults bool, ask func(string, bool) bool) (bool, error) {
 	if no && yesShare {
 		return false, errors.New("--share and --no-requests contradict each other")
@@ -124,73 +143,122 @@ func shareChoice(root string, no, yesShare, assumeDefaults bool, ask func(string
 		}
 		return ask(q, true), nil
 	}
-	if known {
-		fmt.Printf("Include your messages and your agent's replies? %s, as for your other projects.\n", map[bool]string{true: "Yes", false: "No"}[prev])
-		return prev, nil
+	// Consent to upload messages is given per project. Without a terminal an
+	// earlier no is safe to repeat; an earlier yes is not, or connecting a
+	// work project would start uploading because a personal one does.
+	switch {
+	case known && !prev:
+		fmt.Println("Your messages and your agent's replies are not included, as for your other projects.")
+	case known && prev:
+		fmt.Println("Your messages and your agent's replies are not included. Your other projects include them; to match: trackline connect --share")
+	default:
+		fmt.Println("Your messages and your agent's replies are not included. To include them: trackline connect --share")
 	}
-	fmt.Println("Your messages and your agent's replies are not included. To include them: trackline connect --share")
 	return false, nil
 }
 
-// interactive is whether a person can answer at this terminal. /dev/null is
-// a character device too, and it is what an agent's commands often get as
-// input: taken for a terminal, every question was answered with its default,
-// sharing included.
-func interactive() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-		return false
-	}
-	null, err := os.Stat(os.DevNull)
-	return err != nil || !os.SameFile(fi, null)
-}
+// interactive is whether a person can answer at this terminal. Asked of the
+// terminal driver, not read off the file type: /dev/null is a character
+// device too, and it is what an agent's commands often get as input, so
+// every question was once answered with its default, sharing included.
+func interactive() bool { return isTerminal(os.Stdin.Fd()) }
+
+// errApprovalPending means the person has a link to approve, and the next
+// connect will pick it up.
+var errApprovalPending = errors.New("approval pending")
 
 // linkMachine runs the browser approval and saves the machine's credential.
 // It returns who the machine is now connected as.
-func linkMachine(api string, noBrowser bool) (string, error) {
-	host, _ := os.Hostname()
+//
+// wait is false when nobody is at a terminal: an agent's command is usually
+// stopped after a couple of minutes, and a person reading the link from the
+// agent takes longer. So it prints the link and code, keeps the approval, and
+// returns errApprovalPending; the next connect, once approved, finishes.
+func linkMachine(api string, noBrowser, wait bool) (string, error) {
 	c := remote.Client{Base: api}
-	code, err := c.StartConnect(host)
-	if err != nil {
-		return "", err
-	}
-	fmt.Printf("\nApprove this computer in your browser (code %s):\n  %s\n", code.UserCode, code.VerificationURIComplete)
-	if !noBrowser {
-		openBrowser(code.VerificationURIComplete)
-	}
-	fmt.Print("Waiting for approval")
-
-	interval := time.Duration(code.Interval) * time.Second
-	if interval < time.Second {
-		interval = 5 * time.Second
-	}
-	expired := errors.New("the code expired before it was approved. Run trackline connect again")
-	deadline := time.Now().Add(time.Duration(code.ExpiresIn) * time.Second)
-	var got remote.Poll
-	for {
-		if time.Now().After(deadline) {
-			fmt.Println()
-			return "", expired
-		}
-		time.Sleep(interval)
-		fmt.Print(".")
-		got, err = c.Poll(code.DeviceCode)
+	p, resumed := account.LoadPending(api, time.Now())
+	if !resumed {
+		host, _ := os.Hostname()
+		code, err := c.StartConnect(host)
 		if err != nil {
-			fmt.Println()
 			return "", err
 		}
-		if got.Status == "approved" {
-			break
+		p = account.PendingLink{
+			API: api, DeviceCode: code.DeviceCode, UserCode: code.UserCode, URL: code.VerificationURIComplete,
+			Interval: code.Interval, ExpiresAt: time.Now().Add(time.Duration(code.ExpiresIn) * time.Second),
 		}
-		if got.Status == "denied" {
-			fmt.Println()
-			return "", errors.New("the connection was declined on the site")
-		}
-		if got.Status == "expired" {
-			fmt.Println()
-			return "", expired
+		if err := account.SavePending(p); err != nil {
+			return "", err
 		}
 	}
+
+	expired := errors.New("the code expired before it was approved. Run trackline connect again")
+	check := func() (remote.Poll, bool, error) {
+		got, err := c.Poll(p.DeviceCode)
+		if err != nil {
+			return got, false, err
+		}
+		switch got.Status {
+		case "approved":
+			return got, true, nil
+		case "denied":
+			account.ClearPending()
+			return got, false, errors.New("the connection was declined on the site")
+		case "expired":
+			account.ClearPending()
+			return got, false, expired
+		}
+		return got, false, nil
+	}
+
+	var got remote.Poll
+	if resumed {
+		var done bool
+		var err error
+		if got, done, err = check(); err != nil {
+			return "", err
+		}
+		if done {
+			fmt.Print("This computer was approved.")
+			goto approved
+		}
+	}
+
+	fmt.Printf("\nApprove this computer in your browser (code %s):\n  %s\n", p.UserCode, p.URL)
+	if !noBrowser && !resumed {
+		openBrowser(p.URL)
+	}
+	if !wait {
+		fmt.Println("\nOnce it is approved, run the same trackline connect again to finish. The code is good until " + p.ExpiresAt.Local().Format("15:04") + ".")
+		return "", errApprovalPending
+	}
+	fmt.Print("Waiting for approval")
+	{
+		interval := time.Duration(p.Interval) * time.Second
+		if interval < time.Second {
+			interval = 5 * time.Second
+		}
+		for {
+			if time.Now().After(p.ExpiresAt) {
+				fmt.Println()
+				account.ClearPending()
+				return "", expired
+			}
+			time.Sleep(interval)
+			fmt.Print(".")
+			var done bool
+			var err error
+			if got, done, err = check(); err != nil {
+				fmt.Println()
+				return "", err
+			}
+			if done {
+				break
+			}
+		}
+	}
+approved:
+	account.ClearPending()
 	fmt.Println(" approved.")
 
 	creds := account.Credentials{API: api, Token: got.Token, DeviceID: got.Device.ID, DeviceName: got.Device.Name}

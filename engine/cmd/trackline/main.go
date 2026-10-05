@@ -649,7 +649,9 @@ func offerConnect(root string) error {
 		who = "your trackline account"
 	}
 	if !interactive() {
-		fmt.Printf("\nThis computer is linked to %s, but this project is not on its dashboard yet. To add it:\n\n    trackline connect\n", who)
+		fmt.Printf("\nThis computer is linked to %s, but this project is not on its dashboard yet.\n"+
+			"To add it, first ask whether your messages to the agent go with it, then:\n\n"+
+			"    trackline connect --share          (include them)\n    trackline connect --no-requests    (only findings)\n", who)
 		return nil
 	}
 	fmt.Println()
@@ -657,5 +659,5 @@ func offerConnect(root string) error {
 		fmt.Println("Not now. Later: trackline connect")
 		return nil
 	}
-	return cmdConnect([]string{"--root", root, "--yes-dashboard"})
+	return connect(root, connectOptions{asked: true})
 }
