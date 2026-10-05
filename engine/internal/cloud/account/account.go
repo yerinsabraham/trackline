@@ -159,6 +159,28 @@ func ConnectProject(root string, shareRequests bool) (Project, error) {
 	return p, write(filepath.Join(d, "projects.json"), ps)
 }
 
+// PreviousShare is the sharing choice the person already made for their
+// other projects, when they all agree, so a new project can offer it rather
+// than ask from scratch. ok is false when there is no single answer to reuse.
+func PreviousShare(except string) (share, ok bool) {
+	ps, err := Projects()
+	if err != nil {
+		return false, false
+	}
+	seen := 0
+	for root, p := range ps {
+		if root == except {
+			continue
+		}
+		if seen > 0 && p.ShareRequests != share {
+			return false, false
+		}
+		share = p.ShareRequests
+		seen++
+	}
+	return share, seen > 0
+}
+
 // SaveProject replaces what is kept for one connected project.
 func SaveProject(root string, p Project) error {
 	ps, err := Projects()

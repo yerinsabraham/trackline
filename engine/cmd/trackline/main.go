@@ -137,6 +137,9 @@ Without --host, sets up every agent installed on this machine.
 
 Wire the hook into an agent's configuration, merging with what is there.
 Starts in warn mode: it records, and never interrupts.
+
+When this computer is already linked to a trackline account, it then offers
+to show the project on your dashboard.
 `,
 	"status": `trackline status [--root DIR]
 
@@ -203,14 +206,16 @@ and counts. Never what a customer or the model said.
 
 Listens on localhost unless told otherwise: traces carry customer messages.
 `,
-	"connect": `trackline connect [--no-requests] [--root DIR] [--yes] [--no-browser] [--api URL]
+	"connect": `trackline connect [--share | --no-requests] [--root DIR] [--yes] [--no-browser] [--api URL]
 
 Connect this project to a trackline account. Optional: trackline works fully
 without an account.
 
-Asks first: whether this project uploads, and whether your requests (the
-messages you type to your agent) go with it; --no-requests says no to the
-second. Then, only if this computer is not linked yet, opens the site to sign
+Asks first: whether this project uploads, and whether your messages to your
+agent and its replies go with it. --share and --no-requests answer the
+second. In a terminal, the answer you gave for your other projects is the
+default; run by an agent, with no terminal, it keeps that answer, or does not
+share if there is none. Sharing is never turned on without you. Then, only if this computer is not linked yet, opens the site to sign
 in and approve it. That happens once per computer; later projects skip it.
 The credential is kept in your user config directory, readable only by you,
 never inside a project. File contents and command text are never sent.
@@ -360,7 +365,8 @@ func cmdInit(args []string) error {
 	}
 	// A connected project tells its account straight away, so the dashboard
 	// shows the new agent before it has done anything.
-	if _, _, ok := account.ProjectFor(f.root); ok {
+	_, _, connected := account.ProjectFor(f.root)
+	if connected {
 		if creds, err := account.LoadCredentials(); err == nil {
 			sendSetup(remote.Client{Base: creds.API, Token: creds.Token}, false)
 		}
@@ -368,6 +374,12 @@ func cmdInit(args []string) error {
 	for _, h := range targets {
 		if h == install.Codex {
 			fmt.Print("\nCodex needs one step from you, once: in the Codex panel, Settings, Hooks, From Projects, then Trust.\n")
+		}
+	}
+
+	if !connected {
+		if err := offerConnect(f.root); err != nil {
+			return err
 		}
 	}
 
@@ -617,4 +629,33 @@ func lastAction(root string) (session, turn string, err error) {
 		return "", "", fmt.Errorf("no recent action recorded")
 	}
 	return st.SessionID, st.TurnID, nil
+}
+
+// offerConnect asks, at the end of init, whether this project should show on
+// the dashboard. Measured on a real install: an agent following the guide
+// finished init and doctor "successfully", and the person opened an empty
+// app with no idea that connect existed. When this computer is already
+// linked to an account, the question is one keypress. Run by an agent, it
+// only says what to run: connecting includes a privacy choice that is the
+// person's to make.
+func offerConnect(root string) error {
+	creds, err := account.LoadCredentials()
+	if err != nil {
+		fmt.Print("\nTo see this project on trackline.dev, and send tasks to it from your phone:\n\n    trackline connect\n")
+		return nil
+	}
+	who := creds.Email
+	if who == "" {
+		who = "your trackline account"
+	}
+	if !interactive() {
+		fmt.Printf("\nThis computer is linked to %s, but this project is not on its dashboard yet. To add it:\n\n    trackline connect\n", who)
+		return nil
+	}
+	fmt.Println()
+	if !prompter(false)(fmt.Sprintf("This computer is linked to %s. Show this project on your dashboard?", who), true) {
+		fmt.Println("Not now. Later: trackline connect")
+		return nil
+	}
+	return cmdConnect([]string{"--root", root, "--yes-dashboard"})
 }

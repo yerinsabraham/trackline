@@ -14,12 +14,14 @@ export const AGENT_PROMPT = `Install trackline in this project for me.
 Instructions written for coding agents: ${SITE}/install.md
 Read them first if you can fetch URLs. If you cannot:
 
-1. Run: npm install -g trackline   (needs Node 20 or newer)
+1. If trackline is not installed yet: npm install -g trackline   (needs Node 20 or newer)
 2. From the project root, run trackline init with the flag for the agent you are:
    Claude Code: trackline init
    Codex:       trackline init --host codex
    Cursor:      trackline init --host cursor
 3. Run trackline doctor --host <claude|codex|cursor> and show me what it reports.
+4. Ask me whether my trackline dashboard should include my messages, then run
+   trackline connect --share or trackline connect --no-requests.
 
 Then tell me anything I have to do by hand. Do not use sudo, and do not change trackline's settings unless I ask.`;
 

@@ -27,7 +27,7 @@ import (
 //	trackline connect [--api URL] [--root DIR] [--no-requests] [--yes] [--no-browser]
 func cmdConnect(args []string) error {
 	var apiFlag, root string
-	noRequests, yes, noBrowser := false, false, false
+	noRequests, shareFlag, yes, noBrowser, asked := false, false, false, false, false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--api":
@@ -42,6 +42,11 @@ func cmdConnect(args []string) error {
 			}
 		case "--no-requests":
 			noRequests = true
+		case "--share":
+			shareFlag = true
+		case "--yes-dashboard":
+			// From init, which has just asked the same question.
+			asked = true
 		case "--yes", "-y":
 			yes = true
 		case "--no-browser":
@@ -70,13 +75,13 @@ func cmdConnect(args []string) error {
 	}
 
 	name := filepath.Base(root)
-	if !ask(fmt.Sprintf("Show %s's findings on your dashboard?", name), true) {
+	if !asked && !ask(fmt.Sprintf("Show %s's findings on your dashboard?", name), true) {
 		fmt.Println("Nothing connected.")
 		return nil
 	}
-	share := false
-	if !noRequests {
-		share = ask("Include your messages and your agent's replies?", true)
+	share, err := shareChoice(root, noRequests, shareFlag, yes, ask)
+	if err != nil {
+		return err
 	}
 
 	if who == "" {
@@ -93,6 +98,51 @@ func cmdConnect(args []string) error {
 
 	fmt.Printf("\n%s is connected to %s.\n", name, who)
 	return nil
+}
+
+// shareChoice settles whether a project's messages go with its findings.
+//
+// That is the person's call, never an agent's. Run by an agent there is no
+// terminal, and the old default of yes meant an agent following the install
+// guide opted the person in without asking. So without a terminal it takes
+// an explicit flag, or the choice already made for the person's other
+// projects, or no; and in a terminal that earlier choice is the default
+// offered, rather than the same question from scratch every time.
+func shareChoice(root string, no, yesShare, assumeDefaults bool, ask func(string, bool) bool) (bool, error) {
+	if no && yesShare {
+		return false, errors.New("--share and --no-requests contradict each other")
+	}
+	if no || yesShare {
+		return yesShare, nil
+	}
+	prev, known := account.PreviousShare(root)
+	if !assumeDefaults && interactive() {
+		q := "Include your messages and your agent's replies?"
+		if known {
+			q = fmt.Sprintf("Include your messages and your agent's replies? (%s for your other projects)", map[bool]string{true: "yes", false: "no"}[prev])
+			return ask(q, prev), nil
+		}
+		return ask(q, true), nil
+	}
+	if known {
+		fmt.Printf("Include your messages and your agent's replies? %s, as for your other projects.\n", map[bool]string{true: "Yes", false: "No"}[prev])
+		return prev, nil
+	}
+	fmt.Println("Your messages and your agent's replies are not included. To include them: trackline connect --share")
+	return false, nil
+}
+
+// interactive is whether a person can answer at this terminal. /dev/null is
+// a character device too, and it is what an agent's commands often get as
+// input: taken for a terminal, every question was answered with its default,
+// sharing included.
+func interactive() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	null, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(fi, null)
 }
 
 // linkMachine runs the browser approval and saves the machine's credential.
@@ -308,8 +358,7 @@ func display(name, email string) string {
 // terminal, or with --yes, it takes the default, which for both questions is
 // yes; --no-requests is how a script says no to sharing.
 func prompter(yes bool) func(q string, def bool) bool {
-	fi, err := os.Stdin.Stat()
-	interactive := err == nil && fi.Mode()&os.ModeCharDevice != 0
+	interactive := interactive()
 	in := bufio.NewReader(os.Stdin)
 	return func(q string, def bool) bool {
 		hint := "[Y/n]"

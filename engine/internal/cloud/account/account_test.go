@@ -110,3 +110,25 @@ func TestForgetClearsTheOutbox(t *testing.T) {
 		t.Error("the outbox survived disconnecting")
 	}
 }
+
+// A new project is offered the choice already made for the others, when
+// they all agree; otherwise there is nothing to reuse.
+func TestPreviousShareIsReusedOnlyWhenItIsClear(t *testing.T) {
+	isolate(t)
+	if _, ok := account.PreviousShare("/new"); ok {
+		t.Fatal("an answer with no projects connected")
+	}
+	account.ConnectProject("/a", true)
+	account.ConnectProject("/b", true)
+	if share, ok := account.PreviousShare("/new"); !ok || !share {
+		t.Fatalf("share=%v ok=%v, want yes", share, ok)
+	}
+	// The project being connected is not its own precedent.
+	if _, ok := account.PreviousShare("/a"); !ok {
+		t.Fatal("the other project's answer was not found")
+	}
+	account.ConnectProject("/c", false)
+	if _, ok := account.PreviousShare("/new"); ok {
+		t.Fatal("mixed answers were treated as one")
+	}
+}

@@ -91,7 +91,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><span style={{ width: 22, display: "flex" }}><IconLaptop /></span></span>
           <strong>No laptop takes tasks yet.</strong>
-          <span>On your laptop, in a project: <code>trackline remote enable</code></span>
+          <span>On your laptop, in a project: <code>trackline connect</code>, then <code>trackline remote enable</code></span>
         </div>
       )}
 
@@ -114,7 +114,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
           </div>
 
           {machine.projects.length === 0 ? (
-            <p className="app-muted" style={{ margin: 0 }}>No project has remote on. In one: <code className="mono">trackline remote enable</code></p>
+            <p className="app-muted" style={{ margin: 0 }}>No project takes tasks yet. In one, on {machine.name}: <code className="mono">trackline connect</code>, then <code className="mono">trackline remote enable</code></p>
           ) : (
             <>
               <fieldset className="nt-field">
@@ -124,6 +124,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                     <button type="button" key={p.id} className="pick mono" aria-pressed={p.id === project?.id} onClick={() => setProjectId(p.id)}>{p.name}</button>
                   ))}
                 </div>
+                <p className="nt-hint">Don&apos;t see your project? In its folder: <code className="mono">trackline connect</code>, then <code className="mono">trackline remote enable</code></p>
               </fieldset>
               <fieldset className="nt-field">
                 <legend>Agent</legend>

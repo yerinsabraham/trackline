@@ -34,6 +34,20 @@ trackline status
 
 If it says the hook has never run here, the setup is not working yet.
 
+## See it on your dashboard
+
+Optional. To see your agents at [trackline.dev](https://trackline.dev/app) and
+send them tasks from your phone, in each project:
+
+```bash
+trackline connect
+```
+
+It asks whether your messages to the agent and its replies go with what
+trackline finds, then, the first time on a computer, opens the site to approve
+it. Once a computer is linked, `trackline init` offers this for each new
+project.
+
 ## Per agent
 
 **Claude Code.** Hooks load mid-session, so there is nothing to restart.
