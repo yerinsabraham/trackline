@@ -220,7 +220,11 @@ func LoadPending(api string, now time.Time) (PendingLink, bool) {
 		return PendingLink{}, false
 	}
 	var p PendingLink
-	if read(path, &p) != nil || p.API != api || p.DeviceCode == "" || !now.Before(p.ExpiresAt) {
+	if read(path, &p) != nil || p.API != api || p.DeviceCode == "" {
+		return PendingLink{}, false
+	}
+	if !now.Before(p.ExpiresAt) {
+		os.Remove(path)
 		return PendingLink{}, false
 	}
 	return p, true
