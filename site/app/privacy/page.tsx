@@ -78,8 +78,8 @@ export default function Privacy() {
 
         <h2>Deleting it</h2>
         <p>
-          You can clear a chat or delete a session from the app. Its messages and every other word are deleted from trackline,
-          and the agent&apos;s own history on your laptop is not touched. Counts with no text attached stay for the period, so
+          You can delete a session from the app, which removes every word of it from trackline, or clear a chat, which removes
+          its messages and keeps its name. The name may be your first request. The agent&apos;s own history on your laptop is not touched. Counts with no text attached stay for the period, so
           deleting a session does not change your on-track numbers. Deleting your account from the account page deletes your account and every event we hold for it. You can disconnect a
           machine at any time, from the dashboard or with <code>trackline disconnect</code>, and it stops sending immediately.
         </p>

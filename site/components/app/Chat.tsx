@@ -241,6 +241,23 @@ function seen(iso: string): string {
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 }
 
+/** Trying a failed message again: it can fail too, and it goes once it worked. */
+export function SendAgain({ onSend }: { onSend: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+  if (sent) return <span className="composer-note">Sent again.</span>;
+  return (
+    <>
+      <button type="button" className="btn-act" disabled={busy} onClick={async () => {
+        setBusy(true); setError("");
+        try { await onSend(); setSent(true); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      }}>{busy ? "Waiting for your passkey…" : "Send again"}</button>
+      {error && <span className="composer-note error">{error}</span>}
+    </>
+  );
+}
+
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
 export function AgentReply({ host, text, cut }: { host: string | null; text: string; cut?: boolean }) {
   return (

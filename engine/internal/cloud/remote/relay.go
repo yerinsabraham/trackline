@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -120,8 +121,25 @@ func (c Client) JobEvents(id string, from int, events []agent.Event) (cancel boo
 	return out.Cancel, err
 }
 
+// resultBackoff is the longest wait between tries.
+var resultBackoff = 8 * time.Second
+
+// JobResult reports how a job ended, a few times over: it is the one message a
+// chat cannot do without, and it is sent as a lid closes or a connection drops.
 func (c Client) JobResult(id string, r Result) error {
-	return c.do("POST", "/remote/jobs/"+url.PathEscape(id)+"/result", r, nil)
+	var err error
+	for wait := time.Second; wait <= resultBackoff; wait *= 2 {
+		if err = c.do("POST", "/remote/jobs/"+url.PathEscape(id)+"/result", r, nil); err == nil {
+			return nil
+		}
+		// Refused, not lost: asking again would get the same answer.
+		var refused *Error
+		if errors.As(err, &refused) && refused.Status < 500 {
+			return err
+		}
+		time.Sleep(wait)
+	}
+	return err
 }
 
 // JobImage fetches one image attached to a job, by the hash the job signed.

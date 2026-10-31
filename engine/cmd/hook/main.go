@@ -335,19 +335,39 @@ func queueReply(root string, t turnEnd) {
 // lastRequest finds what the person last said. It is read here, at the end of
 // the turn, rather than from a hook on each prompt, because a new hook means a
 // changed settings file, and a changed settings file stops replies from the
-// phone until someone runs remote enable in every project. This runs once a
-// turn, so reading the whole transcript is affordable.
+// phone until someone runs remote enable in every project.
+//
+// Only the end of the file: real transcripts reach hundreds of megabytes, and
+// reading one whole took longer than the host gives a hook, which lost the
+// reply. A turn long enough to push its request out of this has actions, and
+// they carry the request themselves. A line the reader cannot finish does not
+// matter either: whatever came before it still counts.
 func lastRequest(path string) string {
 	if path == "" {
 		return ""
 	}
 	var in intent.Intent
-	r := intent.Reader{Path: path}
-	if r.Read(&in) != nil {
-		return ""
-	}
+	r := intent.Reader{Path: path, Tail: tailBytes}
+	_ = r.Read(&in)
 	t, _ := in.Latest()
 	return t.Text
+}
+
+const tailBytes = 2 << 20
+
+func readTail(path string) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err == nil && st.Size() > tailBytes {
+		if _, err := f.Seek(st.Size()-tailBytes, io.SeekStart); err != nil {
+			return nil
+		}
+	}
+	b, _ := io.ReadAll(f)
+	return b
 }
 
 // agentTitle is the name the agent itself gave the session. Neither format is
@@ -385,12 +405,8 @@ func agentTitle(t turnEnd) string {
 	default:
 		return ""
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
 	title := ""
-	for _, line := range bytes.Split(b, []byte{'\n'}) {
+	for _, line := range bytes.Split(readTail(path), []byte{'\n'}) {
 		if !bytes.Contains(line, []byte("itle")) && !bytes.Contains(line, []byte("thread_name")) {
 			continue
 		}

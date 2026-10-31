@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
@@ -122,5 +123,33 @@ func TestTheAgentsOwnTitleIsFound(t *testing.T) {
 	}
 	if got := agentTitle(turnEnd{host: event.HostCursor, session: "b"}); got != "" {
 		t.Fatalf("cursor: %q", got)
+	}
+}
+
+// Measured on real transcripts: 559 MB took 30 seconds to read whole, against a
+// 15 second hook limit, and the reply went with it.
+func TestALongTranscriptCostsNoMoreThanAShortOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(256 << 20); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Seek(0, 2); err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("\n" + `{"type":"ai-title","aiTitle":"Named late"}` + "\n")
+	f.WriteString(`{"type":"user","turnOrigin":"human","message":{"role":"user","content":"the last thing"},"promptId":"z"}` + "\n")
+	f.Close()
+
+	start := time.Now()
+	req, title := lastRequest(path), agentTitle(turnEnd{host: event.HostClaudeCode, transcript: path})
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("took %s", took)
+	}
+	if req != "the last thing" || title != "Named late" {
+		t.Fatalf("req %q, title %q", req, title)
 	}
 }

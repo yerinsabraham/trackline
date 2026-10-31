@@ -7,7 +7,7 @@ import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessi
 import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
 import { IconBack, IconMore, IconStop } from "@/components/app/icons";
 import SessionMenu from "@/components/app/SessionMenu";
@@ -72,14 +72,16 @@ function dayOf(at: number): string {
   return days === 0 ? "Today" : days === 1 ? "Yesterday" : d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 }
 
-// Which conversation turn a sent message became. The clock on the laptop can
-// differ from the server's by a little, and the words can gain a note about
-// attached images on the way.
-const SKEW_MS = 60_000;
+// Which conversation turn a sent message became. The whole message, or the
+// start of it, as the words can gain a note about attached images on the way:
+// anywhere inside would pin a short "ok" to the wrong turn. The clock on the
+// laptop can differ from the server's by a little. If the hook cleaned the words
+// this misses, and the message shows twice, which beats showing it nowhere.
+const SKEW_MS = 10_000;
 function turnOf(list: Turn[], text: string | null, createdAt: string) {
   if (!text) return undefined;
   const from = +new Date(createdAt) - SKEW_MS;
-  return list.find((t) => startOf(t) >= from && !!t.request?.includes(text));
+  return list.find((t) => startOf(t) >= from && (t.request === text || !!t.request?.startsWith(`${text}\n`)));
 }
 
 export default function Session() {
@@ -348,7 +350,7 @@ export default function Session() {
                     <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Laptop"} · ${jobState(j)}`} />
                     {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
                     {again && (
-                      <Finding tone="warn" title="Not delivered" actions={<button type="button" className="btn-act" onClick={() => deliver(text, imagesFor(j.id))}>Send again</button>}>
+                      <Finding tone="warn" title="Not delivered" actions={<SendAgain onSend={() => deliver(text, imagesFor(j.id))} />}>
                         {j.status === "expired" ? `${cont?.machine.name ?? "The laptop"} stayed asleep or offline, so this never reached it. Wake the laptop, then send it again.` : "An agent was already working in this project, so this never started."}
                       </Finding>
                     )}

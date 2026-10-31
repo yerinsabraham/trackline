@@ -22,7 +22,7 @@ export function clearSession() {
   try {
     localStorage.removeItem(KEY);
     // Half-written messages are the person's, and leave with them.
-    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT) || k.startsWith(READ) || k.startsWith(CACHE)) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT) || k.startsWith(READ) || k.startsWith(CACHE) || k === "trackline.sent") localStorage.removeItem(k);
   } catch { /* nothing to clear */ }
 }
 

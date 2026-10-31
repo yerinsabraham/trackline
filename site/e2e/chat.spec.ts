@@ -236,8 +236,10 @@ test("scrolling to the top loads earlier messages and keeps your place", async (
   const reading = page.locator(".bubble-agent", { hasText: "Reply number 0," });
   // Kept at the top, as a finger is: one jump can land between two frames.
   await expect(async () => {
-    await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 0; });
-    await expect(page.locator(".bubble-agent", { hasText: "Earlier reply 0" })).toHaveCount(1, { timeout: 800 });
+    const earlier = page.locator(".bubble-agent", { hasText: "Earlier reply 0" });
+    // Only until they arrive: scrolling up after that would lose the place being tested.
+    if (!(await earlier.count())) await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 0; });
+    await expect(earlier).toHaveCount(1, { timeout: 800 });
   }).toPass();
   await expect(page.getByRole("button", { name: "Load earlier" })).toHaveCount(0);
   await expect(reading).toBeInViewport();

@@ -5,6 +5,7 @@
 
 const SHELL = "trackline-shell-v1";
 const OFFLINE = "/app";
+const KEPT = 150;
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
@@ -16,7 +17,12 @@ self.addEventListener("fetch", (event) => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) c.put(req, res.clone());
+      if (res.ok) {
+        await c.put(req, res.clone());
+        // Each deploy brings new names; the oldest go, so this cannot grow for ever.
+        const all = await c.keys();
+        await Promise.all(all.filter((k) => k.url.includes("/_next/static/")).slice(0, -KEPT).map((k) => c.delete(k)));
+      }
       return res;
     }));
   } else if (req.mode === "navigate" && url.pathname.startsWith("/app")) {

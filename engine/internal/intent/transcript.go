@@ -23,6 +23,9 @@ import (
 // Reader consumes a host transcript incrementally.
 type Reader struct {
 	Path string
+	// Tail, when set, reads only about this many bytes from the end. The first
+	// read then costs the same however long the session has grown.
+	Tail int64
 
 	offset int64
 	size   int64
@@ -239,6 +242,9 @@ func (r *Reader) Read(in *Intent) error {
 	}
 	r.size = st.Size()
 
+	if r.Tail > 0 && r.offset == 0 && st.Size() > r.Tail {
+		r.offset = st.Size() - r.Tail
+	}
 	if r.offset > 0 {
 		if _, err := f.Seek(r.offset, io.SeekStart); err != nil {
 			return err

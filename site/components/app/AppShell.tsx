@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api, cached, clearSession, keepCached, listen, readAt, rememberNext, session, type User } from "@/lib/account";
 import { line, type Project, whileQuiet } from "@/lib/dashboard";
 import type { Overview as Remote } from "@/lib/remote";
+import { forgetThisDevice } from "@/lib/alerts";
 import Mark from "@/components/Mark";
 import AgentLogo from "./AgentLogo";
 import InstallHint from "./InstallHint";
@@ -45,7 +46,9 @@ export function Avatar({ user, size = 34 }: { user: User | null; size?: number }
   );
 }
 
-export function signOut() {
+export async function signOut() {
+  // A signed-out phone must stop getting the words of replies on its lock screen.
+  await forgetThisDevice().catch(() => {});
   clearSession();
   window.location.replace("/signin");
 }

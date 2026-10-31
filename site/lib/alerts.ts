@@ -1,6 +1,8 @@
 // Web push in the browser: whether this device can get alerts, and turning
 // them on and off.
 
+import { api } from "./account";
+
 export type AlertSettings = {
   prefs: { red: boolean; finished: boolean; drifting: boolean };
   slack: boolean;
@@ -48,6 +50,16 @@ export async function current(): Promise<PushSubscription | null> {
   if (!("serviceWorker" in navigator)) return null;
   const reg = await navigator.serviceWorker.getRegistration("/");
   return reg ? reg.pushManager.getSubscription() : null;
+}
+
+/** Stops alerts reaching this browser, on the server and here. */
+export async function forgetThisDevice() {
+  const sub = await current();
+  if (!sub) return;
+  const { devices } = await api<{ devices: { id: string; endpoint: string }[] }>("/app/alerts");
+  const mine = devices.find((d) => d.endpoint === sub.endpoint);
+  if (mine) await api(`/app/alerts/devices/${mine.id}`, { method: "DELETE" });
+  await sub.unsubscribe();
 }
 
 export async function subscribe(vapidPublicKey: string): Promise<PushSubscriptionJSON> {

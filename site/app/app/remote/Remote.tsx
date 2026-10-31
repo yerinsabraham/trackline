@@ -8,7 +8,7 @@ import {
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 
@@ -317,19 +317,5 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         </div>
       </section>
     </div>
-  );
-}
-
-function SendAgain({ onSend }: { onSend: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  return (
-    <>
-      <button type="button" className="btn-act" disabled={busy} onClick={async () => {
-        setBusy(true); setError("");
-        try { await onSend(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-      }}>{busy ? "Waiting for your passkey…" : "Send again"}</button>
-      {error && <span className="composer-note error">{error}</span>}
-    </>
   );
 }
