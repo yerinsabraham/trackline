@@ -147,6 +147,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                 )}
               </fieldset>
               <div className="nt-field">
+                {member?.title && <p className="sends-position">Sent with your position for {member.name}: {positionText(member)}</p>}
                 <label htmlFor="task">What should {member?.name ?? agentName(chosen)} do?</label>
                 <textarea id="task" className="nt-text" value={text} onChange={(e) => setText(e.target.value)}
                   placeholder="Make the contact form's email required and show the error under the field." />

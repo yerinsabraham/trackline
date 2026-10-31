@@ -3,6 +3,28 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## Unreleased
+
+- **Agents are individuals.** Every reply and chat shows its agent's name in
+  bold, with the model that answered. Tap a name to rename it, add it to your
+  team, or move a chat to someone already on it.
+- **Chats, Team, Settings.** Home and Sessions are now one list, with what
+  needs you first. Team holds the agents you chose to keep, each with a profile
+  of what it has actually done. Helpers show as one line in the chat.
+- **Positions.** Give a team member a title and a description, such as CTO, and
+  it holds that job across a resumed chat in Claude Code and Codex. It reaches
+  the agent with messages sent from trackline, and it never changes what the
+  agent may do.
+- **One agent can ask another.** An agent you started from trackline can ask a
+  team member to do something. You read the whole request and approve it with
+  your passkey, and the result can go back to the asker once. A handoff that
+  changes the files telling agents how to behave fails, however it did so.
+- **A reply never lands on a chat open on your computer.** A Claude Code chat
+  that is open stays yours: the phone says so and sends nothing. A Codex chat
+  open in a terminal can take the message if you run
+  `trackline remote enable --open-chats`. It then runs with that chat's own
+  permissions, not the narrower ones of a phone run.
+
 ## 0.12.0 · 2026-10-31
 
 - **Reply from your phone in every project.** Pair your phone once, during

@@ -419,6 +419,7 @@ export default function Session() {
         <div className="chat-compose">
           <LaptopNotice machine={cont?.machine} />
           {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
+          {s?.position && <p className="sends-position">Sent with your position for {name_}: {positionText(s.position)}</p>}
           <Composer
             chat={id || undefined}
             placeholder={`Reply to ${who_}…`}

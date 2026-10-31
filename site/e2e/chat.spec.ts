@@ -373,8 +373,11 @@ test("a turn's work reads as one line, and opens to the steps", async ({ page, c
 
 test("moving between tabs keeps the frame and its data", async ({ page, context }) => {
   await fakeAccount(context);
+  // Tapped before this arrives, a static export falls back to a full page load.
+  const ready = page.waitForResponse(/app\/team\/__next\.app\.team/);
   await page.goto("/app");
   await page.locator(".swipe .row-link").first().waitFor();
+  await ready;
   await page.evaluate(() => { (window as unknown as { same: boolean }).same = true; });
   await page.locator(".app-tab", { hasText: "Team" }).click();
   await page.waitForURL(/\/app\/team/);
@@ -527,4 +530,48 @@ test("a new chat with a member already knows who and where", async ({ page, cont
   await page.goto("/app/remote?with=a1");
   await expect(page.locator(".app-h1")).toHaveText("New chat with Reviewer · reviewer-3b");
   await expect(page.getByLabel("What should reviewer-3b do?")).toBeVisible();
+});
+
+const handoff = (over = {}) => ({
+  id: "hf_abcdefgh12", number: 1, project: "trackline", task: "Review the login change.\n\nLook at the tests too.", status: "asked", reason: null, result: null, expiresAt: at(-60), createdAt: at(1), job: null,
+  to: { id: "a1", name: "reviewer-3b", title: "Reviewer", host: "codex" },
+  from: { name: "cto-1", title: "CTO", agent: "claude", session: "abc", working: false },
+  sign: { machine: "m1", project: "cp", agent: "codex", session: null },
+  ...over,
+});
+
+test("a handoff shows its whole task and asks plainly", async ({ page, context }) => {
+  await fakeAccount(context, { handoffs: [handoff()] });
+  await page.goto("/app");
+  const card = page.locator(".handoff");
+  await expect(card).toContainText("CTO · cto-1 asks Reviewer · reviewer-3b");
+  await expect(card.locator(".handoff-task")).toHaveText("Review the login change.\n\nLook at the tests too.");
+  await expect(card).toContainText("In trackline · a new chat");
+  await expect(card.getByRole("button", { name: "Approve" })).toBeVisible();
+});
+
+test("a position signed into a message is on screen beside it", async ({ page, context }) => {
+  await fakeAccount(context, { position: { title: "CTO", description: "Reviews every change." } });
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".sends-position")).toHaveText("Sent with your position for reviewer-3b: CTO: Reviews every change.");
+});
+
+test("a handoff can be declined", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { handoffs: [handoff()] });
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Decline" }).click();
+  await expect.poll(() => fake.calls.some((c) => c.path.endsWith("/decline"))).toBe(true);
+});
+
+test("a handoff from an agent still working cannot be approved yet", async ({ page, context }) => {
+  await fakeAccount(context, { handoffs: [handoff({ from: { name: "cto-1", title: "CTO", agent: "claude", session: null, working: true } })] });
+  await page.goto("/app");
+  await expect(page.locator(".handoff")).toContainText("still working");
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+});
+
+test("one nobody approved says so", async ({ page, context }) => {
+  await fakeAccount(context, { handoffs: [handoff({ status: "expired" })] });
+  await page.goto("/app");
+  await expect(page.getByText("Nobody approved this in time")).toBeVisible();
 });

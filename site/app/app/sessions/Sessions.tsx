@@ -7,6 +7,7 @@ import { sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard"
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import FirstRun from "@/components/app/FirstRun";
+import HandoffCards from "@/components/app/HandoffCards";
 import { IconMore } from "@/components/app/icons";
 import SessionMenu from "@/components/app/SessionMenu";
 import { SessionRow } from "@/components/app/SessionRow";
@@ -195,6 +196,7 @@ export default function Sessions() {
       </header>
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
       {!!remote?.machines.length && remote.machines.every((m) => !m.online) && <p className="offline-bar" role="status">Computer offline. Messages wait until it is back.</p>}
+      <HandoffCards />
       <div className="seg rise rise-1" role="group" aria-label="Agent">
         {AGENTS.map(([a, label]) => (
           <button key={a || "all"} aria-pressed={agent === a} onClick={() => pick(a)}>

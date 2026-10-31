@@ -167,6 +167,29 @@ export async function signPrompt(machine: string, project: string, agent: string
   };
 }
 
+/**
+ * Signs one handoff: exactly what the record says, and nothing else. What the
+ * receiver may do is the laptop's to say, so none of that is in here.
+ */
+export async function signHandoff(h: Handoff, keys: Passkey[], allowReturn: boolean) {
+  const now = Date.now();
+  const bytes = utf8(JSON.stringify({
+    v: 1, id: jobId(), machine: h.sign.machine, project: h.sign.project, kind: "handoff", agent: h.sign.agent, text: h.task,
+    ...(h.sign.session ? { session: h.sign.session } : {}),
+    handoff: h.id, from: h.from.session, fromAgent: h.from.agent, ...(allowReturn ? { return: true } : {}),
+    issuedAt: now, expiresAt: now + JOB_LIFE_MS,
+  }));
+  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
+  return { machine: h.sign.machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
+}
+
+export type Handoff = {
+  id: string; number: number; project: string; task: string; status: string; reason: string | null; result: string | null; expiresAt: string; createdAt: string; job: string | null;
+  to: { id: string; name: string; title: string | null; host: string };
+  from: { name: string | null; title: string | null; agent: string | null; session: string | null; working: boolean };
+  sign: { machine: string; project: string; agent: string | null; session: string | null };
+};
+
 /** An image ready to send: shrunk, hashed, and a preview for the page. */
 export type Attachment = { type: string; size: number; sha256: string; data: string; preview: string };
 

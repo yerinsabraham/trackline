@@ -701,3 +701,10 @@ a.metric:active { transform: scale(0.98); }
 .app-tab { position: relative; }
 .app-tab .badge { position: absolute; top: -2px; left: 56%; }
 .agent-title { margin: 2px 0; font-size: 14.5px; }
+.handoff { display: grid; gap: 10px; padding: 14px 16px; }
+.handoff-head { margin: 0; font-size: 14.5px; }
+.handoff-task { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--soft); font: 13.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; }
+.handoff-back { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.handoff-actions { display: flex; gap: 8px; }
+.handoff-line { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.sends-position { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
