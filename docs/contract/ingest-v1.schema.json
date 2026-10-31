@@ -41,7 +41,9 @@
         "text": { "type": "string", "maxLength": 32000, "description": "The agent's final message for the turn. Paths made relative, the home directory replaced, token shapes redacted." },
         "request": { "type": "string", "maxLength": 8000, "description": "What the user said in this turn, so a turn answered in words still shows it. Absent unless they agreed to share it. Cleaned like the text." },
         "cut": { "type": "boolean", "description": "True when the text was longer than its limit and is not all of it." },
-        "title": { "type": "string", "maxLength": 200, "description": "The name the agent gave this session, where it keeps one. Absent unless the user agreed to share their requests. Cleaned like the text." }
+        "title": { "type": "string", "maxLength": 200, "description": "The name the agent gave this session, where it keeps one. Absent unless the user agreed to share their requests. Cleaned like the text." },
+        "name": { "type": "string", "maxLength": 64, "description": "What the tool calls this agent, where it has a name. Cleaned like the text." },
+        "model": { "type": "string", "maxLength": 64, "description": "The model that answered, where the tool records it." }
       }
     },
     "setup": {
@@ -83,6 +85,7 @@
         "session": { "type": "string", "maxLength": 128 },
         "turn": { "type": "string", "maxLength": 128 },
         "request": { "type": "string", "maxLength": 2000, "description": "What the user asked. Absent unless they agreed to share it. Token shapes are replaced with [redacted]." },
+        "helper": { "type": "string", "maxLength": 64, "description": "The kind of short-lived agent that did this, when it was not the agent the person is talking to." },
         "action": {
           "type": "object",
           "additionalProperties": false,

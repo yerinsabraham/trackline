@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
 )
@@ -151,5 +152,54 @@ func TestALongTranscriptCostsNoMoreThanAShortOne(t *testing.T) {
 	}
 	if req != "the last thing" || title != "Named late" {
 		t.Fatalf("req %q, title %q", req, title)
+	}
+}
+
+func TestTheModelIsTheLatestOneTheTranscriptNames(t *testing.T) {
+	tail := []byte(`{"message":{"model":"claude-opus-5-5"}}
+{"payload":{"model":"gpt-6-astra"}}
+{"message":{"model":"<synthetic>"}}
+{"text":"the user wrote \"model\":\"made-up\" here"}
+`)
+	if got := lastModel(tail); got != "gpt-6-astra" {
+		t.Fatalf("model = %q", got)
+	}
+	if lastModel(nil) != "" {
+		t.Fatal("no transcript must mean no model")
+	}
+}
+
+func TestAClaudeChatsNameIsFoundInTheList(t *testing.T) {
+	list := []byte(`[{"sessionId":"a","name":"app-3b"},{"sessionId":"b","name":"app-c8"}]`)
+	if got := claudeChatName(list, "b"); got != "app-c8" {
+		t.Fatalf("name = %q", got)
+	}
+	if claudeChatName(list, "headless") != "" || claudeChatName([]byte("no"), "b") != "" {
+		t.Fatal("an unlisted session has no name")
+	}
+}
+
+func TestAKnownNameIsNotAskedForAgain(t *testing.T) {
+	dir := t.TempDir()
+	bin := t.TempDir()
+	calls := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\necho x >> " + calls + "\nprintf '[{\"sessionId\":\"s1\",\"name\":\"app-3b\"}]'\n"
+	os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	end := turnEnd{host: event.HostClaudeCode, session: "s1"}
+	for range 2 {
+		if got := agentName(end, dir); got != "app-3b" {
+			t.Fatalf("name = %q", got)
+		}
+	}
+	if b, _ := os.ReadFile(calls); len(b) != 2 {
+		t.Fatalf("asked %d times", len(b)/2)
+	}
+}
+
+func TestAPhoneRunDoesNotAskForAName(t *testing.T) {
+	t.Setenv(config.RemoteEnv, "job_1")
+	if got := agentName(turnEnd{host: event.HostClaudeCode, session: "s1"}, t.TempDir()); got != "" {
+		t.Fatalf("name = %q", got)
 	}
 }

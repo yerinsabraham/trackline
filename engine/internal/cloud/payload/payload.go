@@ -57,6 +57,11 @@ type Reply struct {
 	Cut bool `json:"cut,omitempty"`
 	// Title is the name the agent gave the session, under the request's consent.
 	Title string `json:"title,omitempty"`
+	// Name is what the tool calls this agent, where it has a name. Model is what
+	// answered. Neither says anything of the conversation, so both go with the
+	// reply itself and not with the request's consent.
+	Name  string `json:"name,omitempty"`
+	Model string `json:"model,omitempty"`
 }
 
 // Setup says which agents are wired into a project, so an agent that is set
@@ -76,6 +81,7 @@ type Event struct {
 	Session string   `json:"session"`
 	Turn    string   `json:"turn,omitempty"`
 	Request string   `json:"request,omitempty"`
+	Helper  string   `json:"helper,omitempty"`
 	Action  Action   `json:"action"`
 	Results []Result `json:"results"`
 	Mode    string   `json:"mode"`
@@ -122,6 +128,7 @@ const (
 	maxPath, maxPaths, maxInstall, maxInstalls  = 512, 50, 214, 50
 	maxResults, maxFindings, maxText, maxEvents = 12, 10, 300, 100
 	maxReply, maxReplyRequest, maxTitle         = 32000, 8000, 200
+	maxName, maxModel, maxHelper                = 64, 64, 64
 )
 
 // Options are what Build needs beyond the event itself.
@@ -137,6 +144,9 @@ type Options struct {
 	Request string
 	// Title is the name the agent gave the session, for a reply.
 	Title string
+	// Name and Model are what the tool calls the agent and what answered, for
+	// a reply.
+	Name, Model string
 	// Mode and Blocked are what the hook decided.
 	Mode    string
 	Blocked bool
@@ -184,6 +194,7 @@ func Build(ev event.Event, results []verdict.Result, o Options) (Event, error) {
 		Host:    host,
 		Session: cut(ev.SessionID, maxSession),
 		Turn:    cut(ev.TurnID, maxSession),
+		Helper:  cut(ev.Helper, maxHelper),
 		Mode:    o.Mode,
 		Blocked: o.Blocked,
 		Action: Action{
@@ -262,6 +273,8 @@ func BuildReply(host event.Host, session, turn, text string, at time.Time, o Opt
 		Turn:    cut(turn, maxSession),
 		Text:    cut(clean, maxReply),
 		Cut:     len(clean) > maxReply,
+		Name:    cut(redact(c.text(o.Name)), maxName),
+		Model:   cut(o.Model, maxModel),
 	}
 	if o.ShareRequest {
 		r.Request = cut(redact(c.text(o.Request)), maxReplyRequest)

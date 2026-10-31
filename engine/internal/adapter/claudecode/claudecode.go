@@ -19,6 +19,7 @@ type payload struct {
 	HookEventName  string          `json:"hook_event_name"`
 	SessionID      string          `json:"session_id"`
 	PromptID       string          `json:"prompt_id"`
+	AgentType      string          `json:"agent_type"`
 	ToolUseID      string          `json:"tool_use_id"`
 	ToolName       string          `json:"tool_name"`
 	CWD            string          `json:"cwd"`
@@ -91,6 +92,7 @@ func Parse(raw []byte, now time.Time) (event.Event, error) {
 	return event.Event{
 		ID:             p.ToolUseID,
 		SessionID:      p.SessionID,
+		Helper:         p.AgentType,
 		TurnID:         p.PromptID,
 		At:             now,
 		Host:           event.HostClaudeCode,

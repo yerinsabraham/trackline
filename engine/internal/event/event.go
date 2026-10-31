@@ -173,6 +173,10 @@ type Event struct {
 	// response to this request".
 	TurnID string `json:"turnId,omitempty"`
 
+	// Helper is the kind of short-lived agent that did this, when it was not
+	// the agent the person is talking to. Empty means that agent itself.
+	Helper string `json:"helper,omitempty"`
+
 	At    time.Time `json:"at"`
 	Host  Host      `json:"host"`
 	Phase Phase     `json:"phase"`

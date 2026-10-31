@@ -22,6 +22,9 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -29,6 +32,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -36,6 +40,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
+	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
 	"github.com/yerinsabraham/trackline/engine/internal/intent"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
@@ -314,10 +319,12 @@ func queueReply(root string, t turnEnd) {
 		ShareRequest: p.ShareRequests,
 		ID:           "rp_" + strings.TrimPrefix(outbox.NewID(), "ev_"),
 	}
+	if t.transcript == "" && t.host == event.HostCodex {
+		t.transcript = codexTranscript(t.session)
+	}
+	o.Model = lastModel(readTail(t.transcript))
+	o.Name = agentName(t, dir)
 	if p.ShareRequests {
-		if t.transcript == "" && t.host == event.HostCodex {
-			t.transcript = codexTranscript(t.session)
-		}
 		o.Request = lastRequest(t.transcript)
 		o.Title = agentTitle(t)
 	}
@@ -330,6 +337,62 @@ func queueReply(root string, t turnEnd) {
 		return
 	}
 	startSync()
+}
+
+var modelField = regexp.MustCompile(`"model":"([A-Za-z0-9._:-]+)"`)
+
+// lastModel is the latest model named in a transcript, which is where Claude
+// Code and Codex both record it. A quoted one cannot match: inside a message
+// its quotes are escaped.
+func lastModel(tail []byte) string {
+	found := modelField.FindAllSubmatch(tail, -1)
+	if len(found) == 0 {
+		return ""
+	}
+	return string(found[len(found)-1][1])
+}
+
+// claudeChatName finds a session in the output of `claude agents --json`.
+func claudeChatName(list []byte, session string) string {
+	var open []struct {
+		SessionID string `json:"sessionId"`
+		Name      string `json:"name"`
+	}
+	if json.Unmarshal(list, &open) != nil {
+		return ""
+	}
+	for _, s := range open {
+		if s.SessionID == session {
+			return s.Name
+		}
+	}
+	return ""
+}
+
+// agentName is what Claude Code calls this session. It is only known while the
+// session runs, and a headless run from the phone has none, which is why the
+// account gives a nameless chat a name of its own. Asking costs up to a second,
+// so a name found is kept beside the outbox and never asked for again.
+func agentName(t turnEnd, dir string) string {
+	if t.host != event.HostClaudeCode || t.session == "" || os.Getenv(config.RemoteEnv) != "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(t.session))
+	cached := filepath.Join(dir, "names", hex.EncodeToString(sum[:8]))
+	if b, err := os.ReadFile(cached); err == nil {
+		return string(b)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	list, err := exec.CommandContext(ctx, "claude", "agents", "--json").Output()
+	if err != nil {
+		return ""
+	}
+	name := claudeChatName(list, t.session)
+	if name != "" && os.MkdirAll(filepath.Dir(cached), 0o700) == nil {
+		_ = os.WriteFile(cached, []byte(name), 0o600)
+	}
+	return name
 }
 
 // lastRequest finds what the person last said. It is read here, at the end of
