@@ -543,9 +543,13 @@ func remoteRun() error {
 		os.Exit(0)
 	}()
 
-	resendHandoffs(client)
+	r2 := time.Time{}
 	backoff := time.Second
 	for {
+		if time.Since(r2) > time.Minute {
+			r2 = time.Now()
+			resendHandoffs(client, r)
+		}
 		next, err := client.NextJob(pollWait)
 		var apiErr *remote.Error
 		if errors.As(err, &apiErr) && apiErr.Status == 401 {

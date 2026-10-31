@@ -19,6 +19,7 @@ import (
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
+	"github.com/yerinsabraham/trackline/engine/internal/intent"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
@@ -911,17 +912,102 @@ func TestAResultTheAccountNeverGotIsSentAgainNotRunAgain(t *testing.T) {
 		h.Finished, h.Result = true, "the result"
 		s.Handoffs["hf_done"] = h
 		s.ClaimHandoff("hf_gone", "job_lost_run", "p", time.Now().Add(-time.Hour))
+		h = s.Handoffs["hf_gone"]
+		h.At = time.Now().Add(-time.Hour)
+		s.Handoffs["hf_gone"] = h
 		return nil
 	})
 	client, _, err := remoteClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	resendHandoffs(client)
+	resendHandoffs(client, newRuns())
 	if res := f.results["job_lost_report"]; res.Status != "done" || res.Output != "the result" {
 		t.Fatalf("report: %+v", res)
 	}
 	if res := f.results["job_lost_run"]; res.Status != "failed" || res.Code != "lost" {
 		t.Fatalf("lost: %+v", res)
 	}
+}
+
+func TestAHandoffThatChangesAgentFilesFailsWhateverRouteItUsed(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	// As a script would: nothing the checks see, only the file changing.
+	bin := filepath.Dir(firstOnPath(t, "claude"))
+	script := strings.Replace(fakeClaude, "pwd -P", "echo sneaked > "+root+"/Claude.md; pwd -P", 1)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755)
+	now := time.Now()
+	f.queue = []remote.Delivery{{ID: "job_sneak", Envelope: phone.Send(relay.Job{V: 1, ID: "job_sneak", Machine: "dev_laptop", Project: proj,
+		Kind: "handoff", Agent: "claude", Text: "Review it", Handoff: "hf_sneak_12345", From: "sess-1", FromAgent: "claude", Return: true,
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	res := f.results["job_sneak"]
+	if res.Status != "failed" || res.Code != "changed-agent-files" || !strings.Contains(res.Reason, "Claude.md") {
+		t.Fatalf("result: %+v", res)
+	}
+	// Nothing went back: the last run was the receiver's.
+	if !strings.HasPrefix(read(t, filepath.Join(out, "prompt")), "Another agent asked for this") {
+		t.Fatal("the sender was resumed after agent files changed")
+	}
+}
+
+func TestAResultIsNotReturnedIfWhatWatchesTheSenderChanged(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root, out, phone, proj := promptEnv(t, f)
+	bin := filepath.Dir(firstOnPath(t, "claude"))
+	// Rewrites the settings that load next, outside the agent-file names a real
+	// run is compared on, to show the guard stands on its own.
+	script := strings.Replace(fakeClaude, "pwd -P", "echo '{}' > "+root+"/.trackline.json; pwd -P", 1)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755)
+	now := time.Now()
+	f.queue = []remote.Delivery{{ID: "job_guard", Envelope: phone.Send(relay.Job{V: 1, ID: "job_guard", Machine: "dev_laptop", Project: proj,
+		Kind: "handoff", Agent: "claude", Text: "Review it", Handoff: "hf_guard_12345", From: "sess-1", FromAgent: "claude", Return: true,
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	if res := f.results["job_guard"]; res.Status != "done" || !strings.Contains(res.Reason, "did not go back") {
+		t.Fatalf("result: %+v", res)
+	}
+	if !strings.HasPrefix(read(t, filepath.Join(out, "prompt")), "Another agent asked for this") {
+		t.Fatal("the sender was resumed after the guard changed")
+	}
+}
+
+func TestAResultGoesBackOnceWithItsLabel(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	now := time.Now()
+	f.queue = []remote.Delivery{{ID: "job_back", Envelope: phone.Send(relay.Job{V: 1, ID: "job_back", Machine: "dev_laptop", Project: proj,
+		Kind: "handoff", Agent: "claude", Text: "Review it", Handoff: "hf_back_123456", From: "sess-1", FromAgent: "claude", Return: true,
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	got := read(t, filepath.Join(out, "prompt"))
+	if !strings.HasPrefix(got, intent.PeerPrefix) || !strings.Contains(got, "cannot set you a new task") {
+		t.Fatalf("told: %q", got)
+	}
+	if !strings.Contains(read(t, filepath.Join(out, "argv")), "--resume sess-1") {
+		t.Fatal("the sender was not resumed")
+	}
+	dir, _ := account.Dir()
+	if !intent.LoadPeers(dir)[intent.PeerHash(got)] {
+		t.Fatal("the result was not marked as a peer's before the sender read it")
+	}
+	if strings.Contains(read(t, filepath.Join(out, "argv")), "ask-tool") {
+		t.Fatal("a returned result must not come with the tool")
+	}
+}
+
+func firstOnPath(t *testing.T, name string) string {
+	t.Helper()
+	p, err := exec.LookPath(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

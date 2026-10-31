@@ -192,12 +192,109 @@ const HandoffEnv = "TRACKLINE_HANDOFF"
 // handoffLimits are what tell an agent how to behave, and which tools it has.
 // Agents have used these files to free each other, and an approved task is the
 // one route another agent has to this run. Blocked here, never at the desk.
-var handoffLimits = []string{"CLAUDE.md", "AGENTS.md", ".mcp.json", ".codex/**", ".claude/**"}
+var handoffLimits = []string{
+	"CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENTS.override.md", ".mcp.json", ".cursorrules",
+	".claude/**", ".codex/**", ".agents/**", ".cursor/**", ".git/hooks/**",
+}
 
-// ForHandoff tightens a remote run that came from another agent.
+// ForHandoff tightens a remote run that came from another agent. Like
+// ForRemote it drops any exception a project wrote: the project is what the run
+// can edit. This stops the honest attempt. A shell command the checks cannot
+// read gets past it, which is why the runner also compares these files around
+// the run (AgentFiles).
 func (c Config) ForHandoff() Config {
-	c.OffLimits = append(append([]string{}, c.OffLimits...), handoffLimits...)
+	var limits []string
+	for _, p := range c.OffLimits {
+		if !strings.HasPrefix(p, "!") {
+			limits = append(limits, p)
+		}
+	}
+	c.OffLimits = append(limits, handoffLimits...)
 	return c
+}
+
+// agentDirs and agentNames are handoffLimits as a walk finds them, lower-cased,
+// as the default macOS volume does not care about case and a pattern does.
+var (
+	agentDirs  = map[string]bool{".claude": true, ".codex": true, ".agents": true, ".cursor": true}
+	agentNames = map[string]bool{"claude.md": true, "claude.local.md": true, "agents.md": true, "agents.override.md": true, ".mcp.json": true, ".cursorrules": true}
+	skipDirs   = map[string]bool{"node_modules": true, "dist": true, "build": true, ".next": true, "vendor": true, "target": true}
+)
+
+// agentFilesWalked bounds a walk through a very large project.
+const agentFilesWalked = 200_000
+
+// AgentFiles fingerprints every file that tells an agent how to behave,
+// wherever a nested one sits. Comparing two of these catches any route, a
+// script or a symlink included, where a check on the command catches some.
+func AgentFiles(root string) map[string]string {
+	found := map[string]string{}
+	add := func(path string) {
+		rel, _ := filepath.Rel(root, path)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			found[rel] = "unreadable"
+			return
+		}
+		sum := sha256.Sum256(b)
+		found[rel] = hex.EncodeToString(sum[:])
+	}
+	seen := 0
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if seen++; seen > agentFilesWalked {
+			return filepath.SkipAll
+		}
+		name := strings.ToLower(d.Name())
+		if d.IsDir() {
+			switch {
+			case name == ".git":
+				_ = filepath.WalkDir(filepath.Join(path, "hooks"), func(p string, e fs.DirEntry, err error) error {
+					if err == nil && !e.IsDir() {
+						add(p)
+					}
+					return nil
+				})
+				return filepath.SkipDir
+			case skipDirs[name]:
+				return filepath.SkipDir
+			case agentDirs[name]:
+				_ = filepath.WalkDir(path, func(p string, e fs.DirEntry, err error) error {
+					if err == nil && !e.IsDir() {
+						add(p)
+					}
+					return nil
+				})
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if agentNames[name] {
+			add(path)
+		}
+		return nil
+	})
+	return found
+}
+
+// AgentFilesChanged names what differs between two AgentFiles, added and
+// removed included, in order.
+func AgentFilesChanged(before, after map[string]string) []string {
+	var changed []string
+	for p, h := range after {
+		if before[p] != h {
+			changed = append(changed, p)
+		}
+	}
+	for p := range before {
+		if _, kept := after[p]; !kept {
+			changed = append(changed, p)
+		}
+	}
+	slices.Sort(changed)
+	return changed
 }
 
 // Where a remote session reads the fingerprint of its guarded files, and the

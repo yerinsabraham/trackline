@@ -167,14 +167,46 @@ func TestForRemoteOnlyTightens(t *testing.T) {
 }
 
 func TestAHandoffCannotTouchWhatTellsAnAgentHowToBehave(t *testing.T) {
-	c := config.Config{OffLimits: []string{"secrets/**"}}
+	c := config.Config{OffLimits: []string{"secrets/**", "!*.md"}}
 	got := c.ForHandoff()
-	for _, want := range []string{"secrets/**", "CLAUDE.md", "AGENTS.md", ".mcp.json", ".codex/**", ".claude/**"} {
+	if slices.Contains(got.OffLimits, "!*.md") {
+		t.Error("a project's exception must not free these files")
+	}
+	for _, want := range []string{"secrets/**", "CLAUDE.md", "AGENTS.md", "AGENTS.override.md", ".mcp.json", ".codex/**", ".claude/**", ".git/hooks/**"} {
 		if !slices.Contains(got.OffLimits, want) {
 			t.Errorf("%s is not protected", want)
 		}
 	}
-	if len(c.OffLimits) != 1 {
+	if len(c.OffLimits) != 2 {
 		t.Fatal("the caller's list changed")
+	}
+}
+
+func TestAgentFilesCatchEveryRouteAndCase(t *testing.T) {
+	root := t.TempDir()
+	write := func(path, text string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0o755)
+		os.WriteFile(filepath.Join(root, path), []byte(text), 0o644)
+	}
+	write("src/app.go", "code")
+	write("CLAUDE.md", "be good")
+	write("pkg/AGENTS.md", "nested")
+	write(".claude/agents/x.md", "an agent")
+	write("node_modules/CLAUDE.md", "not ours")
+	before := config.AgentFiles(root)
+
+	write("src/app.go", "changed code")
+	if got := config.AgentFilesChanged(before, config.AgentFiles(root)); len(got) != 0 {
+		t.Fatalf("ordinary work counted: %v", got)
+	}
+	write("CLAUDE.md", "be bad")
+	write("Agents.Override.md", "new, in odd case")
+	write(".git/hooks/pre-commit", "new")
+	write(".claude/agents/y.md", "new")
+	os.Remove(filepath.Join(root, "pkg/AGENTS.md"))
+	got := config.AgentFilesChanged(before, config.AgentFiles(root))
+	want := []string{".claude/agents/y.md", ".git/hooks/pre-commit", "Agents.Override.md", "CLAUDE.md", "pkg/AGENTS.md"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("changed = %v", got)
 	}
 }

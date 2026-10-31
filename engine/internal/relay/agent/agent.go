@@ -172,7 +172,7 @@ func OpenClaudeChats(list []byte) (map[string]bool, error) {
 // Locked is whether a failed Codex run failed because another process holds
 // the conversation. Measured on 0.166: the lock refuses a second writer even
 // while the first sits idle.
-func Locked(reason string) bool { return strings.Contains(reason, "active writer") }
+func Locked(reason string) bool { return strings.Contains(reason, "already has an active writer") }
 
 // QueueCommand hands a message to the Codex process that owns a conversation,
 // as its next turn. It is the one command line that carries the person's text:

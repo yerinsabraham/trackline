@@ -102,6 +102,13 @@ func (r *runs) start(project string, cancel context.CancelCauseFunc) bool {
 	return true
 }
 
+func (r *runs) busy(project string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.cancel[project]
+	return ok
+}
+
 func (r *runs) finish(project string) {
 	r.mu.Lock()
 	delete(r.cancel, project)
@@ -136,6 +143,10 @@ func (r *runs) stopAll(why error) {
 	}
 }
 
+// returnEvents numbers a returned result's steps past the receiver's, as they
+// share a job.
+const returnEvents = 100_000
+
 var (
 	errStopped = errors.New("stopped from the phone")
 	errTimeout = fmt.Errorf("stopped after %s", jobLimit)
@@ -156,16 +167,12 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	}
 	name := agentNames[j.Agent]
 	// A remote session is watched exactly like a local one, or it does not
-	// start.
-	if !slices.Contains(install.Wired(got.Root), agent.Hosts[j.Agent]) {
-		refuse("not-watched", fmt.Sprintf("trackline is not set up for %s in %s. Run there: trackline init --host %s", name, filepath.Base(got.Root), j.Agent))
-		return
-	}
-	// Codex runs a project's hook only once it is trusted. Wired but never
-	// heard from is a hook that is off: measured, a remote Codex run in such a
-	// project went unwatched.
-	if h, ok := needsTrust[j.Agent]; ok && slices.Contains(install.Silent(got.Root), h) {
-		refuse("not-watched", fmt.Sprintf("trackline has never heard from %s in %s, so it would run unwatched. %s", name, filepath.Base(got.Root), install.Unsilence(h)))
+	// start. Codex runs a project's hook only once it is trusted, and wired but
+	// never heard from is a hook that is off: measured, a remote Codex run in
+	// such a project went unwatched.
+	if !slices.Contains(install.Wired(got.Root), agent.Hosts[j.Agent]) ||
+		(needsTrust[j.Agent] != "" && slices.Contains(install.Silent(got.Root), needsTrust[j.Agent])) {
+		refuse("not-watched", notReady(j.Agent, got.Root, config.Guard(got.Root)))
 		return
 	}
 	// What watches the agent is what the person agreed to when they turned
@@ -246,7 +253,6 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 			refuse("handoff-repeat", "this handoff already started once, so it will not run again")
 			return
 		}
-		j.Text = delegatedText(j)
 	}
 	if j.Kind == "allow" || j.Kind == "deny" {
 		if err := decide(got, grants); err != nil {
@@ -259,20 +265,30 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	}
 	logf("starting %s for job %s in %s", name, d.ID, got.Root)
 	notify("trackline: remote prompt", fmt.Sprintf("%s started in %s: %s", name, filepath.Base(got.Root), firstLine(j.Text, 80)))
+	// After the notice, which shows the laptop's owner the task itself.
+	var before map[string]string
+	if j.Kind == "handoff" {
+		before = config.AgentFiles(got.Root)
+		j.Text = delegatedText(j)
+	}
 	go func() {
 		defer r.finish(j.Project)
 		defer cancel(nil)
-		res := runAgent(ctx, cancel, client, d.ID, j, got.Root, argv, s.Path, guard, grants)
-		if j.Kind == "handoff" && agent.Locked(res.Reason) {
+		res := runAgent(ctx, cancel, client, d.ID, j, 0, got.Root, argv, s.Path, guard, grants)
+		// Only Codex has this lock, only on a chat it continues, and it refuses
+		// before anything runs. Past that, the words mean nothing: an agent can
+		// say them, and a run that did work must not be offered again.
+		locked := j.Agent == "codex" && j.Session != "" && !res.Acted && agent.Locked(res.Reason)
+		if j.Kind == "handoff" && locked {
 			yieldHandoff(j.Handoff)
 			client.JobResult(d.ID, remote.Result{Status: "refused", Code: "in-use", Reason: "the agent you approved is open on your computer. Close it there and approve this again"})
 			return
 		}
 		if j.Kind == "handoff" {
-			finishHandoff(ctx, cancel, client, d.ID, j, res, got.Root, binaryOf(s, j.FromAgent), s.Path, guard, grants)
+			finishHandoff(ctx, cancel, client, d.ID, j, res, returnEvents, before, got.Root, binaryOf(s, j.FromAgent), s.Path, guard, grants)
 			return
 		}
-		if j.Session != "" && j.Agent == "codex" && agent.Locked(res.Reason) {
+		if locked {
 			res = joinOpenChat(ctx, j, got.Root, binary, s.Path, s.OpenChats)
 		}
 		if res.Session != "" {
@@ -441,7 +457,7 @@ func agentEnv(base []string, path, job, guard, grants string) []string {
 }
 
 // runAgent runs one prompt to the end and says how it ended.
-func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote.Client, id string, j relay.Job, root string, argv []string, path, guard, grants string) remote.Result {
+func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote.Client, id string, j relay.Job, from int, root string, argv []string, path, guard, grants string) remote.Result {
 	ctx, stopTimer := context.WithTimeoutCause(ctx, jobLimit, errTimeout)
 	defer stopTimer()
 
@@ -485,7 +501,7 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 
 	var res remote.Result
 	var pending []agent.Event
-	sent := 0
+	sent := from
 	asked := time.Now()
 	var permission *permissionWatch
 	flush := func() {
@@ -521,6 +537,7 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 				open = false
 				break
 			}
+			res.Acted = res.Acted || e.Kind == "say" || e.Kind == "tool" || e.Kind == "done"
 			switch e.Kind {
 			case "session":
 				res.Session = e.Text

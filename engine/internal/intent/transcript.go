@@ -47,10 +47,17 @@ type Reader struct {
 }
 
 func (r *Reader) add(in *Intent, id string, at time.Time, text string) {
-	if !r.Peers[PeerHash(text)] {
+	// The prefix as well as the hash: a host that changes one character inside
+	// the text must not turn a peer's words into the person's.
+	if !r.Peers[PeerHash(text)] && !strings.HasPrefix(strings.TrimSpace(text), PeerPrefix) {
 		in.Add(id, at, text)
 	}
 }
+
+// PeerPrefix opens every result handed back to an agent. It only ever removes a
+// turn from what counts as a request, so a person who typed it loses nothing
+// and an agent gains nothing.
+const PeerPrefix = "The agent you asked has finished, and this is its result."
 
 // PeerFile names the list of peer text, one hash a line, in the account folder.
 const PeerFile = "peer-results"

@@ -228,7 +228,7 @@ func TestLockedRecognisesOnlyTheWriterLock(t *testing.T) {
 	if !agent.Locked("thread abc already has an active writer") {
 		t.Fatal("the lock was not recognised")
 	}
-	if agent.Locked("model overloaded") || agent.Locked("") {
+	if agent.Locked("model overloaded") || agent.Locked("") || agent.Locked("the active writer role") {
 		t.Fatal("another failure must not be sent on to an open chat")
 	}
 }

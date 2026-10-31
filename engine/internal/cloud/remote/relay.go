@@ -109,6 +109,9 @@ type Result struct {
 	// Session is the agent's own session id, which joins the job to the
 	// session trackline watched, and is what R4 resumes.
 	Session string `json:"session,omitempty"`
+	// Acted says the agent did or said anything, so a refusal it reports cannot
+	// be read as nothing having happened. It stays on the laptop.
+	Acted bool `json:"-"`
 }
 
 // AskAgent files a handoff. job is the run asking: the account takes the sender
