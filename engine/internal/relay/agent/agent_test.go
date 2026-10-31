@@ -120,7 +120,7 @@ func TestParsersIgnoreWhatTheyCannotRead(t *testing.T) {
 // is only text.
 func TestCommandsStaySafe(t *testing.T) {
 	for _, name := range []string{"claude", "codex", "cursor"} {
-		argv, err := agent.Command(name, "/bin/"+name, "/work/app", "")
+		argv, err := agent.Command(name, "/bin/"+name, "/work/app", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,21 +131,21 @@ func TestCommandsStaySafe(t *testing.T) {
 			}
 		}
 	}
-	claude, _ := agent.Command("claude", "claude", "/work/app", "")
+	claude, _ := agent.Command("claude", "claude", "/work/app", "", "")
 	for _, need := range []string{"acceptEdits", "--permission-prompts none", "--setting-sources project"} {
 		if !strings.Contains(strings.Join(claude, " "), need) {
 			t.Errorf("claude is missing %s", need)
 		}
 	}
-	codex, _ := agent.Command("codex", "codex", "/work/app", "")
+	codex, _ := agent.Command("codex", "codex", "/work/app", "", "")
 	if !strings.Contains(strings.Join(codex, " "), "--sandbox workspace-write") || codex[len(codex)-1] != "-" {
 		t.Errorf("codex: %v", codex)
 	}
-	cursor, _ := agent.Command("cursor", "cursor-agent", "/work/app", "")
+	cursor, _ := agent.Command("cursor", "cursor-agent", "/work/app", "", "")
 	if line := strings.Join(cursor, " "); !strings.Contains(line, "--sandbox enabled") || !strings.Contains(line, "--workspace /work/app") || !strings.Contains(line, "-p ") {
 		t.Errorf("cursor: %v", cursor)
 	}
-	resumed, _ := agent.Command("cursor", "cursor-agent", "/work/app", "sess-1")
+	resumed, _ := agent.Command("cursor", "cursor-agent", "/work/app", "sess-1", "")
 	if line := strings.Join(resumed, " "); !strings.Contains(line, "--resume sess-1") || !strings.Contains(line, "--sandbox enabled") {
 		t.Errorf("cursor resume: %v", resumed)
 	}
@@ -168,14 +168,14 @@ func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "�") == s }
 // Continuing a session keeps every safeguard of a new one: the same
 // permissions for Claude Code, the same sandbox for Codex.
 func TestResumingKeepsTheSafeguards(t *testing.T) {
-	claude, _ := agent.Command("claude", "claude", "/work/app", "sess-1")
+	claude, _ := agent.Command("claude", "claude", "/work/app", "sess-1", "")
 	line := strings.Join(claude, " ")
 	for _, need := range []string{"--resume sess-1", "acceptEdits", "--permission-prompts none", "--setting-sources project"} {
 		if !strings.Contains(line, need) {
 			t.Errorf("claude resume is missing %s: %s", need, line)
 		}
 	}
-	codex, _ := agent.Command("codex", "codex", "/work/app", "sess-1")
+	codex, _ := agent.Command("codex", "codex", "/work/app", "sess-1", "")
 	line = strings.Join(codex, " ")
 	for _, need := range []string{"exec resume", `sandbox_mode="workspace-write"`, `approval_policy="never"`, "sess-1 -"} {
 		if !strings.Contains(line, need) {
@@ -191,7 +191,7 @@ func TestResumingKeepsTheSafeguards(t *testing.T) {
 // runner's own, never the job's.
 func TestCodexAttachesImages(t *testing.T) {
 	for _, session := range []string{"", "sess-1"} {
-		argv, _ := agent.Command("codex", "codex", "/work/app", session, ".trackline/attachments/job_x/1.png")
+		argv, _ := agent.Command("codex", "codex", "/work/app", session, "", ".trackline/attachments/job_x/1.png")
 		line := strings.Join(argv, " ")
 		if !strings.Contains(line, "-i .trackline/attachments/job_x/1.png") || argv[len(argv)-1] != "-" {
 			t.Errorf("%q: %s", session, line)
@@ -230,5 +230,41 @@ func TestLockedRecognisesOnlyTheWriterLock(t *testing.T) {
 	}
 	if agent.Locked("model overloaded") || agent.Locked("") {
 		t.Fatal("another failure must not be sent on to an open chat")
+	}
+}
+
+func TestAPositionIsAValueNeverAFlag(t *testing.T) {
+	position := "--dangerously-skip-permissions\nCTO: \"runs\" reviews"
+	claude, err := agent.Command("claude", "claude", "/work/app", "sess-1", position)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, a := range claude {
+		if strings.HasPrefix(a, "--append-system-prompt=") && strings.Contains(a, position) {
+			found++
+		} else if strings.Contains(a, "dangerously") {
+			t.Fatalf("the position reached its own argument: %q", a)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("argv = %q", claude)
+	}
+	for _, session := range []string{"", "sess-1"} {
+		codex, err := agent.Command("codex", "codex", "/work/app", session, position)
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.IndexFunc(codex, func(a string) bool { return strings.HasPrefix(a, "developer_instructions=") })
+		if i < 1 || codex[i-1] != "-c" || !strings.Contains(codex[i], `\"runs\"`) {
+			t.Fatalf("argv = %q", codex)
+		}
+	}
+}
+
+func TestAPositionSaysItWidensNothing(t *testing.T) {
+	argv, _ := agent.Command("claude", "claude", "/work/app", "", "CTO")
+	if !strings.Contains(strings.Join(argv, " "), "does not change what you are allowed to do") {
+		t.Fatalf("argv = %q", argv)
 	}
 }

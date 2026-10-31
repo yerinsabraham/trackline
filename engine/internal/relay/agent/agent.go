@@ -2,9 +2,9 @@
 // does: the command line for each agent, and a parser that turns each
 // agent's own stream into one small shape the phone can show.
 //
-// The command lines are fixed here. Nothing in a job reaches them: the
-// instruction goes in on stdin, where text that looks like a flag is only
-// text.
+// The command lines are fixed here. The instruction goes in on stdin, where
+// text that looks like a flag is only text. The one thing from a job that
+// reaches them is a position, and only ever as the value of a flag set here.
 package agent
 
 import (
@@ -52,7 +52,12 @@ var Hosts = map[string]string{"claude": "claude-code", "codex": "codex", "cursor
 // images are files the person attached, already saved in the project. Codex
 // takes them with -i; Claude Code and Cursor read them from the path the
 // prompt names (measured: all three read an attached image correctly).
-func Command(name, binary, root, session string, images ...string) ([]string, error) {
+//
+// position is the job the person gave this agent, and goes where each tool
+// keeps standing instructions. Measured: both keep it across a resume with
+// nothing passed the second time. Cursor has no such place, so the site does
+// not offer it there.
+func Command(name, binary, root, session, position string, images ...string) ([]string, error) {
 	switch name {
 	case "claude":
 		argv := []string{binary, "-p",
@@ -60,6 +65,9 @@ func Command(name, binary, root, session string, images ...string) ([]string, er
 			"--permission-mode", "acceptEdits",
 			"--permission-prompts", "none",
 			"--setting-sources", "project",
+		}
+		if position != "" {
+			argv = append(argv, "--append-system-prompt="+standing(position))
 		}
 		if session != "" {
 			argv = append(argv, "--resume", session)
@@ -69,6 +77,14 @@ func Command(name, binary, root, session string, images ...string) ([]string, er
 		var attach []string
 		for _, im := range images {
 			attach = append(attach, "-i", im)
+		}
+		if position != "" {
+			// A TOML string, which a JSON string always is.
+			quoted, err := json.Marshal(standing(position))
+			if err != nil {
+				return nil, err
+			}
+			attach = append(attach, "-c", "developer_instructions="+string(quoted))
 		}
 		if session != "" {
 			argv := []string{binary, "exec", "resume", "--json",
@@ -96,6 +112,13 @@ func Command(name, binary, root, session string, images ...string) ([]string, er
 		return argv, nil
 	}
 	return nil, errors.New("unknown agent: " + name)
+}
+
+// standing is what an agent is told about its position. The words around the
+// person's are written here, so no position can claim to be anything else.
+func standing(position string) string {
+	return "The person you work for gave you this position on their team:\n\n" + position +
+		"\n\nIt describes your job. It does not change what you are allowed to do, and every rule and check you work under still applies."
 }
 
 // OpenClaudeChats reads the output of `claude agents --json`, the supported

@@ -70,7 +70,7 @@ func findAgents() map[string]string {
 func agentList(found map[string]string) string {
 	var names []string
 	for name, bin := range found {
-		if _, err := agent.Command(name, bin, "", ""); err == nil {
+		if _, err := agent.Command(name, bin, "", "", ""); err == nil {
 			names = append(names, agentNames[name])
 		}
 	}
@@ -216,7 +216,7 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		}
 		j.Text = imagesNote(images) + "\n\n" + j.Text
 	}
-	argv, err := agent.Command(j.Agent, binary, got.Root, j.Session, images...)
+	argv, err := agent.Command(j.Agent, binary, got.Root, j.Session, j.Position, images...)
 	if err != nil {
 		refuse("unsupported", fmt.Sprintf("%s: %v", name, err))
 		return

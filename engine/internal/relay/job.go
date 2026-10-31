@@ -37,6 +37,10 @@ type Job struct {
 	// Session continues the agent's own session instead of starting one:
 	// the reply box under an answer, on the phone.
 	Session string `json:"session,omitempty"`
+	// Position is the job the person gave this agent, in their own words. It
+	// can only be text: the laptop writes what surrounds it, and it says the
+	// position widens nothing.
+	Position string `json:"position,omitempty"`
 	// Check and Target name what an allow or deny job decides: the check
 	// that stopped an action, and what it stopped.
 	Check  string `json:"check,omitempty"`
@@ -97,6 +101,8 @@ const (
 	Idle = 30 * 24 * time.Hour
 	// MaxText is far more than any instruction a person types on a phone.
 	MaxText = 32 << 10
+	// MaxPosition is a title and a few lines about the job.
+	MaxPosition = 2 << 10
 )
 
 // Kinds a job may be: a test job proves the path and runs nothing; a prompt
@@ -215,6 +221,9 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	}
 	if len(j.Text) > MaxText || strings.ContainsRune(j.Text, 0) {
 		return Accepted{}, refuse("unsupported", "the instruction is too long or not text")
+	}
+	if len(j.Position) > MaxPosition || strings.ContainsRune(j.Position, 0) || j.Position != "" && j.Kind != "prompt" {
+		return Accepted{}, refuse("bad-job", "the position is not one a job can carry")
 	}
 	if len(j.Images) > 0 && j.Kind != "prompt" || len(j.Images) > MaxImages {
 		return Accepted{}, refuse("unsupported", "too many images, or images on a job that takes none")
