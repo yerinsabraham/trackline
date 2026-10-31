@@ -34,6 +34,29 @@ jobs:
       - name: Eval gate
         run: npm run evals -- --report=github
 
+  # The site had no tests and nothing built it, so a bug only WebKit shows
+  # always reached the iPhone first: the back and send buttons were blank there
+  # while every check in Chrome passed. WebKit runs here for that.
+  site:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps webkit chromium
+      - run: npm run e2e
+
   # The live path was broken on Node 20 for months because nothing ran it. The
   # CLI is exercised as an installed binary under plain node, with a stub
   # config, on every supported major. No network and no API keys: the stub

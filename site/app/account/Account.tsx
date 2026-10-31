@@ -54,7 +54,7 @@ export default function Account() {
           <h1 className="app-h1">{user?.name ?? (user ? "Signed in" : "Loading…")}</h1>
           <span className="app-muted" style={{ fontSize: 14 }}>{user?.email}{methods ? ` · Signed in with ${methods}` : ""}</span>
         </div>
-        <button className="btn-plain acct-signout" onClick={signOut}><span style={{ width: 16, display: "flex" }}><IconSignOut /></span>Sign out</button>
+        <button className="btn-plain acct-signout" onClick={signOut}><IconSignOut size={16} />Sign out</button>
       </header>
 
       <div className="acct-tabs rise rise-1" role="tablist" aria-label="Account">
@@ -86,7 +86,7 @@ export default function Account() {
               {security?.factors.passkeys.length === 0 && <div className="empty">No passkey yet. Add one to send tasks from this app.</div>}
               {security?.factors.passkeys.map((p) => (
                 <div key={p.id} className="row-link" style={{ alignItems: "center" }}>
-                  <span className="agent-logo" style={{ width: 38, height: 38 }}><span style={{ width: 18, display: "flex" }}>{phoneish(p.name) ? <IconPhone /> : <IconKey />}</span></span>
+                  <span className="agent-logo" style={{ width: 38, height: 38 }}><span style={{ display: "flex" }}>{phoneish(p.name) ? <IconPhone size={18} /> : <IconKey size={18} />}</span></span>
                   <span className="row-main">
                     <strong style={{ fontSize: 14 }}>{p.name}</strong>
                     <span className="app-muted" style={{ fontSize: 13 }}>Added {new Date(p.createdAt).toLocaleDateString()}{p.lastUsedAt ? ` · last used ${ago(p.lastUsedAt)}` : ""}</span>
@@ -185,7 +185,7 @@ export default function Account() {
           {devices?.length === 0 && <div className="empty">None yet. Run <code>trackline connect</code> in a project.</div>}
           {devices?.map((d) => (
             <div key={d.id} className="row-link" style={{ alignItems: "center" }}>
-              <span className="agent-logo" style={{ width: 38, height: 38 }}><span style={{ width: 18, display: "flex" }}><IconLaptop /></span></span>
+              <span className="agent-logo" style={{ width: 38, height: 38 }}><IconLaptop size={18} /></span>
               <span className="row-main">
                 <strong style={{ fontSize: 14 }}>{d.name}</strong>
                 <span className="app-muted" style={{ fontSize: 13 }}>Connected {new Date(d.createdAt).toLocaleDateString()}{d.lastUsedAt ? ` · last seen ${ago(d.lastUsedAt)}` : ""}</span>

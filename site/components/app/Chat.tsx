@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useStickToBottom } from "use-stick-to-bottom";
+import { readDraft, saveDraft } from "@/lib/account";
 import ReplyText from "@/components/ReplyText";
 import AgentLogo from "./AgentLogo";
 import { IconAlert, IconClip, IconClose, IconShield, IconTerminal, IconUp } from "./icons";
@@ -8,6 +10,15 @@ import { type Attachment, MAX_ATTACHMENTS, prepareImage } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
 // arrived: from trackline's hook in the terminal, or from a task sent here.
+
+/**
+ * A conversation opens on its newest message and follows what arrives, until
+ * you scroll up to read; scrolling back down picks it up again. Instant, so a
+ * long chat is never seen sliding past on the way to the bottom.
+ */
+export function useChatScroll() {
+  return useStickToBottom({ initial: "instant", resize: "instant" });
+}
 
 export type Line = { key: string; time?: string; verb: string; text: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
 
@@ -29,7 +40,7 @@ export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
   return (
     <div className="aterm rise">
       <div className="term-head">
-        <span style={{ width: 14, display: "flex" }}><IconTerminal /></span>
+        <IconTerminal size={14} />
         <span>Activity · {lines.length} step{lines.length === 1 ? "" : "s"}</span>
         {live && <span className="live">live</span>}
       </div>
@@ -50,8 +61,8 @@ export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
 export function Finding({ tone, title, children, actions }: { tone: "block" | "warn"; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div className={`finding ${tone === "warn" ? "warn" : ""}`}>
-      <span style={{ width: 20, flex: "none", color: tone === "warn" ? "#9a6700" : "#c8321a", display: "flex" }}>
-        {tone === "warn" ? <IconAlert /> : <IconShield />}
+      <span style={{ flex: "none", color: tone === "warn" ? "#9a6700" : "#c8321a", display: "flex" }}>
+        {tone === "warn" ? <IconAlert size={20} /> : <IconShield size={20} />}
       </span>
       <div style={{ flexGrow: 1, minWidth: 0 }}>
         <strong>{title}</strong>{children && <p>{children}</p>}
@@ -98,7 +109,7 @@ export function LaptopNotice({ machine }: { machine: { name: string; online: boo
   if (!machine || (machine.online && !machine.stopped)) return null;
   return (
     <div className="laptop-notice" role="status">
-      <span style={{ width: 16, display: "flex", flex: "none" }}><IconAlert /></span>
+      <IconAlert size={16} />
       <span>
         {machine.stopped
           ? <>Remote is stopped on <strong>{machine.name}</strong>. Nothing sent now will run until you turn it on there: <code>trackline remote enable</code></>
@@ -154,7 +165,7 @@ export function useAttachments() {
     <>
       <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => add(e.target.files)} />
       <button type="button" className="composer-attach" aria-label="Attach images" disabled={disabled || busy || items.length >= MAX_ATTACHMENTS} onClick={() => input.current?.click()}>
-        <span style={{ width: 20, display: "flex" }}><IconClip /></span>
+        <IconClip size={20} />
       </button>
     </>
   );
@@ -164,7 +175,7 @@ export function useAttachments() {
         <span key={it.sha256} className="attach-thumb">
           <img src={it.preview} alt="Attached image" />
           <button type="button" aria-label="Remove image" onClick={() => setItems((x) => x.filter((y) => y.sha256 !== it.sha256))}>
-            <span style={{ width: 12, display: "flex" }}><IconClose /></span>
+            <IconClose size={12} />
           </button>
         </span>
       ))}
@@ -178,7 +189,9 @@ export function useAttachments() {
  * Where you type to the agent. When nothing can be sent, the box says why
  * rather than taking text that goes nowhere.
  */
-export function Composer({ placeholder, onSend, blocked, note }: {
+export function Composer({ chat, placeholder, onSend, blocked, note }: {
+  /** Which conversation this is, so a half-written message waits for you there. */
+  chat?: string;
   placeholder: string;
   onSend: (text: string, images: Attachment[]) => Promise<void>;
   blocked?: string;
@@ -197,6 +210,12 @@ export function Composer({ placeholder, onSend, blocked, note }: {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   };
 
+  useEffect(() => {
+    if (!chat) return;
+    setText(readDraft(chat));
+    requestAnimationFrame(grow);
+  }, [chat]);
+
   const send = async () => {
     // A picture alone is a message too; the agent is told to look at it.
     const t = text.trim() || (attach.items.length ? "See the attached image." : "");
@@ -205,6 +224,7 @@ export function Composer({ placeholder, onSend, blocked, note }: {
     try {
       await onSend(t, attach.items);
       setText("");
+      if (chat) saveDraft(chat, "");
       attach.clear();
       requestAnimationFrame(grow);
     } catch (e) {
@@ -222,15 +242,17 @@ export function Composer({ placeholder, onSend, blocked, note }: {
         <label htmlFor="composer" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{placeholder}</label>
         <textarea
           id="composer" ref={box} rows={1} value={text} placeholder={blocked ? "Replying is not available here" : placeholder}
-          disabled={!!blocked || busy}
-          onChange={(e) => { setText(e.target.value); grow(); }}
+          // Read-only rather than disabled while sending: a disabled box loses
+          // focus, and the phone's keyboard goes with it.
+          disabled={!!blocked} readOnly={busy}
+          onChange={(e) => { setText(e.target.value); if (chat) saveDraft(chat, e.target.value); grow(); }}
           onKeyDown={(e) => {
             // Enter sends on a keyboard with one; a phone keeps Enter for new lines.
             if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 900px)").matches) { e.preventDefault(); send(); }
           }}
         />
-        <button type="submit" className="composer-send" aria-label="Sign and send" disabled={(!text.trim() && !attach.items.length) || busy || !!blocked}>
-          <span style={{ width: 18, display: "flex" }}><IconUp /></span>
+        <button type="submit" className={`composer-send ${busy ? "sending" : ""}`} aria-label={busy ? "Sending" : "Sign and send"} disabled={(!text.trim() && !attach.items.length) || busy || !!blocked}>
+          {busy ? <span className="composer-spinner" aria-hidden="true" /> : <IconUp size={20} />}
         </button>
       </div>
       <span className={`composer-note ${error || blocked ? "error" : ""}`}>

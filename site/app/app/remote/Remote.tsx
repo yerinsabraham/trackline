@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { whileVisible } from "@/lib/dashboard";
 import {
-  active, type AgentEvent, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberPreviews, signPrompt, type Attachment,
+  active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment,
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, useAttachments } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, useAttachments, useChatScroll } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 import { Cmd } from "@/components/app/FirstRun";
@@ -63,7 +63,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
       const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items);
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
       remember(r.id, said);
-      rememberPreviews(r.id, attach.items.map((i) => i.preview));
+      rememberImages(r.id, attach.items);
       open(r.id);
     } catch (e) {
       setError((e as Error).message);
@@ -89,7 +89,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
       )}
       {machines.length === 0 && (
         <div className="card empty">
-          <span className="agent-logo" style={{ width: 44, height: 44 }}><span style={{ width: 22, display: "flex" }}><IconLaptop /></span></span>
+          <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
           <strong>No laptop takes tasks yet.</strong>
           <span>On your laptop, in a project: <code>trackline connect</code>, then <code>trackline remote enable</code></span>
         </div>
@@ -98,7 +98,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
       {machine && (
         <form className="new-task-form rise rise-1" onSubmit={(e) => { e.preventDefault(); send(); }}>
           <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-            <span className="agent-logo" style={{ width: 40, height: 40 }}><span style={{ width: 20, display: "flex" }}><IconLaptop /></span></span>
+            <span className="agent-logo" style={{ width: 40, height: 40 }}><IconLaptop size={20} /></span>
             <div style={{ display: "grid", gap: 2, flexGrow: 1, minWidth: 0 }}>
               <strong style={{ fontSize: 14.5 }}>{machine.name}</strong>
               <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, color: machine.stopped ? "var(--red-ink)" : machine.online ? "var(--ok-ink)" : "var(--muted)" }}>
@@ -155,7 +155,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
               {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
               <LaptopNotice machine={machine} />
               <button type="submit" className="btn-act nt-send" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || !keys?.length || machine.stopped}>
-                <span style={{ width: 18, display: "flex" }}><IconFace /></span>{busy ? "Waiting for your passkey…" : "Sign and send"}
+                <IconFace size={18} />{busy ? "Waiting for your passkey…" : "Sign and send"}
               </button>
               <p className="composer-note">Secrets and new dependencies stay blocked in tasks sent from here. For unattended work, keep files inside this project when you can.</p>
             </>
@@ -199,12 +199,13 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
   const [stopping, setStopping] = useState(false);
   const [missing, setMissing] = useState(false);
   const after = useRef(-1);
-  const scroller = useRef<HTMLDivElement>(null);
+  const { scrollRef, contentRef } = useChatScroll();
   const keys = useRef<Passkey[] | null>(null);
   const { remote } = useApp();
   const asked = recall(id);
 
   useEffect(() => {
+    api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => { keys.current = r.passkeys; }).catch(() => {});
     after.current = -1;
     setEvents([]); setJob(null);
     let busy = false;
@@ -232,11 +233,6 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     return whileVisible(load, 1200);
   }, [id]);
 
-  useEffect(() => {
-    const el = scroller.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [events.length, job?.status]);
-
   const machine = remote?.machines.find((m) => m.id === job?.machine);
   const machineName = machine?.name ?? "your laptop";
   const live = !!job && active(job.status);
@@ -252,7 +248,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session ?? undefined, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
-    rememberPreviews(r.id, images.map((i) => i.preview));
+    rememberImages(r.id, images);
     open(r.id);
   };
 
@@ -260,7 +256,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     <div className="chat-page single">
       <section className="chat-pane">
         <header className="chat-head">
-          <button className="app-icon-btn" aria-label="New task" onClick={onNew}><IconBack /></button>
+          <button className="app-icon-btn" aria-label="New task" onClick={onNew}><IconBack size={24} /></button>
           {job?.agent && <AgentLogo host={job.agent} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
             <h1>{asked ?? (job ? `${agentName(job.agent)} task` : "Task")}</h1>
@@ -270,12 +266,12 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             <button className="btn-plain" style={{ height: 36, padding: "0 12px" }} disabled={stopping} onClick={async () => {
               setStopping(true);
               try { await api(`/app/remote/jobs/${encodeURIComponent(id)}/stop`, { method: "POST", body: "{}" }); } finally { setStopping(false); }
-            }}><span style={{ width: 12, display: "flex" }}><IconStop /></span>{stopping ? "Stopping…" : "Stop"}</button>
+            }}><IconStop size={12} />{stopping ? "Stopping…" : "Stop"}</button>
           )}
         </header>
 
-        <div className="chat-scroll" ref={scroller}>
-          <div className="convo">
+        <div className="chat-scroll" ref={scrollRef}>
+          <div className="convo" ref={contentRef}>
             {missing && <p className="composer-note error">This task does not exist, or is not yours.</p>}
             {asked && <MyMessage text={asked} images={previewsFor(id)} note={job ? `Sent to ${machineName}` : undefined} />}
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}
@@ -292,7 +288,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
               : <Finding key={it.key} tone="block" title="The agent stopped with an error">{it.text}</Finding>)}
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
             {job?.status === "expired" && (
-              <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, [], true)} /> : undefined}>
+              <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, imagesFor(id), true)} /> : undefined}>
                 {machineName} was asleep or offline for 3 minutes, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
               </Finding>
             )}
@@ -322,6 +318,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
         <div className="chat-compose">
           <LaptopNotice machine={machine} />
           <Composer
+            chat={job?.session ?? id}
             placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}
             blocked={!job ? "Loading…" : live ? `${agentName(job.agent)} is still working. Reply when it has finished.` : !canContinue ? "This task has no session to continue." : undefined}
             note={`Signed with your passkey · continues this session on ${machineName}`}

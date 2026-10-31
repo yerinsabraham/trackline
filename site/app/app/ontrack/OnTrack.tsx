@@ -159,7 +159,7 @@ export default function OnTrack() {
                 <span className="row-meta">{checkName(o.check)} · {o.project} · {ago(o.at)}</span>
                 {o.request && <span className="row-note">Asked: {requestLabel(o.request)}</span>}
               </span>
-              <span className="ot-go"><IconChevron /></span>
+              <span className="ot-go"><IconChevron size={18} /></span>
             </a>
           ))}
         </section>

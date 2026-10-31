@@ -1,61 +1,57 @@
-import { Fragment, type ReactNode } from "react";
+import { Children, isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import CopyButton from "./CopyButton";
 
 // An agent's reply, in the Markdown agents write, rendered as React elements
 // and never as HTML. The text comes from a model that has read the project and
 // can be steered by what it read, and this page holds the sign-in token: a
-// reply must not be able to put markup on it. Links show their text only, so
-// a reply cannot send anyone anywhere either.
-export default function ReplyText({ text }: { text: string }) {
-  const blocks: ReactNode[] = [];
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith("```")) {
-      const body: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith("```")) body.push(lines[i++]);
-      i++;
-      blocks.push(<pre key={blocks.length}><code>{body.join("\n")}</code></pre>);
-      continue;
-    }
-    const bullet = /^\s*(?:[-*]|\d+[.)])\s+/;
-    if (bullet.test(line)) {
-      const ordered = /^\s*\d/.test(line);
-      const items: string[] = [];
-      while (i < lines.length && bullet.test(lines[i])) items.push(lines[i++].replace(bullet, ""));
-      const List = ordered ? "ol" : "ul";
-      blocks.push(<List key={blocks.length}>{items.map((t, k) => <li key={k}>{inline(t)}</li>)}</List>);
-      continue;
-    }
-    if (!line.trim()) { i++; continue; }
-    const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !lines[i].startsWith("```") && !bullet.test(lines[i])) {
-      para.push(lines[i++].replace(/^#{1,6}\s+/, ""));
-    }
-    blocks.push(<p key={blocks.length}>{inline(para.join(" "))}</p>);
-  }
-  return <div className="reply-text">{blocks}</div>;
+// reply must not be able to put markup on it. Raw HTML in a reply is shown as
+// the text it is. Links show their text only, so a reply cannot send anyone
+// anywhere, and an image shows its description, because loading one would tell
+// whoever wrote its address anything the model put in it.
+
+const ALLOWED = [
+  "p", "br", "hr", "strong", "em", "del", "code", "pre", "blockquote", "ul", "ol", "li", "input",
+  "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td", "a", "img",
+];
+
+const PLUGINS = [remarkGfm];
+
+function textOf(node: ReactNode): string {
+  return Children.toArray(node).map((n) => (typeof n === "string" ? n : isValidElement(n) ? textOf((n as ReactElement<{ children?: ReactNode }>).props.children) : "")).join("");
 }
 
-// `code`, **bold**, and [text](target) shown as its text.
-function inline(s: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  const re = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\([^)]*\)/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) {
-    if (m.index > last) out.push(<Fragment key={out.length}>{s.slice(last, m.index)}</Fragment>);
-    if (m[1] !== undefined) out.push(<code key={out.length}>{m[1]}</code>);
-    else if (m[2] !== undefined) out.push(<strong key={out.length}>{m[2]}</strong>);
-    else out.push(<Fragment key={out.length}>{m[3]}</Fragment>);
-    last = re.lastIndex;
-  }
-  if (last < s.length) out.push(<Fragment key={out.length}>{s.slice(last)}</Fragment>);
-  return out;
+const ELEMENTS: Components = {
+  // The page's own heading is the chat's; a reply's headings sit below it.
+  h1: "h3", h2: "h3", h3: "h4", h4: "h5", h5: "h5", h6: "h5",
+  a: ({ children }) => <>{children}</>,
+  img: ({ alt }) => <>{alt}</>,
+  // Wide things scroll inside their own box, so the chat never scrolls sideways.
+  table: ({ children }: ComponentProps<"table">) => <div className="md-table"><table>{children}</table></div>,
+  pre: ({ children }: ComponentProps<"pre">) => (
+    <div className="md-code"><CopyButton text={textOf(children).replace(/\n$/, "")} /><pre>{children}</pre></div>
+  ),
+};
+
+export default function ReplyText({ text }: { text: string }) {
+  return (
+    <div className="reply-text">
+      <Markdown remarkPlugins={PLUGINS} allowedElements={ALLOWED} components={ELEMENTS}>{text}</Markdown>
+    </div>
+  );
 }
 
 /** The reply as one line of plain text, for previews. */
 export function plain(text: string): string {
-  return text.replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[`*#]/g, "").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1")
+    // A table's ruled line, then its bars, so a preview reads as words.
+    .replace(/^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/gm, " ")
+    .replace(/\|/g, " ")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/[`*#~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

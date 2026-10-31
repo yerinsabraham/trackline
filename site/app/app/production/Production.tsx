@@ -85,7 +85,7 @@ export default function Production() {
             {data.services.length === 0 && <div className="card empty"><strong>Nothing {within(days)}.</strong><span>No conversations arrived in this range.</span></div>}
             {data.services.map((s) => (
               <button key={s.name} className={`card pr-service ${s.flagged ? "has" : ""}`} aria-pressed={service === s.name} onClick={() => go(days, service === s.name ? "" : s.name)}>
-                <span className="pr-service-name"><span style={{ width: 18, display: "flex" }}><IconServer /></span>{s.name}</span>
+                <span className="pr-service-name"><IconServer size={18} />{s.name}</span>
                 <span className="pr-stats">
                   <span><strong>{s.conversations}</strong> conversation{s.conversations === 1 ? "" : "s"}</span>
                   <span className={s.findings ? "bad" : ""}><strong>{s.findings}</strong> policy</span>
@@ -127,7 +127,7 @@ function Row({ c, showService }: { c: Conversation; showService: boolean }) {
           <span className="row-meta">{showService ? `${c.service} · ` : ""}{ago(c.startedAt)}</span>
           {note && <span className="row-note">{note}</span>}
         </span>
-        <span className="pr-chev" aria-hidden="true"><IconChevron /></span>
+        <span className="pr-chev" aria-hidden="true"><IconChevron size={16} /></span>
       </summary>
       <div className="pr-detail">
         {c.findings.map((f, i) => <p key={`f${i}`} className="pr-line bad"><span>Policy</span>{f.summary}</p>)}

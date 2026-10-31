@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, type Attachment, jobState, type Job, type Passkey, previewsFor, recall, remember, rememberPreviews, signDecision, signPrompt } from "@/lib/remote";
+import { active, type Attachment, imagesFor, jobState, type Job, type Passkey, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, useChatScroll } from "@/components/app/Chat";
 import { IconBack } from "@/components/app/icons";
 import { SessionRow } from "../Overview";
 
@@ -67,10 +67,13 @@ export default function Session() {
   const [deciding, setDeciding] = useState("");
   const [decideError, setDecideError] = useState("");
   const cursor = useRef<string | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
+  const { scrollRef, contentRef } = useChatScroll();
   const keys = useRef<Passkey[] | null>(null);
 
   useEffect(() => {
+    // Ready before you tap send: on an iPhone a network call between the tap
+    // and Face ID can cost the tap its right to ask for Face ID.
+    api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => { keys.current = r.passkeys; }).catch(() => {});
     const sid = new URLSearchParams(window.location.search).get("id") ?? "";
     setId(sid);
     let busy = false;
@@ -80,7 +83,9 @@ export default function Session() {
       try {
         const after = cursor.current ? `?after=${encodeURIComponent(cursor.current)}` : "";
         const r = await api<SessionView>(`/app/sessions/${encodeURIComponent(sid)}${after}`);
-        if (!cursor.current) setView(r); else setView((v) => (v ? { ...v, session: r.session } : r));
+        // The laptop can come and go while this page stays open for days, so
+        // where a reply would go is read fresh every time.
+        if (!cursor.current) setView(r); else setView((v) => (v ? { ...v, session: r.session, continueWith: r.continueWith === undefined ? v.continueWith : r.continueWith } : r));
         cursor.current = r.cursor;
         if (r.events.length) setEvents((old) => [...new Map([...old, ...r.events].map((e) => [e.id, e])).values()]);
         if (r.replies.length) setReplies((old) => [...new Map([...old, ...r.replies].map((x) => [x.id ?? x.at, x])).values()]);
@@ -94,12 +99,6 @@ export default function Session() {
     load();
     return whileVisible(load, 2500);
   }, []);
-
-  // Follow the conversation as it grows, unless you have scrolled up to read.
-  useEffect(() => {
-    const el = scroller.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [events.length, replies.length, sent.length]);
 
   // Tasks sent from the box: followed until the laptop says how they went.
   useEffect(() => {
@@ -156,7 +155,7 @@ export default function Session() {
     const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
-    rememberPreviews(r.id, images.map((i) => i.preview));
+    rememberImages(r.id, images);
     setSent((x) => [...x, { job: r.id, text, status: "queued", code: null, reason: null }]);
   };
   // Replies sent from here before, perhaps from a page since closed, that
@@ -179,7 +178,7 @@ export default function Session() {
 
       <section className="chat-pane">
         <header className="chat-head">
-          <a href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack /></a>
+          <a href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack size={24} /></a>
           {s && <AgentLogo host={s.host} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
             <h1>{requestLabel(s?.request ?? null) ?? (error ? "Session" : "Loading…")}</h1>
@@ -188,8 +187,8 @@ export default function Session() {
           {s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
         </header>
 
-        <div className="chat-scroll" ref={scroller}>
-          <div className="convo">
+        <div className="chat-scroll" ref={scrollRef}>
+          <div className="convo" ref={contentRef}>
             {error && <p className="composer-note error">{error}</p>}
             {!view && !error && [0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: i === 1 ? 120 : 56 }} />)}
             {s && <p className="chat-divider">{scoreLine(s.score.session)}</p>}
@@ -231,7 +230,7 @@ export default function Session() {
               <div key={x.job} style={{ display: "contents" }}>
                 <MyMessage text={x.text} images={previewsFor(x.job)} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
                 {x.status === "expired" && (
-                  <Finding tone="warn" title="Not delivered" actions={x.text !== "A message you sent" ? <button type="button" className="btn-act" onClick={() => send(x.text)}>Send again</button> : undefined}>
+                  <Finding tone="warn" title="Not delivered" actions={x.text !== "A message you sent" ? <button type="button" className="btn-act" onClick={() => send(x.text, imagesFor(x.job))}>Send again</button> : undefined}>
                     {cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.
                   </Finding>
                 )}
@@ -243,6 +242,7 @@ export default function Session() {
         <div className="chat-compose">
           <LaptopNotice machine={cont?.machine} />
           <Composer
+            chat={id || undefined}
             placeholder={`Reply to ${agentName(s?.host)}…`}
             blocked={blocked}
             note={cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}

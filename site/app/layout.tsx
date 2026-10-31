@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import AccountButton from "@/components/AccountButton";
@@ -45,6 +45,10 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, title: "trackline", statusBarStyle: "default" },
 };
+
+// viewport-fit=cover is what makes env(safe-area-inset-*) real on an iPhone:
+// without it every inset the CSS asks for is 0.
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#f1f1ef" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

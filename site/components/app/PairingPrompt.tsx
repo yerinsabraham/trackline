@@ -134,7 +134,7 @@ function PairSheet({ pairing, onClose }: { pairing: Pairing; onClose: () => void
 
         {state === "idle" && (
           <p style={{ margin: 0, display: "flex", gap: 10, padding: "12px 14px", background: "#f5f5f3", borderRadius: 12, fontSize: 13, color: "var(--ink-2)", lineHeight: 1.45 }}>
-            <span style={{ width: 18, flex: "none" }}><IconShield /></span>
+            <IconShield size={18} />
             Only pair a laptop you are in front of. The code proves this screen and that laptop belong to the same person.
           </p>
         )}
@@ -147,7 +147,7 @@ function PairSheet({ pairing, onClose }: { pairing: Pairing; onClose: () => void
             <button className="btn-act" style={{ height: 48 }} onClick={onClose}>Done</button>
           ) : (
             <button className="btn-act" style={{ height: 48 }} disabled={code.length !== LEN || !keys?.length || state !== "idle"} onClick={pair}>
-              <span style={{ width: 18, display: "flex" }}><IconFace /></span>
+              <IconFace size={18} />
               {state === "signing" ? "Waiting for your passkey…" : state === "checking" ? "The laptop is checking…" : "Pair with your passkey"}
             </button>
           )}

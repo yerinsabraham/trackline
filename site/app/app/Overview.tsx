@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/account";
-import { ago, LIGHT_LABEL, requestLabel, type SessionSummary } from "@/lib/dashboard";
+import { ago, LIGHT_LABEL, requestLabel, type SessionSummary, whileVisible } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
@@ -37,8 +37,12 @@ export default function Overview() {
   // The same number as the On track page: its own endpoint, today's actions.
   const [onTrack, setOnTrack] = useState<number | null | undefined>(undefined);
   useEffect(() => {
-    api<{ score: { percent: number | null } }>("/app/ontrack?days=1").then((r) => setOnTrack(r.score.percent)).catch(() => setOnTrack(null));
-  }, [projects]);
+    // On its own slow clock: `projects` is a new object on every poll, and this
+    // reads a whole day of actions.
+    const load = () => { api<{ score: { percent: number | null } }>("/app/ontrack?days=1").then((r) => setOnTrack(r.score.percent)).catch(() => setOnTrack(null)); };
+    load();
+    return whileVisible(load, 60_000);
+  }, []);
 
   const shown = sessions.filter((s) =>
     filter === "all" ? true : filter === "done" ? s.light === "done" || s.light === "idle" : s.light === filter).slice(0, 12);
@@ -97,7 +101,7 @@ export default function Overview() {
           {(needsYou.length > 0 || asking.length > 0) && (
             <section className="card rise rise-3" aria-labelledby="needs" style={{ borderColor: "#f3c9bd" }}>
               <div className="card-head">
-                <span style={{ width: 18, color: "#c8321a", display: "flex" }}><IconAlert /></span>
+                <span style={{ color: "#c8321a", display: "flex" }}><IconAlert size={18} /></span>
                 <h2 id="needs">Needs you</h2>
               </div>
               {asking.slice(0, 3).map((j) => (
@@ -133,7 +137,7 @@ export default function Overview() {
               )}
               {remote?.machines.map((m) => (
                 <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span className="agent-logo" style={{ width: 38, height: 38 }}><span style={{ width: 20, display: "flex" }}><IconLaptop /></span></span>
+                  <span className="agent-logo" style={{ width: 38, height: 38 }}><IconLaptop size={20} /></span>
                   <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
                     <strong style={{ fontSize: 14 }}>{m.name}</strong>
                     <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, color: m.stopped ? "var(--red-ink)" : m.online ? "var(--ok-ink)" : "var(--muted)" }}>
@@ -160,7 +164,7 @@ export default function Overview() {
                 );
               })}
               <a href="/app/production" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-                <span className="agent-logo" style={{ width: 28, height: 28 }}><span style={{ width: 16, display: "flex" }}><IconServer /></span></span>
+                <span className="agent-logo" style={{ width: 28, height: 28 }}><IconServer size={16} /></span>
                 Deployed agents
                 <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--ink-2)" }}>Production</span>
               </a>

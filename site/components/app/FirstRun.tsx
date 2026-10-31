@@ -40,7 +40,7 @@ export default function FirstRun({ projects }: { projects: Project[] }) {
     <section className="card fr rise rise-1" aria-labelledby="fr-title">
       <div className="fr-head">
         <h2 id="fr-title">Set up trackline</h2>
-        <p className="fr-laptop"><span style={{ width: 16, display: "flex" }}><IconLaptop /></span>Do this on your laptop.</p>
+        <p className="fr-laptop"><IconLaptop size={16} />Do this on your laptop.</p>
       </div>
 
       <ol className="fr-steps">

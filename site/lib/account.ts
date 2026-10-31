@@ -19,7 +19,23 @@ export function setSession(token: string) {
   try { localStorage.setItem(KEY, token); } catch { /* private mode: the session lasts this tab */ }
 }
 export function clearSession() {
-  try { localStorage.removeItem(KEY); } catch { /* nothing to clear */ }
+  try {
+    localStorage.removeItem(KEY);
+    // Half-written messages are the person's, and leave with them.
+    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT)) localStorage.removeItem(k);
+  } catch { /* nothing to clear */ }
+}
+
+// A message not sent yet, by chat, on this device.
+const DRAFT = "trackline.draft.";
+
+export function readDraft(chat: string): string {
+  try { return localStorage.getItem(DRAFT + chat) ?? ""; } catch { return ""; }
+}
+export function saveDraft(chat: string, text: string) {
+  try {
+    if (text) localStorage.setItem(DRAFT + chat, text); else localStorage.removeItem(DRAFT + chat);
+  } catch { /* private mode: the draft lasts as long as the page */ }
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {

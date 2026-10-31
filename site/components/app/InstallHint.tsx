@@ -34,7 +34,7 @@ export default function InstallHint() {
       ) : (
         <span>Hear when an agent needs you. <a href="/app/alerts">Turn on alerts</a></span>
       )}
-      <button aria-label="Dismiss" onClick={dismiss}><span style={{ width: 16, display: "flex" }}><IconClose /></span></button>
+      <button aria-label="Dismiss" onClick={dismiss}><IconClose size={16} /></button>
     </div>
   );
 }

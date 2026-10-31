@@ -60,7 +60,7 @@ export default function Alerts() {
         <>
           <section className="card rise rise-1" aria-labelledby="here">
             <div className="card-head">
-              <span className="agent-logo" style={{ width: 36, height: 36 }}><span style={{ width: 18, display: "flex" }}><IconPhone /></span></span>
+              <span className="agent-logo" style={{ width: 36, height: 36 }}><IconPhone size={18} /></span>
               <h2 id="here">This {deviceLabel() === "This browser" ? "browser" : deviceLabel()}</h2>
               {thisDevice && <span className="pill working" style={{ marginLeft: "auto" }}>On</span>}
             </div>
@@ -84,7 +84,7 @@ export default function Alerts() {
                   setS(await api<AlertSettings>("/app/alerts/devices", { method: "POST", body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys, label: deviceLabel() }) }));
                   setMine(sub.endpoint ?? null);
                   setNote("Alerts are on here.");
-                })}><span style={{ width: 16, display: "flex" }}><IconBell /></span>Turn on alerts here</button>
+                })}><IconBell size={16} />Turn on alerts here</button>
               )}
               {can === "ok" && checked && thisDevice && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

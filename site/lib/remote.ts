@@ -95,7 +95,7 @@ async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promis
       userVerification: "required",
       timeout: 60_000,
     },
-  })) as PublicKeyCredential | null;
+  }).catch((e: Error) => { throw new Error(signError(e)); })) as PublicKeyCredential | null;
   if (!cred) throw new Error("No passkey signed.");
   const r = cred.response as AuthenticatorAssertionResponse;
   const key = keys.find((k) => k.id === b64u(cred.rawId));
@@ -104,6 +104,16 @@ async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promis
     key,
     assertion: { authenticatorData: b64u(r.authenticatorData), clientDataJSON: b64u(r.clientDataJSON), signature: b64u(r.signature) },
   };
+}
+
+/**
+ * What went wrong, in words. Browsers report a cancelled Face ID and a timeout
+ * as the same error, with a sentence written for developers.
+ */
+function signError(e: Error): string {
+  if (e.name === "NotAllowedError" || e.name === "AbortError") return "Face ID was cancelled, so nothing was sent. Try again.";
+  if (e.name === "InvalidStateError" || e.name === "SecurityError") return "This device could not use your passkey. Check it on your account page.";
+  return "Your passkey could not sign this. Try again.";
 }
 
 const PAIR = "trackline pair v2\n";
@@ -194,11 +204,12 @@ export async function prepareImage(file: File): Promise<Attachment> {
   };
 }
 
-// Previews of what was sent, for this page only: the images themselves are
-// not kept anywhere once the laptop has them.
-const sentPreviews = new Map<string, string[]>();
-export const rememberPreviews = (job: string, urls: string[]) => { if (urls.length) sentPreviews.set(job, urls); };
-export const previewsFor = (job: string) => sentPreviews.get(job) ?? [];
+// Images sent, for this page only, to show them and to send them again if
+// the laptop never got them. They are not kept anywhere once the page closes.
+const sentImages = new Map<string, Attachment[]>();
+export const rememberImages = (job: string, images: Attachment[]) => { if (images.length) sentImages.set(job, images); };
+export const imagesFor = (job: string) => sentImages.get(job) ?? [];
+export const previewsFor = (job: string) => imagesFor(job).map((i) => i.preview);
 
 /**
  * Signs a decision about something trackline stopped: allow it once, or keep
