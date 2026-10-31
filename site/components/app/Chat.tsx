@@ -230,7 +230,7 @@ export function LaptopNotice({ machine }: { machine: { name: string; online: boo
       <span>
         {machine.stopped
           ? <>Remote is stopped on <strong>{machine.name}</strong>. Nothing sent now will run until you turn it on there: <code>trackline remote enable</code></>
-          : <><strong>{machine.name}</strong> is asleep or offline{machine.lastSeenAt ? ` (last seen ${seen(machine.lastSeenAt)})` : ""}. A message waits 3 minutes for it, then is not delivered. Wake the laptop first.</>}
+          : <><strong>{machine.name}</strong> is asleep or offline{machine.lastSeenAt ? ` (last seen ${seen(machine.lastSeenAt)})` : ""}. A message runs when it wakes, for up to 12 hours, and Stop cancels it. One with images needs it awake.</>}
       </span>
     </div>
   );

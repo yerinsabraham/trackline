@@ -54,6 +54,24 @@ export function saveDraft(chat: string, text: string) {
   } catch { /* private mode: the draft lasts as long as the page */ }
 }
 
+/**
+ * The app's line to the server, which says only that something changed. Each
+ * ping is `onChange`; it returns when the line drops.
+ */
+export async function listen(onChange: () => void, onOpen: () => void, signal: AbortSignal) {
+  const token = session();
+  const res = await fetch(`${API}/app/stream`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal });
+  if (!res.ok || !res.body || !res.headers.get("content-type")?.includes("event-stream")) throw new Error("no stream");
+  onOpen();
+  const reader = res.body.getReader();
+  const text = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    if (text.decode(value).includes("data:")) onChange();
+  }
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = session();
   const res = await fetch(`${API}${path}`, {

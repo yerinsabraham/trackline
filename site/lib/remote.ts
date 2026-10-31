@@ -53,6 +53,9 @@ export function protectedMacArea(text: string): string | null {
 
 /** How long a job may wait for the laptop. The laptop refuses anything older. */
 const JOB_LIFE_MS = 3 * 60 * 1000;
+// For a laptop known to be asleep. Images do not wait: the server would hold
+// them for all that time, and they are the one thing here it cannot just lose.
+const JOB_WAIT_MS = 12 * 60 * 60 * 1000;
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
 
@@ -148,14 +151,14 @@ function jobId(): string {
  * Builds and signs a prompt for one project on one laptop. With a session,
  * the agent continues that conversation instead of starting one.
  */
-export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = []) {
+export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = [], wait = false) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
     v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}),
     // The hashes are signed; the bytes travel beside the job, and the laptop
     // takes only images that match.
     ...(images.length ? { images: images.map((i) => ({ type: i.type, size: i.size, sha256: i.sha256 })) } : {}),
-    issuedAt: now, expiresAt: now + JOB_LIFE_MS,
+    issuedAt: now, expiresAt: now + (wait && !images.length ? JOB_WAIT_MS : JOB_LIFE_MS),
   }));
   const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
   return {

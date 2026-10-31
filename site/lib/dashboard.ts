@@ -39,6 +39,8 @@ export type SessionJob = {
   asked: { question: string; options: string[] } | null;
   /** A macOS prompt the agent may be waiting behind. */
   permission: string | null;
+  /** The last thing it said while still working. */
+  saying?: string | null;
 };
 
 export const LIGHT_LABEL: Record<Light, string> = {
@@ -81,6 +83,19 @@ export function describe(e: FeedEvent): string {
 }
 
 /** Polls while the page is visible, and once more on coming back to it. */
+/** Whether the server's line is open, so polling can be the slow backstop. */
+export const line = { open: false };
+
+/** Polls, slowing to `slow` while the line is open and doing the work itself. */
+export function whileQuiet(fn: () => void, ms: number, slow: number): () => void {
+  let last = Date.now();
+  const run = () => { last = Date.now(); fn(); };
+  const onChange = () => run();
+  window.addEventListener("app:change", onChange);
+  const stop = whileVisible(() => { if (!line.open || Date.now() - last >= slow) run(); }, ms);
+  return () => { window.removeEventListener("app:change", onChange); stop(); };
+}
+
 export function whileVisible(fn: () => void, ms: number): () => void {
   let timer: ReturnType<typeof setInterval> | null = null;
   const start = () => { if (!timer) timer = setInterval(fn, ms); };

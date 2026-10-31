@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, markRead, readAt, readDraft, saveDraft } from "@/lib/account";
-import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileVisible } from "@/lib/dashboard";
+import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
 import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
@@ -145,7 +145,7 @@ export default function Session() {
       }
     };
     load();
-    return whileVisible(load, 2500);
+    return whileQuiet(load, 2500, 15_000);
   }, []);
 
   useLayoutEffect(() => {
@@ -211,7 +211,7 @@ export default function Session() {
   const known = view?.jobs ?? [];
   const jobs: SessionJob[] = [
     ...known,
-    ...sent.filter((x) => !known.some((j) => j.id === x.job)).map((x) => ({ id: x.job, kind: "prompt", status: "queued", code: null, reason: null, createdAt: x.createdAt, stopRequestedAt: null, asked: null, permission: null })),
+    ...sent.filter((x) => !known.some((j) => j.id === x.job)).map((x) => ({ id: x.job, kind: "prompt", status: "queued", code: null, reason: null, createdAt: x.createdAt, stopRequestedAt: null, asked: null, permission: null, saying: null })),
   ];
   const running = jobs.find((j) => active(j.status));
   const working = s?.light === "working" || !!running;
@@ -244,7 +244,7 @@ export default function Session() {
 
   const deliver = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images);
+    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images, !cont.machine.online);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -281,6 +281,9 @@ export default function Session() {
     try { await api(`/app/remote/jobs/${encodeURIComponent(running.id)}/stop`, { method: "POST", body: "{}" }); } catch { /* the button stays, and a tap tries again */ } finally { setStopping(false); }
   };
 
+  // Measured: a second process on one session keeps the file sound but forks
+  // the conversation, so the agent open at the desk never learns of this one.
+  const atDesk = !!s && known.length === 0 && Date.now() - +new Date(s.lastAt) < 30 * 60_000;
   const lastTurn = list[list.length - 1]?.key;
   const jobFor = new Map(jobs.flatMap((j) => { const t = turnOf(list, textOf(j), j.createdAt); return t ? [[t.key, j] as const] : []; }));
   const landed = new Set([...jobFor.values()].map((j) => j.id));
@@ -346,7 +349,7 @@ export default function Session() {
                     {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
                     {again && (
                       <Finding tone="warn" title="Not delivered" actions={<button type="button" className="btn-act" onClick={() => deliver(text, imagesFor(j.id))}>Send again</button>}>
-                        {j.status === "expired" ? `${cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.` : "An agent was already working in this project, so this never started."}
+                        {j.status === "expired" ? `${cont?.machine.name ?? "The laptop"} stayed asleep or offline, so this never reached it. Wake the laptop, then send it again.` : "An agent was already working in this project, so this never started."}
                       </Finding>
                     )}
                   </div>
@@ -388,6 +391,7 @@ export default function Session() {
                 </div>
               );
             })}
+            {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} />}
             {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
             {held && (
               <>
@@ -411,7 +415,7 @@ export default function Session() {
             chat={id || undefined}
             placeholder={`Reply to ${agentName(s?.host)}…`}
             blocked={blocked}
-            note={working ? `${agentName(s?.host)} is working. A message waits here until it finishes.` : cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
+            note={working ? `${agentName(s?.host)} is working. A message waits here until it finishes.` : atDesk ? "Open on your laptop? It won't show a reply sent from here." : cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
             onSend={send}
           />
         </div>

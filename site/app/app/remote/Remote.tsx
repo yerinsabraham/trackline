@@ -57,7 +57,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
     if (!machine || !project || !chosen || !keys?.length || !said) return;
     setBusy(true); setError("");
     try {
-      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items);
+      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items, !machine.online);
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
       remember(r.id, said);
       rememberImages(r.id, attach.items);
@@ -100,7 +100,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
               <strong style={{ fontSize: 14.5 }}>{machine.name}</strong>
               <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, color: machine.stopped ? "var(--red-ink)" : machine.online ? "var(--ok-ink)" : "var(--muted)" }}>
                 <span className={`dot ${machine.online && !machine.stopped ? "working" : ""}`} />
-                {machine.stopped ? "Stopped. Turn it on again on the laptop." : machine.online ? "Online" : "Asleep or offline. A task waits 3 minutes."}
+                {machine.stopped ? "Stopped. Turn it on again on the laptop." : machine.online ? "Online" : "Asleep or offline. A task waits up to 12 hours."}
               </span>
             </div>
             {machines.length > 1 && (
@@ -245,7 +245,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     if (!job || !(canContinue || again)) return;
     // Sending again goes where the first one was meant to: the same
     // conversation if it had one, a new one if not.
-    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, await passkeys.get(), job.session ?? undefined, images);
+    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, await passkeys.get(), job.session ?? undefined, images, machine ? !machine.online : false);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -277,7 +277,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}
             {job?.status === "queued" && (
               <p className="chat-divider">{machine && !machine.online
-                ? `Waiting for ${machineName}, which is asleep or offline. This waits 3 minutes for it.`
+                ? `Waiting for ${machineName}, which is asleep or offline. It runs when the laptop wakes, for up to 12 hours.`
                 : `Waiting for ${machineName} to pick it up…`}</p>
             )}
             {list.map((it, i) => it.kind === "activity"
@@ -289,7 +289,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
             {job?.status === "expired" && (
               <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, imagesFor(id), true)} /> : undefined}>
-                {machineName} was asleep or offline for 3 minutes, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
+                {machineName} stayed asleep or offline, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
               </Finding>
             )}
             {job && !live && job.status !== "done" && job.status !== "expired" && (

@@ -428,3 +428,17 @@ test("stopping a laptop asks in the app, not in a browser box", async ({ page, c
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("what the agent says while it works shows as it arrives", async ({ page, context }) => {
+  await fakeAccount(context, { light: "working", jobs: [job("job_1", "delivered", { saying: "Reading the login form now." })] });
+  await openChat(page);
+  await expect(page.locator(".bubble-agent", { hasText: "Reading the login form now." })).toBeVisible();
+});
+
+test("a ping from the server updates a chat at once", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { light: "working" });
+  await openChat(page);
+  fake.extra.push({ id: "live", at: new Date().toISOString(), turn: "t39", text: "Arrived by ping." });
+  await page.evaluate(() => window.dispatchEvent(new Event("app:change")));
+  await expect(page.locator(".bubble-agent", { hasText: "Arrived by ping." })).toBeVisible({ timeout: 1500 });
+});

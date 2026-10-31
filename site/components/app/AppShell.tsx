@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, cached, clearSession, keepCached, readAt, rememberNext, session, type User } from "@/lib/account";
-import { type Project, whileVisible } from "@/lib/dashboard";
+import { api, cached, clearSession, keepCached, listen, readAt, rememberNext, session, type User } from "@/lib/account";
+import { line, type Project, whileQuiet } from "@/lib/dashboard";
 import type { Overview as Remote } from "@/lib/remote";
 import Mark from "@/components/Mark";
 import AgentLogo from "./AgentLogo";
@@ -105,8 +105,25 @@ export default function AppShell({ section, agent, flush, chat, children }: {
     }
     api<{ user: User }>("/auth/me").then((r) => setUser(r.user)).catch(gone);
     load();
-    return whileVisible(load, 8000);
+    return whileQuiet(load, 8000, 30_000);
   }, [load, gone]);
+
+  // One line for the whole app: pages listen for what it hears. A dropped line
+  // is normal on a phone, and polling covers the gap until it reopens.
+  useEffect(() => {
+    if (!session()) return;
+    const stop = new AbortController();
+    (async () => {
+      while (!stop.signal.aborted) {
+        if (document.visibilityState === "visible") {
+          await listen(() => window.dispatchEvent(new Event("app:change")), () => { line.open = true; }, stop.signal).catch(() => {});
+          line.open = false;
+        }
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    })();
+    return () => stop.abort();
+  }, []);
 
   const sessions = projects?.flatMap((p) => p.sessions) ?? [];
   const count = (h: string) => sessions.filter((s) => s.host === h).length;

@@ -31,6 +31,12 @@ changelog page is built from this file.
   dark mode, the keyboard stays out of the way, and the icon shows a count.
   A turn's work reads as one line, like "Edited 4 files, Ran 2 commands", and
   opens to the steps. With no signal the app still opens on the last list.
+- **Live.** The app updates the moment something changes, and shows what the
+  agent is saying while it works. It uses less of the server, too.
+- **A sleeping laptop no longer loses your message.** A message sent while the
+  laptop is asleep runs when it wakes, for up to 12 hours, once, and Stop cancels
+  it. A message with images still needs the laptop awake. While a task runs, a
+  Mac stays awake unless its lid is closed.
 - **Write while the agent works.** Your message waits in the chat and Face ID
   sends it when the agent finishes.
 - **Longer replies.** The limit goes from 8,000 to 32,000 bytes, and a reply cut

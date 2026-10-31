@@ -80,6 +80,13 @@ const (
 	// MaxLife bounds how long a job may say it is valid for. A job captured
 	// in transit is useless after this.
 	MaxLife = 5 * time.Minute
+	// WaitLife is how long a plain prompt may wait for a laptop that is asleep,
+	// so a message sent from the train still arrives. It lengthens how long a
+	// signed prompt stays usable, and nothing else: Seen keeps its id just as
+	// long, so it still runs once, and the key, the project and the stop switch
+	// are all checked when it arrives. A decision on a blocked action stays at
+	// MaxLife, because hours later it would answer a question nobody remembers.
+	WaitLife = 12 * time.Hour
 	// Skew allows for the phone's clock and the laptop's disagreeing.
 	Skew = 2 * time.Minute
 	// Idle is how long a project may go unused, by a job or by an agent at the
@@ -140,6 +147,13 @@ type Accepted struct {
 	Root string
 }
 
+func lifeOf(kind string) time.Duration {
+	if kind == "prompt" {
+		return WaitLife
+	}
+	return MaxLife
+}
+
 // Check decides whether this laptop runs a job. It records the job as seen,
 // so the same signed job is never accepted twice, even if the server sends it
 // again.
@@ -176,8 +190,8 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 
 	issued, expires := time.UnixMilli(j.IssuedAt), time.UnixMilli(j.ExpiresAt)
 	switch {
-	case expires.Sub(issued) > MaxLife || !expires.After(issued):
-		return Accepted{}, refuse("too-long-lived", "the job claims to be valid for longer than %s", MaxLife)
+	case expires.Sub(issued) > lifeOf(j.Kind) || !expires.After(issued):
+		return Accepted{}, refuse("too-long-lived", "the job claims to be valid for longer than %s", lifeOf(j.Kind))
 	case issued.After(now.Add(Skew)):
 		return Accepted{}, refuse("not-yet-valid", "the job is dated in the future; check this laptop's clock")
 	case now.After(expires.Add(Skew)):

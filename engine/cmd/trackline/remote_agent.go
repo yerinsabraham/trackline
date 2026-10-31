@@ -13,8 +13,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -378,6 +380,8 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 		return remote.Result{Status: "failed", Reason: fmt.Sprintf("could not start %s: %v", agentNames[j.Agent], err)}
 	}
 
+	keepAwake(cmd)
+
 	lines := make(chan agent.Event, 256)
 	go func() {
 		defer close(lines)
@@ -571,4 +575,18 @@ func imagesNote(paths []string) string {
 		return "The person attached an image to this message, saved in this project at " + paths[0] + ". Look at it before you start."
 	}
 	return "The person attached " + fmt.Sprint(len(paths)) + " images to this message, saved in this project at " + strings.Join(paths, ", ") + ". Look at them before you start."
+}
+
+// keepAwake holds off idle sleep for as long as the agent runs: a laptop left
+// on a desk would otherwise sleep mid-task, and the person is away by
+// definition. caffeinate ends with the process it watches. A closed lid still
+// sleeps, and that is macOS's call to make, not ours.
+func keepAwake(cmd *exec.Cmd) {
+	if runtime.GOOS != "darwin" || cmd.Process == nil {
+		return
+	}
+	c := exec.Command("/usr/bin/caffeinate", "-i", "-w", strconv.Itoa(cmd.Process.Pid))
+	if c.Start() == nil {
+		go func() { _ = c.Wait() }()
+	}
 }

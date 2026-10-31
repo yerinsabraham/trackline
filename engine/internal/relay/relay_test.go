@@ -374,3 +374,41 @@ func TestParseKeyRefusesWeakOrMismatchedKeys(t *testing.T) {
 		t.Error("accepted a key whose type and algorithm disagree")
 	}
 }
+
+func TestOnlyAPromptMayWaitForASleepingLaptop(t *testing.T) {
+	waits := func(kind string, life time.Duration) relay.Job {
+		return job(func(j *relay.Job) {
+			j.Kind = kind
+			j.Agent = "claude"
+			j.ExpiresAt = now.Add(life).UnixMilli()
+		})
+	}
+	wake := now.Add(11 * time.Hour)
+	check := func(f fixture, env relay.Envelope, at time.Time) string {
+		_, err := relay.Check(f.state, env, machine, at)
+		return code(err)
+	}
+
+	f := setup(t)
+	env := f.phone.Send(waits("prompt", 12*time.Hour))
+	if got := check(f, env, wake); got != "accepted" {
+		t.Fatalf("a prompt that waited for the laptop: %s", got)
+	}
+	// Waiting must not reopen the door: its id is held for as long as it lives.
+	if got := check(f, env, wake.Add(time.Minute)); got != "replayed" {
+		t.Fatalf("the same prompt again, hours later: %s", got)
+	}
+
+	f = setup(t)
+	if got := check(f, f.phone.Send(waits("prompt", 13*time.Hour)), now); got != "too-long-lived" {
+		t.Fatalf("longer than a prompt may wait: %s", got)
+	}
+	f = setup(t)
+	if got := check(f, f.phone.Send(waits("allow", time.Hour)), now); got != "too-long-lived" {
+		t.Fatalf("a decision that lingers: %s", got)
+	}
+	f = setup(t)
+	if got := check(f, f.phone.Send(waits("prompt", 12*time.Hour)), now.Add(13*time.Hour)); got != "expired" {
+		t.Fatalf("a prompt nothing collected in time: %s", got)
+	}
+}
