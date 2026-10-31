@@ -257,7 +257,7 @@ export default function Sessions() {
         </div>
       )}
       {menu && (
-        <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt }}
+        <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt, onTeam: !!menu.agentId }}
           onClose={() => setMenu(null)} onChanged={() => { setRows(null); read(0).catch(() => {}); }} onDelete={() => remove([menu.id])}
           onSelect={() => setChoosing(true)} onAgent={() => setWho(menu)} />
       )}

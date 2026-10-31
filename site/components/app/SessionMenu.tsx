@@ -7,7 +7,7 @@ import { api } from "@/lib/account";
 // a phone has no hover. Deleting takes no confirmation here, because it comes
 // with an Undo; clearing has no Undo, so it asks once.
 
-export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean };
+export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean; onTeam?: boolean };
 
 export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect, onAgent }: {
   session: MenuSession;
@@ -56,7 +56,15 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
         ) : (
           <>
             <strong className="sheet-title">{session.name}</strong>
-            {onAgent && <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>Agent and team</button>}
+            {onAgent && (session.onTeam
+              ? <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>View agent</button>
+              : <button type="button" className="sheet-item" onClick={async () => {
+                try {
+                  await api(`${path}/team`, { method: "POST", body: "{}" });
+                  onChanged();
+                  onClose();
+                } catch (e) { setError((e as Error).message); }
+              }}>Add to team</button>)}
             <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename chat</button>
             <button type="button" className="sheet-item" onClick={() => change({ pinned: !session.pinned })}>{session.pinned ? "Unpin" : "Pin"}</button>
             <button type="button" className="sheet-item" onClick={() => change({ archived: !session.archived })}>{session.archived ? "Unarchive" : "Archive"}</button>

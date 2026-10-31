@@ -576,11 +576,19 @@ test("one nobody approved says so", async ({ page, context }) => {
   await expect(page.getByText("Nobody approved this in time")).toBeVisible();
 });
 
-test("the three dots also reach add to team", async ({ page, context }) => {
+test("the three dots add to the team in one tap", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
   await page.getByRole("button", { name: "Chat options" }).first().click();
-  await page.getByRole("button", { name: "Agent and team" }).click();
   await page.getByRole("button", { name: "Add to team" }).click();
   await expect.poll(() => fake.calls.some((c) => c.path.endsWith("/team"))).toBe(true);
+});
+
+test("the tags around pasted text never show", async ({ page, context }) => {
+  const title = '<\\pasted_content id="4aa2"> Do you know FIFA Street?';
+  const fake = await fakeAccount(context);
+  fake.list = [{ ...fake.list[0], title }];
+  await page.goto("/app/sessions");
+  await expect(page.locator(".row-title").first()).toHaveText("Do you know FIFA Street?");
+  await expect(page.getByText("pasted_content")).toHaveCount(0);
 });

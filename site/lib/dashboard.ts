@@ -146,13 +146,17 @@ export const WAKE: Record<string, { text: string; copy?: string }> = {
  * the agent as a message the laptop writes (engine/cmd/trackline/remote_agent.go,
  * decisionText); shown whole it would read as something you typed.
  */
+/** Claude Code wraps pasted text in tags of its own, which are not the person's words. */
+export const withoutPasteTags = (text: string) => text.replace(/<\\?\/?\\?pasted_content\b[^>]*>/g, "").trim();
+
 /** A session's name: what is known of it, or where and when it ran. */
 export function sessionName(s: { title?: string | null; host: string; startedAt: string }, agent: string, project?: string): string {
-  return s.title || [agent, project, new Date(s.startedAt).toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
+  return (s.title && withoutPasteTags(s.title)) || [agent, project, new Date(s.startedAt).toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
 }
 
 export function requestLabel(text: string | null): string | null {
   if (!text) return text;
+  text = withoutPasteTags(text);
   const allow = text.match(/^You were stopped by trackline \([^:]+: (.+?)\)\. The person you are working with has now approved/);
   if (allow) return `Allowed once from your phone: ${allow[1]}`;
   const deny = text.match(/^The person you are working with has decided, from their phone, to keep this blocked \([^:]+: (.+?)\)\./);
