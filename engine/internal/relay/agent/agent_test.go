@@ -198,3 +198,37 @@ func TestCodexAttachesImages(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenClaudeChatsListsOnlyInteractiveSessions(t *testing.T) {
+	open, err := agent.OpenClaudeChats([]byte(`[
+		{"pid":1,"cwd":"/w","kind":"interactive","sessionId":"open-1","name":"app-3b","status":"idle"},
+		{"pid":2,"cwd":"/w","kind":"background","sessionId":"bg-1"},
+		{"pid":3,"cwd":"/w","kind":"interactive"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(open, map[string]bool{"open-1": true}) {
+		t.Fatalf("open = %v", open)
+	}
+	if _, err := agent.OpenClaudeChats([]byte(`not json`)); err == nil {
+		t.Fatal("an unreadable list must be an error, so the chat counts as open")
+	}
+}
+
+func TestQueueCommandKeepsFlagLikeTextAsText(t *testing.T) {
+	argv := agent.QueueCommand("codex", "sess-1", "--dangerously-bypass-approvals-and-sandbox")
+	want := []string{"codex", "queue", "--thread", "sess-1", "--message=--dangerously-bypass-approvals-and-sandbox"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Fatalf("argv = %v", argv)
+	}
+}
+
+func TestLockedRecognisesOnlyTheWriterLock(t *testing.T) {
+	if !agent.Locked("thread abc already has an active writer") {
+		t.Fatal("the lock was not recognised")
+	}
+	if agent.Locked("model overloaded") || agent.Locked("") {
+		t.Fatal("another failure must not be sent on to an open chat")
+	}
+}

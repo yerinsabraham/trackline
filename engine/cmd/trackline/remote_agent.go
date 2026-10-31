@@ -195,6 +195,18 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("agent-missing", fmt.Sprintf("%s was not found on this laptop. Install it, then run trackline remote enable again", name))
 		return
 	}
+	if j.Session != "" && j.Agent == "claude" {
+		// Measured: a second process on an open chat reaches its file but never
+		// its screen, and the two go on to fork. Not knowing counts as open.
+		switch open, err := claudeChatOpen(binary, s.Path, j.Session); {
+		case err != nil:
+			refuse("in-use", "the laptop could not tell whether this chat is open. Update Claude Code, or close the chat and send again")
+			return
+		case open:
+			refuse("in-use", "this chat is open on your computer. Close it there and send again, or start a new task")
+			return
+		}
+	}
 	var images []string
 	if len(j.Images) > 0 {
 		images, err = saveImages(client, j, got.Root)
@@ -230,6 +242,9 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		defer r.finish(j.Project)
 		defer cancel(nil)
 		res := runAgent(ctx, cancel, client, d.ID, j, got.Root, argv, s.Path, guard, grants)
+		if j.Session != "" && j.Agent == "codex" && agent.Locked(res.Reason) {
+			res = joinOpenChat(ctx, j, got.Root, binary, s.Path, s.OpenChats)
+		}
 		if res.Session != "" {
 			_ = relay.Update(func(s *relay.State) error { s.Ran(j.Project, res.Session); return nil })
 		}
@@ -238,6 +253,43 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		}
 		logf("job %s ended: %s %s", d.ID, res.Status, res.Code)
 	}()
+}
+
+// claudeChatOpen asks Claude Code whether a session is open somewhere.
+func claudeChatOpen(binary, path, session string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, "agents", "--json")
+	cmd.Env = agentEnv(os.Environ(), path, "", "", "")
+	list, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	open, err := agent.OpenClaudeChats(list)
+	return open[session], err
+}
+
+// joinOpenChat hands a message to the Codex process holding its chat. Only a
+// plain message goes: a decision answers a check in a run of our own, and
+// codex queue takes no images.
+func joinOpenChat(ctx context.Context, j relay.Job, root, binary, path string, allowed bool) remote.Result {
+	busy := remote.Result{Status: "refused", Code: "in-use"}
+	switch {
+	case !allowed:
+		busy.Reason = "this chat is open on your computer. Close it there and send again, or start a new task"
+		return busy
+	case j.Kind != "prompt" || len(j.Images) > 0:
+		busy.Reason = "this chat is open on your computer, and only a plain message can join it. Close it there and send again"
+		return busy
+	}
+	argv := agent.QueueCommand(binary, j.Session, j.Text)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = root
+	cmd.Env = agentEnv(os.Environ(), path, "", "", "")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return remote.Result{Status: "failed", Reason: strings.TrimSpace(fmt.Sprintf("the open chat did not take the message: %v\n%s", err, out))}
+	}
+	return remote.Result{Status: "done", Code: "queued", Output: "Sent to your open chat.", Session: j.Session}
 }
 
 // decide records "allow once" where trackline's hook will find it: the next

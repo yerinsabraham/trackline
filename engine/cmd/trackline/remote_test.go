@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -328,6 +329,11 @@ func TestLaunchPlistIsValid(t *testing.T) {
 // fakeClaude is a stand-in for Claude Code: it records how it was started,
 // and answers in Claude's stream-json. Told "sleep", it works until stopped.
 const fakeClaude = `#!/bin/sh
+if [ "$1" = "agents" ]; then
+	if [ -n "$FAKE_LIST_FAILS" ]; then exit 1; fi
+	printf '[{"kind":"interactive","sessionId":"%s"}]' "$FAKE_OPEN"
+	exit 0
+fi
 prompt=$(cat)
 printf '%s' "$prompt" > "$FAKE_OUT/prompt"
 echo "$@" > "$FAKE_OUT/argv"
@@ -390,6 +396,100 @@ func runUntilStopped(t *testing.T) {
 func read(t *testing.T, path string) string {
 	b, _ := os.ReadFile(path)
 	return strings.TrimSpace(string(b))
+}
+
+func reply(phone *relaytest.Phone, id, project string) remote.Delivery {
+	now := time.Now()
+	return remote.Delivery{ID: id, Envelope: phone.Send(relay.Job{V: 1, ID: id, Machine: "dev_laptop", Project: project,
+		Kind: "prompt", Agent: "claude", Session: "sess-1", Text: "carry on", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}
+}
+
+func TestReplyToAnOpenClaudeChatIsHeld(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	t.Setenv("FAKE_OPEN", "sess-1")
+	f.queue = []remote.Delivery{reply(phone, "job_open", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	if res := f.results["job_open"]; res.Status != "refused" || res.Code != "in-use" {
+		t.Fatalf("result: %+v", res)
+	}
+	if read(t, filepath.Join(out, "prompt")) != "" {
+		t.Error("a second process ran on an open chat")
+	}
+}
+
+func TestReplyIsHeldWhenItCannotTellTheChatIsClosed(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	t.Setenv("FAKE_LIST_FAILS", "1")
+	f.queue = []remote.Delivery{reply(phone, "job_unknown", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	if res := f.results["job_unknown"]; res.Code != "in-use" {
+		t.Fatalf("result: %+v", res)
+	}
+	if read(t, filepath.Join(out, "prompt")) != "" {
+		t.Error("unknown must count as open")
+	}
+}
+
+func TestReplyToAClosedClaudeChatResumesIt(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	t.Setenv("FAKE_OPEN", "another-chat")
+	f.queue = []remote.Delivery{reply(phone, "job_closed", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	if res := f.results["job_closed"]; res.Status != "done" {
+		t.Fatalf("result: %+v", res)
+	}
+	if !strings.Contains(read(t, filepath.Join(out, "argv")), "--resume sess-1") {
+		t.Error("the chat was not continued")
+	}
+}
+
+// fakeCodex is Codex holding a chat: resume is refused, as measured on 0.166.
+func fakeCodex(t *testing.T) (binary, out string) {
+	t.Helper()
+	bin, out := t.TempDir(), t.TempDir()
+	script := "#!/bin/sh\nif [ \"$1\" = queue ]; then for a; do echo \"$a\"; done > " + out + "/queued; exit 0; fi\n" +
+		"echo 'thread abc already has an active writer' >&2; exit 1\n"
+	os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755)
+	return filepath.Join(bin, "codex"), out
+}
+
+func TestJoinOpenChat(t *testing.T) {
+	bin, out := fakeCodex(t)
+	j := relay.Job{Kind: "prompt", Session: "sess-1", Text: "--carry on"}
+
+	if res := joinOpenChat(context.Background(), j, t.TempDir(), bin, "", false); res.Code != "in-use" {
+		t.Fatalf("not switched on, got %+v", res)
+	}
+	if read(t, filepath.Join(out, "queued")) != "" {
+		t.Fatal("queued without the person's say-so at the laptop")
+	}
+
+	withImage := j
+	withImage.Images = []relay.Image{{Type: "image/png"}}
+	decision := j
+	decision.Kind = "allow"
+	for _, held := range []relay.Job{withImage, decision} {
+		if res := joinOpenChat(context.Background(), held, t.TempDir(), bin, "", true); res.Code != "in-use" {
+			t.Fatalf("%+v was not held: %+v", held, res)
+		}
+	}
+
+	res := joinOpenChat(context.Background(), j, t.TempDir(), bin, "", true)
+	if res.Status != "done" || res.Code != "queued" || res.Session != "sess-1" {
+		t.Fatalf("result: %+v", res)
+	}
+	if got := read(t, filepath.Join(out, "queued")); !strings.Contains(got, "--message=--carry on") {
+		t.Fatalf("queued: %s", got)
+	}
 }
 
 func TestRemotePromptRunsTheAgentWatched(t *testing.T) {

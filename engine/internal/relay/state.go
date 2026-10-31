@@ -25,6 +25,10 @@ type State struct {
 	RP       *RP                `json:"rp,omitempty"`
 	Keys     []Key              `json:"keys"`
 	Projects map[string]Enabled `json:"projects"`
+	// OpenChats lets a phone message join a Codex chat open on this laptop. That
+	// chat keeps its own permissions, not the narrow ones a phone run gets, so
+	// only a person at a terminal here turns it on.
+	OpenChats bool `json:"openChats,omitempty"`
 	// All means every project connected on this laptop takes jobs, so a new
 	// one needs no step of its own. Pairing a passkey here is the consent: it
 	// is done at this laptop, and no job passes without that passkey's

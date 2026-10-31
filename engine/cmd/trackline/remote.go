@@ -79,6 +79,7 @@ func rpFor(s *relay.State) (relay.RP, error) {
 
 func remoteEnable(args []string) error {
 	root, pair, start := "", false, true
+	var openChats *bool
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--root", "-root":
@@ -90,6 +91,12 @@ func remoteEnable(args []string) error {
 			pair = true
 		case "--no-start":
 			start = false
+		case "--open-chats":
+			on := true
+			openChats = &on
+		case "--no-open-chats":
+			off := false
+			openChats = &off
 		}
 	}
 	named := root != ""
@@ -123,6 +130,12 @@ func remoteEnable(args []string) error {
 	}
 	if len(s.Keys) == 0 || pair {
 		if err := pairPasskey(client, creds, s); err != nil {
+			return err
+		}
+	}
+
+	if openChats != nil {
+		if err := relay.Update(func(s *relay.State) error { s.OpenChats = *openChats; return nil }); err != nil {
 			return err
 		}
 	}

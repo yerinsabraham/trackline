@@ -98,6 +98,38 @@ func Command(name, binary, root, session string, images ...string) ([]string, er
 	return nil, errors.New("unknown agent: " + name)
 }
 
+// OpenClaudeChats reads the output of `claude agents --json`, the supported
+// list of running sessions, and returns the ids of those open interactive.
+// A headless run is not listed, and a background session has its own owner.
+func OpenClaudeChats(list []byte) (map[string]bool, error) {
+	var sessions []struct {
+		SessionID string `json:"sessionId"`
+		Kind      string `json:"kind"`
+	}
+	if err := json.Unmarshal(list, &sessions); err != nil {
+		return nil, err
+	}
+	open := map[string]bool{}
+	for _, s := range sessions {
+		if s.SessionID != "" && s.Kind == "interactive" {
+			open[s.SessionID] = true
+		}
+	}
+	return open, nil
+}
+
+// Locked is whether a failed Codex run failed because another process holds
+// the conversation. Measured on 0.166: the lock refuses a second writer even
+// while the first sits idle.
+func Locked(reason string) bool { return strings.Contains(reason, "active writer") }
+
+// QueueCommand hands a message to the Codex process that owns a conversation,
+// as its next turn. It is the one command line that carries the person's text:
+// codex queue reads no stdin. The = keeps text that looks like a flag as text.
+func QueueCommand(binary, session, text string) []string {
+	return []string{binary, "queue", "--thread", session, "--message=" + text}
+}
+
 // Event is one thing the agent did, as the phone shows it.
 type Event struct {
 	// Kind is session (the agent's own session id, in Text), say (the agent
