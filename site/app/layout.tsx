@@ -48,7 +48,7 @@ export const metadata: Metadata = {
 
 // viewport-fit=cover is what makes env(safe-area-inset-*) real on an iPhone:
 // without it every inset the CSS asks for is 0.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#f1f1ef" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f1f1ef" }, { media: "(prefers-color-scheme: dark)", color: "#0f0f10" }] };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

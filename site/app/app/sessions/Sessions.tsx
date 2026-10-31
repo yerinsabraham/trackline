@@ -165,18 +165,18 @@ export default function Sessions() {
       <header className="rise">
         <h1 className="app-h1">Sessions</h1>
       </header>
-      <div className="seg rise rise-1" role="tablist" aria-label="Agent">
+      <div className="seg rise rise-1" role="group" aria-label="Agent">
         {AGENTS.map(([a, label]) => (
-          <button key={a || "all"} role="tab" aria-selected={agent === a} onClick={() => pick(a)}>
+          <button key={a || "all"} aria-pressed={agent === a} onClick={() => pick(a)}>
             {a && <AgentLogo host={a} size={20} />}
             <span className="seg-label">{label}</span>
           </button>
         ))}
       </div>
       <input type="search" className="list-search rise rise-2" aria-label="Search sessions" placeholder="Search names and replies" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="chips rise rise-2" role="tablist" aria-label="Status">
+      <div className="chips rise rise-2" role="group" aria-label="Status">
         {FILTERS.map(([f, label]) => (
-          <button key={f} role="tab" className="pick" aria-selected={filter === f} onClick={() => setFilter(f)}>
+          <button key={f} className="pick" aria-pressed={filter === f} onClick={() => setFilter(f)}>
             {label}{f === "all" && rows ? ` ${total}` : ""}
           </button>
         ))}

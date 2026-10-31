@@ -5,6 +5,7 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { api, readDraft, saveDraft } from "@/lib/account";
 import { addPasskey, withStepUp } from "@/lib/security";
 import ReplyText, { LinkedText } from "@/components/ReplyText";
+import CopyButton from "@/components/CopyButton";
 import AgentLogo from "./AgentLogo";
 import { Cmd } from "./FirstRun";
 import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconTerminal, IconUp } from "./icons";
@@ -19,7 +20,33 @@ import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage } from "@/
  * long chat is never seen sliding past on the way to the bottom.
  */
 export function useChatScroll() {
+  useKeyboard();
   return useStickToBottom({ initial: "instant", resize: "instant" });
+}
+
+/**
+ * The height left above the keyboard. iOS ignores interactive-widget and leaves
+ * dvh alone, and in a Home Screen app it can also scroll the page up behind the
+ * keyboard, so the chat takes its height from the visual viewport itself.
+ */
+function useKeyboard() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const fit = () => {
+      root.style.setProperty("--vvh", `${vv.height}px`);
+      if (window.scrollY) window.scrollTo(0, 0);
+    };
+    fit();
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    return () => {
+      vv.removeEventListener("resize", fit);
+      vv.removeEventListener("scroll", fit);
+      root.style.removeProperty("--vvh");
+    };
+  }, []);
 }
 
 /** Back to the newest message, when you have scrolled away from it. */
@@ -106,16 +133,34 @@ export function MyMessage({ text, note, images, actions }: { text: string; note?
   );
 }
 
-/** What the agent did, as a terminal would show it. */
+const SAID: [RegExp, string, string][] = [[/^Edit/, "Edited", "file"], [/^Write/, "Wrote", "file"], [/^Delete/, "Deleted", "file"], [/^Read/, "Read", "file"], [/^Run/, "Ran", "command"]];
+
+/** A turn's work in a line, for people reading the conversation and not the log. */
+export function summarise(lines: Line[]): string {
+  const counts = new Map<string, { n: number; noun: string }>();
+  let other = 0;
+  for (const l of lines) {
+    const hit = SAID.find(([re]) => re.test(l.verb));
+    if (!hit) { other++; continue; }
+    const c = counts.get(hit[1]) ?? { n: 0, noun: hit[2] };
+    c.n++;
+    counts.set(hit[1], c);
+  }
+  const parts = [...counts].map(([verb, { n, noun }]) => `${verb} ${n} ${noun}${n === 1 ? "" : "s"}`);
+  if (other) parts.push(`${other} other step${other === 1 ? "" : "s"}`);
+  return parts.join(", ");
+}
+
+/** What the agent did: one line, opening to the steps, as a terminal showed them. */
 export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
   if (!lines.length && !live) return null;
   return (
-    <div className="aterm rise">
-      <div className="term-head">
+    <details className="aterm rise" open={live}>
+      <summary className="term-head">
         <IconTerminal size={14} />
-        <span>Activity · {lines.length} step{lines.length === 1 ? "" : "s"}</span>
+        <span>{summarise(lines) || "Working"}</span>
         {live && <span className="live">live</span>}
-      </div>
+      </summary>
       {lines.map((l) => (
         <div key={l.key} className="term-line">
           {l.time && <span className="t">{l.time}</span>}
@@ -126,14 +171,14 @@ export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
       {live && (
         <div className="term-line"><span className="v dim">Working</span><span className="term-caret" aria-hidden="true" /></div>
       )}
-    </div>
+    </details>
   );
 }
 
 export function Finding({ tone, title, children, actions }: { tone: "block" | "warn"; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div className={`finding ${tone === "warn" ? "warn" : ""}`}>
-      <span style={{ flex: "none", color: tone === "warn" ? "#9a6700" : "#c8321a", display: "flex" }}>
+      <span style={{ flex: "none", color: tone === "warn" ? "var(--amber-ink)" : "var(--red-ink)", display: "flex" }}>
         {tone === "warn" ? <IconAlert size={20} /> : <IconShield size={20} />}
       </span>
       <div style={{ flexGrow: 1, minWidth: 0 }}>
@@ -204,6 +249,7 @@ export function AgentReply({ host, text, cut }: { host: string | null; text: str
       <div className="body">
         <ReplyText text={text} />
         {cut && <p className="reply-cut">Cut short. The rest is on your laptop.</p>}
+        <div className="reply-tools"><CopyButton text={text} /></div>
       </div>
     </div>
   );

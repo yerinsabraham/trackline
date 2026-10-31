@@ -234,8 +234,11 @@ test("scrolling to the top loads earlier messages and keeps your place", async (
   await fakeAccount(context, { more: true, older: Array.from({ length: 30 }, (_, i) => ({ id: `old${i}`, at: at(2000 - i), turn: `o${i}`, text: `Earlier reply ${i}, with enough words to take up some of the screen when it is read on a phone.` })) });
   await openChat(page);
   const reading = page.locator(".bubble-agent", { hasText: "Reply number 0," });
-  await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 0; });
-  await expect(page.locator(".bubble-agent", { hasText: "Earlier reply 0" })).toHaveCount(1);
+  // Kept at the top, as a finger is: one jump can land between two frames.
+  await expect(async () => {
+    await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 0; });
+    await expect(page.locator(".bubble-agent", { hasText: "Earlier reply 0" })).toHaveCount(1, { timeout: 800 });
+  }).toPass();
   await expect(page.getByRole("button", { name: "Load earlier" })).toHaveCount(0);
   await expect(reading).toBeInViewport();
 });
@@ -354,4 +357,74 @@ test("search narrows the list", async ({ page, context }) => {
   await page.fill(".list-search", "dark");
   await expect(page.locator(".swipe")).toHaveCount(1);
   await expect(page.locator(".swipe")).toContainText("Add dark mode");
+});
+
+test("a turn's work reads as one line, and opens to the steps", async ({ page, context }) => {
+  await fakeAccount(context);
+  await openChat(page);
+  const work = page.locator(".aterm").last();
+  await expect(work.locator("summary")).toContainText("Edited 1 file");
+  await expect(work.locator(".term-line").first()).toBeHidden();
+  await work.locator("summary").click();
+  await expect(work.locator(".term-line").first()).toBeVisible();
+});
+
+test("moving between tabs keeps the frame and its data", async ({ page, context }) => {
+  await fakeAccount(context);
+  let overview = 0;
+  page.on("request", (r) => { if (r.url().endsWith("/app/overview")) overview++; });
+  await page.goto("/app");
+  await page.locator(".inbox .row-link").first().waitFor();
+  const reads = overview;
+  await page.locator(".app-tab", { hasText: "Sessions" }).click();
+  await page.waitForURL(/\/app\/sessions/);
+  await page.locator(".swipe").first().waitFor();
+  await page.locator(".app-tab", { hasText: "Home" }).click();
+  await expect(page.locator(".inbox .row-link").first()).toBeVisible({ timeout: 500 });
+  expect(overview).toBe(reads);
+});
+
+test("a phone opens on its chats, with what needs you first", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app");
+  await expect(page.locator(".inbox .row-link").first()).toContainText("needs you".replace("needs you", "Needs you"));
+});
+
+test("with no connection the app says so and shows the last list", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app");
+  await page.locator(".inbox .row-link").first().waitFor();
+  await context.unroute("https://api.creovine.com/**");
+  await context.route("https://api.creovine.com/**", (r) => r.abort());
+  await page.reload();
+  await expect(page.locator(".offline-bar")).toBeVisible({ timeout: 12000 });
+  await expect(page.locator(".inbox .row-link").first()).toBeVisible();
+});
+
+test("dark mode leaves nothing dark on dark", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await openChat(page);
+  const look = () => page.evaluate(() => {
+    const lum = (c: string) => { const [r, g, b] = c.match(/[\d.]+/g)!.map(Number); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const bg = (el: Element | null): string => {
+      for (; el; el = el.parentElement) { const c = getComputedStyle(el).backgroundColor; if (!/rgba\(.*, 0\)|transparent/.test(c)) return c; }
+      return "rgb(255,255,255)";
+    };
+    return [...document.querySelectorAll(".chat-head h1, .bubble-agent p, .bubble-me > div, .composer textarea, .row-meta")].map((el) => {
+      const cs = getComputedStyle(el);
+      return { what: el.className || el.tagName, gap: Math.abs(lum(cs.color) - lum(bg(el))) };
+    }).filter((x) => x.gap < 90);
+  });
+  expect(await look()).toEqual([]);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".chat-scroll")!.closest(".app-shell")!).colorScheme)).toBe("dark");
+});
+
+test("stopping a laptop asks in the app, not in a browser box", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app/machines");
+  await page.getByRole("button", { name: /^Stop/ }).first().click();
+  await expect(page.getByRole("dialog")).toContainText("Stop remote on this laptop?");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });

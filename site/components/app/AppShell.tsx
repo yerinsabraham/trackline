@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, clearSession, rememberNext, session, type User } from "@/lib/account";
+import { api, cached, clearSession, keepCached, readAt, rememberNext, session, type User } from "@/lib/account";
 import { type Project, whileVisible } from "@/lib/dashboard";
 import type { Overview as Remote } from "@/lib/remote";
 import Mark from "@/components/Mark";
@@ -57,6 +58,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [offline, setOffline] = useState(false);
   const [remote, setRemote] = useState<Remote | null>(null);
   const [error, setError] = useState("");
   // Sessions filtered to one agent say so in the address; the sidebar lights it.
@@ -81,8 +83,16 @@ export default function AppShell({ section, agent, flush, chat, children }: {
 
   const load = useCallback(() => {
     api<{ projects: Project[] }>("/app/overview")
-      .then((r) => { setProjects(r.projects); setError(""); })
-      .catch((e) => { if (!gone(e)) setError((e as Error).message); });
+      .then((r) => { setProjects(r.projects); setError(""); setOffline(false); keepCached("overview", r.projects); })
+      .catch((e) => {
+        if (gone(e)) return;
+        // No answer at all is no signal, which is worth saying differently, and
+        // the last list is still worth reading.
+        if ((e as { status?: number }).status === undefined) {
+          setOffline(true);
+          setProjects((p) => p ?? cached<Project[]>("overview"));
+        } else setError((e as Error).message);
+      });
     // Remote answers 404 while it is switched off for the account service.
     api<Remote>("/app/remote").then(setRemote).catch((e) => { if (!gone(e)) setRemote({ machines: [], pairings: [], jobs: [] }); });
   }, [gone]);
@@ -102,6 +112,12 @@ export default function AppShell({ section, agent, flush, chat, children }: {
   const count = (h: string) => sessions.filter((s) => s.host === h).length;
   const wired = (h: string) => !!projects?.some((p) => p.agents.some((a) => a.host === h && a.wired));
   const needsYou = sessions.filter((s) => s.light === "needs-you").length;
+  const unread = sessions.filter((s) => s.reply && +new Date(s.reply.at) > (readAt(s.id) ?? Infinity)).length;
+  useEffect(() => {
+    if (!projects || !("setAppBadge" in navigator)) return;
+    const n = needsYou + unread;
+    (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  }, [projects, needsYou, unread]);
 
   const here = (s: Section) => (section === s && !agent ? "page" : undefined);
 
@@ -109,24 +125,24 @@ export default function AppShell({ section, agent, flush, chat, children }: {
     <Ctx.Provider value={{ user, projects, remote, error, refresh: load }}>
       <div className={`app-shell ${chat ? "chat-mode" : ""}`}>
         <nav className="app-side" aria-label="Main">
-          <a href="/app" className="app-brand"><Mark />trackline</a>
-          <a href="/app/remote" className="app-new"><IconPlus />New task</a>
+          <Link href="/app" className="app-brand"><Mark />trackline</Link>
+          <Link href="/app/remote" className="app-new"><IconPlus />New task</Link>
           <div className="app-nav">
-            <a className="app-link" href="/app" aria-current={here("overview")}><IconHome />Overview</a>
-            <a className="app-link" href="/app/ontrack" aria-current={here("ontrack")}><IconTarget />On track</a>
-            <a className="app-link" href="/app/production" aria-current={here("production")}><IconServer />Production</a>
-            <a className="app-link" href="/app/sessions" aria-current={here("sessions")}><IconChat />All sessions<span className="count">{sessions.length || ""}</span></a>
-            <a className="app-link" href="/app/machines" aria-current={here("machines")}><IconLaptop />Machines</a>
-            <a className="app-link" href="/app/alerts" aria-current={here("alerts")}><IconBell />Alerts{needsYou > 0 && <span className="badge">{needsYou}</span>}</a>
+            <Link className="app-link" href="/app" aria-current={here("overview")}><IconHome />Overview</Link>
+            <Link className="app-link" href="/app/ontrack" aria-current={here("ontrack")}><IconTarget />On track</Link>
+            <Link className="app-link" href="/app/production" aria-current={here("production")}><IconServer />Production</Link>
+            <Link className="app-link" href="/app/sessions" aria-current={here("sessions")}><IconChat />All sessions<span className="count">{sessions.length || ""}</span></Link>
+            <Link className="app-link" href="/app/machines" aria-current={here("machines")}><IconLaptop />Machines</Link>
+            <Link className="app-link" href="/app/alerts" aria-current={here("alerts")}><IconBell />Alerts{needsYou > 0 && <span className="badge">{needsYou}</span>}</Link>
           </div>
           <div className="app-nav">
             <div className="app-nav-label">Agents</div>
             {HOSTS.map((h) => (
-              <a key={h} className="app-link" href={`/app/sessions?agent=${h}`} aria-current={agent === h ? "page" : undefined}>
+              <Link key={h} className="app-link" href={`/app/sessions?agent=${h}`} aria-current={agent === h ? "page" : undefined}>
                 <AgentLogo host={h} size={22} />
                 {h === "claude-code" ? "Claude Code" : h === "codex" ? "Codex" : "Cursor"}
                 <span className="count">{count(h) || (projects && !wired(h) ? "Set up" : "")}</span>
-              </a>
+              </Link>
             ))}
           </div>
           <div className="app-me">
@@ -140,17 +156,20 @@ export default function AppShell({ section, agent, flush, chat, children }: {
         </nav>
 
         <header className="app-top">
-          <a href="/app" className="app-brand"><Mark />trackline</a>
+          <Link href="/app" className="app-brand"><Mark />trackline</Link>
           <a href="/account" className="app-avatar-link" aria-label="Account"><Avatar user={user} /></a>
         </header>
 
-        <main className={`app-main ${flush || chat ? "flush" : ""}`}>{!chat && <InstallHint />}{children}</main>
+        <main className={`app-main ${flush || chat ? "flush" : ""}`}>
+          {offline && <p className="offline-bar" role="status">No connection. Showing what was last seen.</p>}
+          {!chat && <InstallHint />}{children}
+        </main>
 
         <nav className="app-tabs" aria-label="Main">
-          <a className="app-tab" href="/app" aria-current={section === "overview" || section === "ontrack" || section === "production" ? "page" : undefined}><IconHome />Home</a>
-          <a className="app-tab" href="/app/sessions" aria-current={section === "sessions" ? "page" : undefined}><IconChat />Sessions</a>
-          <a className="app-tab-new" href="/app/remote" aria-label="New task"><IconPlus /></a>
-          <a className="app-tab" href="/app/alerts" aria-current={section === "alerts" ? "page" : undefined}><IconBell />Alerts</a>
+          <Link className="app-tab" href="/app" aria-current={section === "overview" || section === "ontrack" || section === "production" ? "page" : undefined}><IconHome />Home</Link>
+          <Link className="app-tab" href="/app/sessions" aria-current={section === "sessions" ? "page" : undefined}><IconChat />Sessions</Link>
+          <Link className="app-tab-new" href="/app/remote" aria-label="New task"><IconPlus /></Link>
+          <Link className="app-tab" href="/app/alerts" aria-current={section === "alerts" ? "page" : undefined}><IconBell />Alerts</Link>
           <a className="app-tab" href="/account" aria-current={section === "account" ? "page" : undefined}><IconUser />Account</a>
         </nav>
 

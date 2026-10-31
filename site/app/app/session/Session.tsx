@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { api, readDraft, saveDraft } from "@/lib/account";
+import { api, markRead, readAt, readDraft, saveDraft } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileVisible } from "@/lib/dashboard";
 import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
@@ -20,7 +21,7 @@ const VERB: Record<string, string> = {
   "write-file": "Write", "edit-file": "Edit", "delete-file": "Delete", "read-file": "Read",
   "run-command": "Run", "call-tool": "Tool", other: "Act",
 };
-const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 function toLine(e: FeedEvent): Line {
   const target = e.installs.length ? `install ${e.installs.join(", ")}` : e.paths.length ? e.paths.slice(0, 3).join(", ") + (e.paths.length > 3 ? ` +${e.paths.length - 3}` : "") : e.tool ?? "";
@@ -65,12 +66,10 @@ export function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
 
 type Sent = { job: string; text: string; createdAt: string };
 
-const READ = "trackline.read.";
-function readAt(id: string): number | null {
-  try { const v = localStorage.getItem(READ + id); return v ? +v : null; } catch { return null; }
-}
-function markRead(id: string, at: number) {
-  try { localStorage.setItem(READ + id, String(at)); } catch { /* private mode: every open starts at the newest */ }
+function dayOf(at: number): string {
+  const d = new Date(at), now = new Date();
+  const days = Math.round((new Date(now).setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
+  return days === 0 ? "Today" : days === 1 ? "Yesterday" : d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 }
 
 // Which conversation turn a sent message became. The clock on the laptop can
@@ -307,11 +306,11 @@ export default function Session() {
 
       <section className="chat-pane">
         <header className="chat-head">
-          <a href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack size={24} /></a>
+          <Link href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack size={24} /></Link>
           {s && <AgentLogo host={s.host} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
             <h1>{s ? sessionName(s, agentName(s.host), s.project.name) : error ? "Session" : "Loading…"}</h1>
-            <span className="row-meta">{s ? `${agentName(s.host)} · ${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
+            <span className="row-meta">{s ? `${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
           </div>
           {running ? (
             <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>
@@ -333,13 +332,16 @@ export default function Session() {
             {more && <button ref={top} type="button" className="load-earlier" onClick={earlier}>Load earlier</button>}
             {s && <p className="chat-divider">{scoreLine(s.score.session)}</p>}
             {view && timeline.length === 0 && <p className="chat-divider">No actions in the last 30 days.</p>}
-            {timeline.map((item) => {
+            {timeline.map((item, n) => {
+              const day = dayOf(item.at);
+              const divider = n === 0 || day !== dayOf(timeline[n - 1].at) ? <p key={`day-${item.at}`} className="chat-day">{day}</p> : null;
               if (item.job) {
                 const j = item.job;
                 const text = textOf(j);
                 const again = (j.status === "expired" || (j.status === "refused" && j.code === "busy")) && !!text;
                 return (
                   <div key={j.id} style={{ display: "contents" }}>
+                    {divider}
                     <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Laptop"} · ${jobState(j)}`} />
                     {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
                     {again && (
@@ -356,6 +358,7 @@ export default function Session() {
               const job = jobFor.get(t.key);
               return (
                 <div key={t.key} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {divider}
                   {firstNew === t.key && <div ref={line} className="new-line">New messages</div>}
                   {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Laptop"} · ${jobState(job)}` : undefined} />}
                   {job?.permission && <Finding tone="block" title="Action needed on Mac">{job.permission}</Finding>}

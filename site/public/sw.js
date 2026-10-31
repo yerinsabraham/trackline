@@ -1,9 +1,37 @@
-// trackline's service worker. It does one thing: show an alert the server
-// pushed, and open the session it is about when tapped. No caching, no fetch
-// handling: the site is always loaded fresh.
+// trackline's service worker. It shows an alert the server pushed, opens the
+// session it is about when tapped, and keeps the app's pages for when there is
+// no signal. Only same-origin page and asset loads are kept, never an API
+// answer: the network is asked first for pages, so the site stays fresh.
+
+const SHELL = "trackline-shell-v1";
+const OFFLINE = "/app";
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/_next/static/")) {
+    // Named by their contents, so a kept one is never stale.
+    event.respondWith(caches.open(SHELL).then(async (c) => {
+      const hit = await c.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok) c.put(req, res.clone());
+      return res;
+    }));
+  } else if (req.mode === "navigate" && url.pathname.startsWith("/app")) {
+    event.respondWith(fetch(req).then((res) => {
+      const keep = res.clone();
+      if (res.ok) caches.open(SHELL).then((c) => c.put(url.pathname, keep));
+      return res;
+    }).catch(async () => (await caches.match(url.pathname)) ?? (await caches.match(OFFLINE)) ?? Response.error()));
+  }
+});
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => event.waitUntil(
+  caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+));
 
 self.addEventListener("push", (event) => {
   let data = {};
@@ -15,14 +43,14 @@ self.addEventListener("push", (event) => {
   // Only paths on this site: a push cannot send anyone elsewhere.
   const url = typeof data.url === "string" && data.url.startsWith("/") && !data.url.startsWith("//") ? data.url : "/app";
   event.waitUntil(
-    self.registration.showNotification(data.title || "trackline", {
+    Promise.resolve(self.navigator.setAppBadge?.()).catch(() => {}).then(() => self.registration.showNotification(data.title || "trackline", {
       body: data.body || "",
       tag: data.tag || url,
       renotify: true,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       data: { url },
-    }),
+    })),
   );
 });
 

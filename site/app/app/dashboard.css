@@ -29,7 +29,7 @@
   background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--light);
   border-radius: 14px; padding: 14px 16px;
 }
-.dash-session:hover { border-color: #cfcfca; border-left-color: var(--light); }
+.dash-session:hover { border-color: var(--line); border-left-color: var(--light); }
 .dash-session .dash-dot { margin-top: 7px; }
 .dash-session-main { display: grid; gap: 3px; min-width: 0; flex: 1; }
 .dash-session-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -80,11 +80,11 @@
 .agent-list li > div { display: grid; gap: 2px; min-width: 0; }
 .agent-mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex: none; margin-top: 2px; }
 .agent-list .ready .agent-mark { background: #22a355; color: #fff; }
-.agent-list .waiting .agent-mark { background: #fbe9c4; color: #8a5a00; }
-.agent-list .waiting { border-color: #f0d7a0; }
+.agent-list .waiting .agent-mark { background: var(--amber-tint); color: var(--amber-ink); }
+.agent-list .waiting { border-color: var(--line); }
 .agent-note { color: var(--ink-2); font-size: 14px; line-height: 1.45; }
 .agent-copy { display: inline-flex; align-items: center; gap: 8px; margin-left: 6px; }
-.agent-copy code { background: #f3f3f0; border-radius: 6px; padding: 1px 6px; }
+.agent-copy code { background: var(--soft); border-radius: 6px; padding: 1px 6px; }
 
 /* the agent's reply */
 .dash-reply { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 6px 0 4px; }
@@ -93,8 +93,8 @@
 .reply-text > * { margin: 0 0 8px; }
 .reply-text > :last-child { margin-bottom: 0; }
 .reply-text ul, .reply-text ol { padding-left: 20px; }
-.reply-text code { font-size: 0.9em; background: #f3f3f0; border-radius: 5px; padding: 1px 5px; }
-.reply-text pre { background: #f3f3f0; border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 13px; }
+.reply-text code { font-size: 0.9em; background: var(--soft); border-radius: 5px; padding: 1px 5px; }
+.reply-text pre { background: var(--soft); border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 13px; }
 .reply-text pre code { background: none; padding: 0; }
 .dash-reply.clamped .reply-text { max-height: 9.5em; overflow: hidden; mask-image: linear-gradient(to bottom, #000 70%, transparent); }
 .dash-reply button { margin-top: 6px; background: none; border: 0; padding: 0; color: var(--ink-2); font-size: 13px; cursor: pointer; }
@@ -106,12 +106,12 @@
 .alert-card .device-list { margin: 0; }
 .alert-steps { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; color: var(--ink); }
 .alert-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
-.alert-note { margin: 12px 0 0; color: #1d7a3f; }
+.alert-note { margin: 12px 0 0; color: var(--ok-ink); }
 .alert-toggle { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
 .alert-toggle:first-of-type { border-top: 0; padding-top: 0; }
 .alert-toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--ink); flex: none; }
 .alert-toggle > span { display: grid; gap: 2px; }
-.alert-input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.alert-input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .dash-alerts-nudge { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 8px; }
 
 /* Remote: sending a task to a laptop, and watching it run. */
@@ -119,7 +119,7 @@
 .remote-machine.on { color: #22a355; }
 .remote-agents { display: flex; gap: 8px; flex-wrap: wrap; }
 .remote-text { resize: vertical; min-height: 120px; font-size: 16px; line-height: 1.45; }
-.remote-warning { margin: 0; color: #8a5a00; border-left: 3px solid var(--amber); padding-left: 10px; font-size: 14px; line-height: 1.45; }
+.remote-warning { margin: 0; color: var(--amber-ink); border-left: 3px solid var(--amber); padding-left: 10px; font-size: 14px; line-height: 1.45; }
 .remote-setup-note { line-height: 1.45; }
 .remote-send { justify-self: stretch; min-height: 48px; }
 .remote-pair { display: grid; gap: 10px; margin-bottom: 18px; }
@@ -128,9 +128,9 @@
 .remote-events { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 8px; }
 .remote-event p { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
 .remote-event code { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
-.remote-permission { background: #fff7e0; border: 1px solid #eed58d; border-left: 3px solid var(--amber); border-radius: 12px; padding: 12px 14px; }
+.remote-permission { background: var(--amber-tint); border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 12px; padding: 12px 14px; }
 .remote-denied { border-left: 3px solid #e5341b; padding-left: 10px; }
-.remote-error { color: #b42318; }
+.remote-error { color: var(--red-ink); }
 .remote-done { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 .link-plain { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
 

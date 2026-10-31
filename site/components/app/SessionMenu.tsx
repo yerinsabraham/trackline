@@ -68,3 +68,30 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
     </div>
   );
 }
+
+/** A question with one answer that matters, in place of the browser's own box. */
+export function ConfirmSheet({ title, action, onConfirm, onClose }: { title: string; action: string; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="sheet-back" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <p className="sheet-note">{title}</p>
+        <button type="button" className="sheet-item danger" onClick={() => { onConfirm(); onClose(); }}>{action}</button>
+        <button type="button" className="sheet-item" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/** A name to give something, in place of the browser's own prompt. */
+export function NameSheet({ label, value, onSave, onClose }: { label: string; value: string; onSave: (name: string) => void; onClose: () => void }) {
+  const [name, setName] = useState(value);
+  return (
+    <div className="sheet-back" onClick={onClose}>
+      <form className="sheet" role="dialog" aria-label={label} onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); onSave(name.trim() || value); onClose(); }}>
+        <label htmlFor="sheet-name" className="sheet-label">{label}</label>
+        <input id="sheet-name" className="sheet-input" autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+        <button type="submit" className="btn-act sheet-wide">Continue</button>
+      </form>
+    </div>
+  );
+}

@@ -71,8 +71,8 @@ export default function OnTrack() {
           <h1 className="app-h1">On track</h1>
           <p className="app-sub">Whether your agents did what you asked.</p>
         </div>
-        <div className="seg ot-range" role="tablist" aria-label="Range">
-          {RANGES.map(([d, label]) => <button key={d} role="tab" aria-selected={days === d} onClick={() => pick(d)}>{label}</button>)}
+        <div className="seg ot-range" role="group" aria-label="Range">
+          {RANGES.map(([d, label]) => <button key={d} aria-pressed={days === d} onClick={() => pick(d)}>{label}</button>)}
         </div>
       </header>
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}

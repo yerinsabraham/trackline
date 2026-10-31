@@ -68,8 +68,8 @@ export default function Production() {
           <p className="app-sub">Your deployed agents, checked from their traces.</p>
         </div>
         {data?.connected && (
-          <div className="seg ot-range" role="tablist" aria-label="Range">
-            {RANGES.map(([d, label]) => <button key={d} role="tab" aria-selected={days === d} onClick={() => go(d, service)}>{label}</button>)}
+          <div className="seg ot-range" role="group" aria-label="Range">
+            {RANGES.map(([d, label]) => <button key={d} aria-pressed={days === d} onClick={() => go(d, service)}>{label}</button>)}
           </div>
         )}
       </header>

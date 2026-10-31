@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type MouseEvent } from "react";
-import { api } from "@/lib/account";
+import { api, readAt } from "@/lib/account";
 import { ago, LIGHT_LABEL, requestLabel, sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
@@ -44,6 +45,8 @@ export default function Overview() {
     return whileVisible(load, 60_000);
   }, []);
 
+  // A phone opens on the conversations: whatever waits on you first, then newest.
+  const inbox = [...sessions].sort((a, b) => Number(b.light === "needs-you") - Number(a.light === "needs-you")).slice(0, 20);
   const shown = sessions.filter((s) =>
     filter === "all" ? true : filter === "done" ? s.light === "done" || s.light === "idle" : s.light === filter).slice(0, 12);
 
@@ -72,6 +75,11 @@ export default function Overview() {
       {fresh && <FirstRun projects={projects} />}
       {!fresh && <>
 
+      <section className="card inbox rise" aria-label="Chats">
+        {inbox.map((s) => <SessionRow key={s.id} s={s} project={s.project} unread={!!s.reply && +new Date(s.reply.at) > (readAt(s.id) ?? Infinity)} />)}
+        {inbox.length === 0 && <div className="empty">No chats yet.</div>}
+      </section>
+
       <section className="metrics rise rise-1" aria-label="Today">
         <Stat href="/app/ontrack" primary percent={onTrack} dot="on-track" label="On track" value={onTrack === undefined ? null : onTrack === null ? "—" : `${onTrack}%`} note={onTrack === null ? "Nothing checked today" : "of today's actions matched the request"} />
         <Stat href={asking.length && !needsYou.length ? `/app/remote?job=${encodeURIComponent(asking[0].id)}` : "/app/sessions?status=needs-you"} dot="needs-you" label="Needs you" value={projects ? needsYou.length + asking.length : null} note={asking[0] ? `${agentName(asking[0].agent)} is asking you` : needsYou[0] ? `${agentName(needsYou[0].host)} is waiting` : "Nothing waiting"} />
@@ -80,12 +88,12 @@ export default function Overview() {
       </section>
 
       <div className="ov-grid">
-        <section className="card rise rise-2" aria-labelledby="recent">
+        <section className="card ov-recent rise rise-2" aria-labelledby="recent">
           <div className="card-head" style={{ flexWrap: "wrap" }}>
             <h2 id="recent">Recent sessions</h2>
-            <div className="chips" role="tablist" aria-label="Filter" style={{ marginLeft: "auto" }}>
+            <div className="chips" role="group" aria-label="Filter" style={{ marginLeft: "auto" }}>
               {FILTERS.map(([f, label]) => (
-                <button key={f} role="tab" className="pick" aria-selected={filter === f} onClick={() => setFilter(f)}>{label}</button>
+                <button key={f} className="pick" aria-pressed={filter === f} onClick={() => setFilter(f)}>{label}</button>
               ))}
             </div>
           </div>
@@ -99,9 +107,9 @@ export default function Overview() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {(needsYou.length > 0 || asking.length > 0) && (
-            <section className="card rise rise-3" aria-labelledby="needs" style={{ borderColor: "#f3c9bd" }}>
+            <section className="card rise rise-3" aria-labelledby="needs" style={{ borderColor: "var(--red-ink)" }}>
               <div className="card-head">
-                <span style={{ color: "#c8321a", display: "flex" }}><IconAlert size={18} /></span>
+                <span style={{ color: "var(--red-ink)", display: "flex" }}><IconAlert size={18} /></span>
                 <h2 id="needs">Needs you</h2>
               </div>
               {asking.slice(0, 3).map((j) => (
@@ -193,19 +201,20 @@ function Stat({ dot, label, value, note, desktopOnly, href, primary, percent }: 
   );
 }
 
-export function SessionRow({ s, project, current, onClick }: { s: SessionSummary; project?: string; current?: boolean; onClick?: (e: MouseEvent) => void }) {
+export function SessionRow({ s, project, current, onClick, unread }: { s: SessionSummary; project?: string; current?: boolean; onClick?: (e: MouseEvent) => void; unread?: boolean }) {
   const note = s.reply ? plain(s.reply.text) : null;
   return (
-    <a href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link" aria-current={current ? "true" : undefined} onClick={onClick}>
+    <Link href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link" aria-current={current ? "true" : undefined} onClick={onClick}>
       <AgentLogo host={s.host} size={34} />
       <span className="row-main">
         <span className="row-top">
           <strong>{s.pinnedAt && <span className="row-pin">Pinned · </span>}{sessionName(s, agentName(s.host), project)}</strong>
+          {unread && <span className="dot-unread" role="img" aria-label="New messages" />}
           <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>
         </span>
         <span className="row-meta">{project ? `${project} · ` : ""}{ago(s.lastAt)}</span>
         {note && <span className="row-note">{note}</span>}
       </span>
-    </a>
+    </Link>
   );
 }

@@ -22,12 +22,28 @@ export function clearSession() {
   try {
     localStorage.removeItem(KEY);
     // Half-written messages are the person's, and leave with them.
-    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT)) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT) || k.startsWith(READ) || k.startsWith(CACHE)) localStorage.removeItem(k);
   } catch { /* nothing to clear */ }
 }
 
 // A message not sent yet, by chat, on this device.
 const DRAFT = "trackline.draft.";
+
+const READ = "trackline.read.";
+const CACHE = "trackline.cache.";
+/** The last of something, to show with no connection. Gone at sign-out. */
+export function cached<T>(key: string): T | null {
+  try { return JSON.parse(localStorage.getItem(CACHE + key) ?? "null") as T | null; } catch { return null; }
+}
+export function keepCached(key: string, value: unknown) {
+  try { localStorage.setItem(CACHE + key, JSON.stringify(value)); } catch { /* full or private: the app just has less to show offline */ }
+}
+export function readAt(id: string): number | null {
+  try { const v = localStorage.getItem(READ + id); return v ? +v : null; } catch { return null; }
+}
+export function markRead(id: string, at: number) {
+  try { localStorage.setItem(READ + id, String(at)); } catch { /* private mode: every open starts at the newest */ }
+}
 
 export function readDraft(chat: string): string {
   try { return localStorage.getItem(DRAFT + chat) ?? ""; } catch { return ""; }

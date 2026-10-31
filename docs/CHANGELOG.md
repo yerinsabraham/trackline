@@ -26,6 +26,11 @@ changelog page is built from this file.
   numbers do not change.
 - **Search** names and replies, filter by project, and see every session rather
   than the latest 50.
+- **Feels like an app.** A phone opens on your chats, with what needs you first
+  and unread ones marked. Tabs change instantly, the app follows your phone's
+  dark mode, the keyboard stays out of the way, and the icon shows a count.
+  A turn's work reads as one line, like "Edited 4 files, Ran 2 commands", and
+  opens to the steps. With no signal the app still opens on the last list.
 - **Write while the agent works.** Your message waits in the chat and Face ID
   sends it when the agent finishes.
 - **Longer replies.** The limit goes from 8,000 to 32,000 bytes, and a reply cut

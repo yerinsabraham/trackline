@@ -5,6 +5,7 @@ import { api, type Device } from "@/lib/account";
 import { ago } from "@/lib/dashboard";
 import { addPasskey, withStepUp } from "@/lib/security";
 import { Avatar, signOut, useApp } from "@/components/app/AppShell";
+import { NameSheet } from "@/components/app/SessionMenu";
 import { IconKey, IconLaptop, IconPhone, IconSignOut } from "@/components/app/icons";
 
 // Who you are, how you prove it, and the ways out: sign out here, sign out
@@ -31,6 +32,7 @@ export default function Account() {
   const [totpCode, setTotpCode] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [naming, setNaming] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
@@ -75,12 +77,12 @@ export default function Account() {
                   <h2 id="pk">Passkeys</h2>
                   <span className="app-muted" style={{ fontSize: 13 }}>Face ID or Touch ID. Needed to send tasks and change security settings.</span>
                 </div>
-                <button className="btn-act" style={{ marginLeft: "auto", height: 36, flex: "none" }} disabled={busy} onClick={() => act(async () => {
-                  const name = window.prompt("Name this passkey", /iPhone|Android/i.test(navigator.userAgent) ? "Phone" : "Laptop") || "Passkey";
+                <button className="btn-act" style={{ marginLeft: "auto", height: 36, flex: "none" }} disabled={busy} onClick={() => setNaming(true)}>Add a passkey</button>
+                {naming && <NameSheet label="Name this passkey" value={/iPhone|Android/i.test(navigator.userAgent) ? "Phone" : "Laptop"} onClose={() => setNaming(false)} onSave={(name) => act(async () => {
                   await withStepUp(() => addPasskey(name));
                   setNote("Passkey added.");
                   await loadSecurity();
-                })}>Add a passkey</button>
+                })} />}
               </div>
               {!security && <div className="card-body"><div className="skel" style={{ height: 44 }} /></div>}
               {security?.factors.passkeys.length === 0 && <div className="empty">No passkey yet. Add one to send tasks from this app.</div>}
@@ -112,7 +114,7 @@ export default function Account() {
                 })}>{security?.factors.totp ? "Replace" : "Set up"}</button>
               </div>
               {totp && (
-                <div className="card-body" style={{ background: "#fafaf8" }}>
+                <div className="card-body" style={{ background: "var(--soft)" }}>
                   <span className="app-muted" style={{ fontSize: 13 }}>Add this secret to your authenticator app, then enter the code it shows.</span>
                   <code className="mono" style={{ fontSize: 13, overflowWrap: "anywhere" }}>{totp.secret}</code>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -137,7 +139,7 @@ export default function Account() {
                 })}>Make new codes</button>
               </div>
               {recoveryCodes.length > 0 && (
-                <div className="card-body" style={{ background: "#fafaf8" }}>
+                <div className="card-body" style={{ background: "var(--soft)" }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>Save these now. trackline will not show them again.</span>
                   <pre className="mono" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7 }}>{recoveryCodes.join("\n")}</pre>
                 </div>
@@ -147,7 +149,7 @@ export default function Account() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <RecentActivity security={security} limit={5} more={() => setTab("activity")} />
-            <section className="card" aria-labelledby="everywhere" style={{ borderColor: "#f3c9bd" }}>
+            <section className="card" aria-labelledby="everywhere" style={{ borderColor: "var(--red-ink)" }}>
               <div className="card-body">
                 <h2 id="everywhere" style={{ margin: 0, fontSize: 16 }}>Everywhere at once</h2>
                 <p className="app-muted" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>Signs out every browser and phone, and stops remote on every laptop.</p>
@@ -160,7 +162,7 @@ export default function Account() {
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>
                     <p style={{ margin: 0, fontSize: 13.5 }}>This deletes your account and everything trackline holds for it. It cannot be undone.</p>
-                    <button className="btn-act" style={{ background: "#b42318" }} disabled={busy} onClick={() => act(async () => {
+                    <button className="btn-act" style={{ background: "var(--red)" }} disabled={busy} onClick={() => act(async () => {
                       await withStepUp(() => api("/auth/me", { method: "DELETE" }));
                       signOut();
                     })}>Delete my account</button>

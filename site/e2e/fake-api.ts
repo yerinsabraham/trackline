@@ -37,7 +37,7 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
     });
     if (route.request().method() === "OPTIONS") return json({});
     if (path === "/auth/me") return json({ user: { id: "u", name: "Test Person", email: "t@example.com", avatarUrl: null, signInMethods: ["github"] } });
-    if (path === "/app/overview") return json({ historyDays: 30, projects: [{ id: "p1", name: "trackline", lastSeenAt: iso(1), agents: [{ host: "claude-code", wired: true, reported: true, lastAt: iso(1) }], sessions: [summary("s1", "Fix the login page", "done"), summary("s2", "yes", "needs-you")] }] });
+    if (path === "/app/overview") return json({ historyDays: 30, projects: [{ id: "p1", name: "trackline", lastSeenAt: iso(1), agents: [{ host: "claude-code", wired: true, reported: true, lastAt: iso(1) }], sessions: [{ ...summary("s1", "Fix the login page", "done"), title: "Fix the login page" }, { ...summary("s2", "yes", "needs-you"), title: "Add dark mode" }] }] });
     if (path === "/app/remote") return json({ machines: [{ id: "m1", name: "MacBook", online: true, lastSeenAt: iso(0), stopped: false, projects: [{ id: "cp", name: "trackline", agents: ["claude"] }], passkeys: [{ id: "k", name: "Phone" }] }], pairings: [], jobs: [] });
     if (path === "/app/ontrack") return json({ score: { percent: 90 } });
     if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: fake.passkeys }); }

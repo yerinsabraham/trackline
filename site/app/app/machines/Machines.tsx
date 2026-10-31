@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/account";
 import { ago } from "@/lib/dashboard";
 import { useApp } from "@/components/app/AppShell";
+import { ConfirmSheet } from "@/components/app/SessionMenu";
 import { IconKey, IconLaptop, IconStop } from "@/components/app/icons";
 
 // The laptops that take tasks: whether each is awake, what it takes tasks
@@ -13,8 +14,9 @@ export default function Machines() {
   const { remote, refresh } = useApp();
   const [busy, setBusy] = useState("");
 
+  const [asking, setAsking] = useState<{ machine?: string } | null>(null);
+
   const stop = async (machine?: string) => {
-    if (!window.confirm(machine ? "Stop remote on this laptop? Starting again takes the laptop." : "Stop remote on every laptop? Starting again takes the laptop.")) return;
     setBusy(machine ?? "all");
     try { await api("/app/remote/stop", { method: "POST", body: JSON.stringify(machine ? { machine } : {}) }); refresh(); } finally { setBusy(""); }
   };
@@ -45,7 +47,7 @@ export default function Machines() {
               </span>
             </div>
             {!m.stopped && (
-              <button className="btn-plain" style={{ marginLeft: "auto", height: 36 }} disabled={!!busy} onClick={() => stop(m.id)}>
+              <button className="btn-plain" style={{ marginLeft: "auto", height: 36 }} disabled={!!busy} onClick={() => setAsking({ machine: m.id })}>
                 <IconStop size={12} />Stop
               </button>
             )}
@@ -68,8 +70,9 @@ export default function Machines() {
         </section>
       ))}
       {remote && remote.machines.some((m) => !m.stopped) && remote.machines.length > 1 && (
-        <button className="btn-danger-text" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => stop()}>Stop remote on every laptop</button>
+        <button className="btn-danger-text" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => setAsking({})}>Stop remote on every laptop</button>
       )}
+      {asking && <ConfirmSheet title={`Stop remote on ${asking.machine ? "this laptop" : "every laptop"}? Starting again takes the laptop.`} action="Stop remote" onConfirm={() => stop(asking.machine)} onClose={() => setAsking(null)} />}
     </div>
   );
 }

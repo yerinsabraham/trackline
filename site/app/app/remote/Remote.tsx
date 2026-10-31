@@ -7,7 +7,7 @@ import {
   active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment,
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
-import AppShell, { useApp } from "@/components/app/AppShell";
+import { useApp } from "@/components/app/AppShell";
 import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
@@ -26,10 +26,10 @@ export default function Remote() {
   }, []);
   const open = (id: string) => { window.history.pushState(null, "", `/app/remote?job=${encodeURIComponent(id)}`); setJob(id); };
 
-  if (job === undefined) return <AppShell section="new"><div className="skel" style={{ height: 320 }} /></AppShell>;
+  if (job === undefined) return <div className="skel" style={{ height: 320 }} />;
   return job
-    ? <AppShell section="new" chat><JobChat key={job} id={job} onNew={() => { window.history.pushState(null, "", "/app/remote"); setJob(null); }} open={open} /></AppShell>
-    : <AppShell section="new"><NewTask open={open} /></AppShell>;
+    ? <JobChat key={job} id={job} onNew={() => { window.history.pushState(null, "", "/app/remote"); setJob(null); }} open={open} />
+    : <NewTask open={open} />;
 }
 
 function NewTask({ open }: { open: (id: string) => void }) {
@@ -171,7 +171,7 @@ function items(events: AgentEvent[]): Item[] {
   for (const e of events) {
     if (e.kind === "tool" || e.kind === "denied") {
       const l: Line = {
-        key: String(e.seq), time: new Date(e.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        key: String(e.seq), time: new Date(e.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
         verb: e.kind === "denied" ? "Not allowed" : e.tool ?? "Tool", text: e.text ?? "", tone: e.kind === "denied" ? "block" : undefined,
       };
       const prev = out[out.length - 1];
