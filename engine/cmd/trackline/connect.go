@@ -29,7 +29,8 @@ type connectOptions struct {
 	noBrowser  bool
 	// asked is set by init, which has just asked whether to show the project
 	// on the dashboard, so the same question is not put twice.
-	asked bool
+	asked    bool
+	noRemote bool
 }
 
 // cmdConnect asks about the project first, then links this machine to an
@@ -60,6 +61,8 @@ func cmdConnect(args []string) error {
 			o.yes = true
 		case "--no-browser":
 			o.noBrowser = true
+		case "--no-remote":
+			o.noRemote = true
 		}
 	}
 	if root == "" {
@@ -69,6 +72,9 @@ func cmdConnect(args []string) error {
 }
 
 func connect(root string, o connectOptions) error {
+	if remoteJob() {
+		return errors.New("a task from your phone cannot connect a project")
+	}
 	root, _ = filepath.Abs(root)
 	api := remote.Base(o.api)
 	ask := prompter(o.yes)
@@ -116,7 +122,57 @@ func connect(root string, o connectOptions) error {
 	}
 
 	fmt.Printf("\n%s is connected to %s.\n", name, who)
+	connectRemote(root, name, o, ask)
 	return nil
+}
+
+// connectRemote makes the phone able to reach what was just connected. A
+// laptop already set up needs nothing more. Otherwise it is done here, with a
+// person at the terminal: a code has to pass from this screen to their phone,
+// and without a terminal that is left for later. Never a reason for connect
+// itself to fail.
+func connectRemote(root, name string, o connectOptions, ask func(string, bool) bool) {
+	if o.noRemote {
+		// Said once, it holds, or the runner brings it in at its next start.
+		if _, p, ok := account.ProjectFor(root); ok {
+			relay.Update(func(s *relay.State) error { s.TurnOff(p.ID, root); return nil })
+		}
+		return
+	}
+	client, creds, err := remoteClient()
+	if err != nil {
+		return
+	}
+	s, err := relay.Load()
+	if err != nil {
+		return
+	}
+	if !s.All || len(s.Keys) == 0 {
+		if o.yes || !interactive() {
+			fmt.Println("To reply to your agents from your phone, run this once in a terminal: trackline remote enable")
+			return
+		}
+		if !ask("Reply to your agents from your phone, in every project on this laptop?", true) {
+			return
+		}
+		if len(s.Keys) == 0 {
+			if err := pairPasskey(client, creds, s); err != nil {
+				fmt.Fprintf(os.Stderr, "Not paired: %v\nConnected anyway. To pair later: trackline remote enable\n", err)
+				return
+			}
+		}
+	}
+	if _, _, err := enrollAll(client, true); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not turn on replies from your phone: %v\n", err)
+		return
+	}
+	if !runnerRunning() {
+		if err := startAtLogin(); err != nil {
+			fmt.Fprintf(os.Stderr, "Could not start the runner: %v\nRun it yourself: trackline remote run\n", err)
+			return
+		}
+	}
+	fmt.Printf("You can reply to %s from your phone. Every message needs your passkey.\n", name)
 }
 
 // shareChoice settles whether a project's messages go with its findings.
@@ -161,7 +217,7 @@ func shareChoice(root string, no, yesShare, assumeDefaults bool, ask func(string
 // terminal driver, not read off the file type: /dev/null is a character
 // device too, and it is what an agent's commands often get as input, so
 // every question was once answered with its default, sharing included.
-func interactive() bool { return isTerminal(os.Stdin.Fd()) }
+var interactive = func() bool { return isTerminal(os.Stdin.Fd()) }
 
 // errApprovalPending means the person has a link to approve, and the next
 // connect will pick it up.

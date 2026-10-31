@@ -247,7 +247,7 @@ func TestSeenJobsAreForgottenOnceTheyCouldNotPassAnyway(t *testing.T) {
 	}
 }
 
-func TestAProjectUnusedForAMonthIsTurnedOff(t *testing.T) {
+func TestAProjectUnusedForAMonthIsPaused(t *testing.T) {
 	f := setup(t)
 	later := now.Add(31 * 24 * time.Hour)
 	env := f.phone.Send(job(func(j *relay.Job) {
@@ -256,8 +256,10 @@ func TestAProjectUnusedForAMonthIsTurnedOff(t *testing.T) {
 	if got := code(func() error { _, err := relay.Check(f.state, env, machine, later); return err }()); got != "project-idle" {
 		t.Fatalf("got %s", got)
 	}
-	if _, ok := f.state.Projects["proj_enabled"]; ok {
-		t.Fatal("the idle project is still enabled")
+	// Paused, not removed: with every connected project on, removing it would
+	// only have it enrolled again.
+	if _, ok := f.state.Projects["proj_enabled"]; !ok {
+		t.Fatal("the idle project was removed")
 	}
 }
 

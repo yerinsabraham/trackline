@@ -168,10 +168,12 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	}
 	// What watches the agent is what the person agreed to when they turned
 	// remote on. An earlier run could have rewritten it: the files live in the
-	// project, where the agent writes.
+	// project, where the agent writes, and a process it left behind can do so
+	// after it has ended. So only the person, at a terminal here, accepts a
+	// change.
 	guard := config.Guard(got.Root)
 	if p, ok := s.Projects[j.Project]; !ok || p.Guard != guard {
-		refuse("changed", fmt.Sprintf("trackline's settings or hook wiring in %s changed since remote was turned on. Check them on the laptop, then run trackline remote enable there", filepath.Base(got.Root)))
+		refuse("changed", fmt.Sprintf("trackline's settings or hook wiring in %s changed. Check them on the laptop, then run trackline remote enable there", filepath.Base(got.Root)))
 		return
 	}
 	grants, err := relay.GrantsPath(j.Project)
@@ -449,6 +451,7 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 		}
 	}
 	err = cmd.Wait()
+	endGroup(cmd)
 	flush()
 
 	switch cause := context.Cause(ctx); {

@@ -48,6 +48,23 @@ func (c Client) SetRemoteProject(id, name string) error {
 	return c.do("PUT", "/remote/projects/"+url.PathEscape(id), map[string]string{"name": name}, nil)
 }
 
+// RemoteProject is one project the account is told takes remote jobs.
+type RemoteProject struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// SetRemoteProjects tells the account about many projects at once, so turning
+// on a laptop with twenty is one security email rather than twenty. Unlike
+// SetRemoteProject it never lifts a stop made from the site: this runs on its
+// own, and only a person at the laptop may undo that.
+func (c Client) SetRemoteProjects(ps []RemoteProject) error {
+	if len(ps) == 0 {
+		return nil
+	}
+	return c.do("PUT", "/remote/projects", map[string]any{"projects": ps}, nil)
+}
+
 func (c Client) UnsetRemoteProject(id string) error {
 	return c.do("DELETE", "/remote/projects/"+url.PathEscape(id), nil, nil)
 }

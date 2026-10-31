@@ -5,6 +5,7 @@ import { api } from "@/lib/account";
 import { withStepUp } from "@/lib/security";
 import { normalizeCode, type Pairing, type Passkey, passkeysSupported, signPairing } from "@/lib/remote";
 import { useApp } from "./AppShell";
+import { AddPasskey } from "./Chat";
 import { IconClose, IconFace, IconLaptop, IconShield } from "./icons";
 
 // A laptop asking to pair, wherever you are in the app: a notice, then the
@@ -139,7 +140,7 @@ function PairSheet({ pairing, onClose }: { pairing: Pairing; onClose: () => void
           </p>
         )}
         {note && <p className="composer-note error" style={{ textAlign: "left" }}>{note}</p>}
-        {keys?.length === 0 && <p className="composer-note error" style={{ textAlign: "left" }}>Add a passkey on your account page first: pairing is signed with it.</p>}
+        {keys?.length === 0 && <div className="passkey-needed"><span>Pairing is signed with a passkey. Add one here.</span><AddPasskey onAdded={() => api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys))} /></div>}
         {!passkeysSupported() && <p className="composer-note error" style={{ textAlign: "left" }}>This browser cannot use passkeys.</p>}
 
         <div style={{ display: "grid", gap: 8 }}>

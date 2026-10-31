@@ -204,8 +204,8 @@ export default function Home() {
         </div>
         <p className="feature-note">
           Every message is signed with your passkey, and your laptop checks the signature itself, so the server that
-          carries it cannot write one. Remote is off until you turn it on, on the laptop:{" "}
-          <code>trackline remote enable</code>.
+          carries it cannot write one. Pair your phone once, when you connect, and every project you connect is ready.
+          To turn one off, inside it: <code>trackline remote disable</code>.
         </p>
       </section>
 
@@ -317,7 +317,7 @@ export default function Home() {
             Paste the prompt into your agent, or run the commands yourself. It starts in warn mode: it notices
             things and writes them down, and never interrupts you. Run{" "}
             <code>trackline status</code> after your agent&apos;s next edit to see that it fired. For the dashboard and
-            your phone, both optional: <code>trackline connect</code>, then <code>trackline remote enable</code>.
+            your phone, both optional: <code>trackline connect</code>.
           </p>
           <div className="actions">
             <span className="frame"><Link className="btn btn-quiet" href="/evidence"><Plus />Read the evidence</Link></span>

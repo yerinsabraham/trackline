@@ -87,12 +87,36 @@ test("a table renders as a table and does not widen the page", async ({ page, co
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 });
 
-test("a chat left open learns the laptop came online without a reload", async ({ page, context }) => {
+test("you can always type, and a chat left open learns the laptop came online", async ({ page, context }) => {
   const fake = await fakeAccount(context, { continueWith: null });
   await openChat(page);
-  await expect(page.locator("textarea")).toBeDisabled();
+  const box = page.locator("textarea");
+  await expect(box).toBeEnabled();
+  await box.fill("written before the laptop was ready");
+  await expect(page.locator(".composer-send")).toBeDisabled();
+  await expect(page.getByText("trackline remote enable")).toBeVisible();
   fake.continueWith = REMOTE_ON;
-  await expect(page.locator("textarea")).toBeEnabled({ timeout: 8000 });
+  await expect(page.locator(".composer-send")).toBeEnabled({ timeout: 8000 });
+  await expect(box).toHaveValue("written before the laptop was ready");
+});
+
+test("links in a reply and in your own message open in a new tab", async ({ page, context }) => {
+  await fakeAccount(context);
+  await openChat(page);
+  const reply = page.getByRole("link", { name: "the docs" });
+  await expect(reply).toHaveAttribute("href", "https://example.com/docs");
+  await expect(reply).toHaveAttribute("target", "_blank");
+  await expect(reply).toHaveAttribute("rel", /noopener/);
+  const mine = page.locator(".bubble-me a").last();
+  await expect(mine).toHaveAttribute("href", "https://example.com/ticket");
+  await expect(mine).toHaveAttribute("target", "_blank");
+});
+
+test("a passkey can be added from the chat, without leaving it", async ({ page, context }) => {
+  await fakeAccount(context, { passkeys: [] });
+  await openChat(page);
+  await expect(page.getByRole("button", { name: "Add a passkey" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/app/session");
 });
 
 test("the send button is visible before and after typing", async ({ page, context }) => {

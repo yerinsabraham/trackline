@@ -6,3 +6,5 @@ import "os/exec"
 
 // inGroup: without process groups, stopping the agent stops the agent alone.
 func inGroup(cmd *exec.Cmd) {}
+
+func endGroup(cmd *exec.Cmd) {}

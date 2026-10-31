@@ -133,7 +133,7 @@ export default function Overview() {
             <div className="card-body">
               {!remote && <div className="skel" style={{ height: 44 }} />}
               {remote?.machines.length === 0 && (
-                <p style={{ margin: 0, fontSize: 14, color: "var(--ink-2)" }}>No laptop takes tasks yet. In a project: <code className="mono" style={{ fontSize: 12.5 }}>trackline remote enable</code></p>
+                <p style={{ margin: 0, fontSize: 14, color: "var(--ink-2)" }}>No laptop takes tasks yet. In a project: <code className="mono" style={{ fontSize: 12.5 }}>trackline connect</code></p>
               )}
               {remote?.machines.map((m) => (
                 <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>

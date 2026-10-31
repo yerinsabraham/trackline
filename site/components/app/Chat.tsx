@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
-import { readDraft, saveDraft } from "@/lib/account";
-import ReplyText from "@/components/ReplyText";
+import { api, readDraft, saveDraft } from "@/lib/account";
+import { addPasskey, withStepUp } from "@/lib/security";
+import ReplyText, { LinkedText } from "@/components/ReplyText";
 import AgentLogo from "./AgentLogo";
 import { IconAlert, IconClip, IconClose, IconShield, IconTerminal, IconUp } from "./icons";
-import { type Attachment, MAX_ATTACHMENTS, prepareImage } from "@/lib/remote";
+import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
 // arrived: from trackline's hook in the terminal, or from a task sent here.
@@ -20,6 +21,53 @@ export function useChatScroll() {
   return useStickToBottom({ initial: "instant", resize: "instant" });
 }
 
+/**
+ * This account's passkeys, ready before you tap send: on an iPhone a network
+ * call between the tap and Face ID can cost the tap its right to ask for it.
+ */
+export function usePasskeys() {
+  const keys = useRef<Passkey[] | null>(null);
+  const [missing, setMissing] = useState(false);
+  const load = async () => {
+    keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
+    setMissing(keys.current.length === 0);
+    return keys.current;
+  };
+  useEffect(() => { load().catch(() => {}); }, []);
+  const get = async () => {
+    const k = keys.current?.length ? keys.current : await load();
+    if (!k.length) throw new Error("Add a passkey to send from here.");
+    return k;
+  };
+  return { get, missing, reload: load };
+}
+
+/** The first passkey, added where it is needed rather than on another page. */
+export function AddPasskey({ onAdded }: { onAdded: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <>
+      <button type="button" className="btn-act" disabled={busy} onClick={async () => {
+        setBusy(true); setError("");
+        try {
+          await withStepUp(() => addPasskey(/iPhone|Android/i.test(navigator.userAgent) ? "Phone" : "Laptop"));
+          onAdded();
+        } catch (e) {
+          setError((e as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}>{busy ? "Waiting for your passkey…" : "Add a passkey"}</button>
+      {error && <span className="composer-note error">{error}</span>}
+    </>
+  );
+}
+
+export function PasskeyNeeded({ onAdded }: { onAdded: () => void }) {
+  return <div className="passkey-needed"><span>Add a passkey to send from this device.</span><AddPasskey onAdded={onAdded} /></div>;
+}
+
 export type Line = { key: string; time?: string; verb: string; text: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
 
 export function MyMessage({ text, note, images }: { text: string; note?: string; images?: string[] }) {
@@ -28,7 +76,7 @@ export function MyMessage({ text, note, images }: { text: string; note?: string;
       {images && images.length > 0 && (
         <div className="bubble-images">{images.map((u) => <img key={u} src={u} alt="Attached image" />)}</div>
       )}
-      <div>{text}</div>
+      <div><LinkedText text={text} /></div>
       {note && <span>{note}</span>}
     </div>
   );
@@ -186,8 +234,9 @@ export function useAttachments() {
 }
 
 /**
- * Where you type to the agent. When nothing can be sent, the box says why
- * rather than taking text that goes nowhere.
+ * Where you type to the agent. You can always type: a thought is worth keeping
+ * whatever the laptop is doing, and the draft waits here. When it cannot be
+ * sent yet, the line underneath says what would let it.
  */
 export function Composer({ chat, placeholder, onSend, blocked, note }: {
   /** Which conversation this is, so a half-written message waits for you there. */
@@ -238,13 +287,13 @@ export function Composer({ chat, placeholder, onSend, blocked, note }: {
     <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
       {attach.strip}
       <div className="composer-box">
-        {attach.button(!!blocked || busy)}
+        {attach.button(busy)}
         <label htmlFor="composer" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{placeholder}</label>
         <textarea
-          id="composer" ref={box} rows={1} value={text} placeholder={blocked ? "Replying is not available here" : placeholder}
+          id="composer" ref={box} rows={1} value={text} placeholder={placeholder}
           // Read-only rather than disabled while sending: a disabled box loses
           // focus, and the phone's keyboard goes with it.
-          disabled={!!blocked} readOnly={busy}
+          readOnly={busy}
           onChange={(e) => { setText(e.target.value); if (chat) saveDraft(chat, e.target.value); grow(); }}
           onKeyDown={(e) => {
             // Enter sends on a keyboard with one; a phone keeps Enter for new lines.
@@ -255,7 +304,7 @@ export function Composer({ chat, placeholder, onSend, blocked, note }: {
           {busy ? <span className="composer-spinner" aria-hidden="true" /> : <IconUp size={20} />}
         </button>
       </div>
-      <span className={`composer-note ${error || blocked ? "error" : ""}`}>
+      <span className={`composer-note ${error ? "error" : ""}`}>
         {error || attach.error || blocked || (busy ? "Waiting for your passkey…" : note)}
       </span>
     </form>

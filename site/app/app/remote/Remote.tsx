@@ -8,7 +8,7 @@ import {
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, useAttachments, useChatScroll } from "@/components/app/Chat";
+import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 import { Cmd } from "@/components/app/FirstRun";
@@ -84,14 +84,14 @@ function NewTask({ open }: { open: (id: string) => void }) {
         <div className="card empty">
           <strong>Add a passkey first.</strong>
           <span>Every task is signed with it, so only you can send one.</span>
-          <a className="btn-act" href="/account">Add a passkey</a>
+          <AddPasskey onAdded={() => api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys))} />
         </div>
       )}
       {machines.length === 0 && (
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
           <strong>No laptop takes tasks yet.</strong>
-          <span>On your laptop, in a project: <code>trackline connect</code>, then <code>trackline remote enable</code></span>
+          <span>On your laptop, in a project: <code>trackline connect</code></span>
         </div>
       )}
 
@@ -114,7 +114,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
           </div>
 
           {machine.projects.length === 0 ? (
-            <p className="app-muted" style={{ margin: 0 }}>No project takes tasks yet. In one, on {machine.name}: <code className="mono">trackline connect</code>, then <code className="mono">trackline remote enable</code></p>
+            <p className="app-muted" style={{ margin: 0 }}>No project takes tasks yet. In one, on {machine.name}: <code className="mono">trackline connect</code></p>
           ) : (
             <>
               <fieldset className="nt-field">
@@ -124,7 +124,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                     <button type="button" key={p.id} className="pick mono" aria-pressed={p.id === project?.id} onClick={() => setProjectId(p.id)}>{p.name}</button>
                   ))}
                 </div>
-                <p className="nt-hint">Don&apos;t see your project? In its folder: <code className="mono">trackline connect</code>, then <code className="mono">trackline remote enable</code></p>
+                <p className="nt-hint">Don&apos;t see your project? In its folder: <code className="mono">trackline connect</code></p>
               </fieldset>
               <fieldset className="nt-field">
                 <legend>Agent</legend>
@@ -200,12 +200,11 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
   const [missing, setMissing] = useState(false);
   const after = useRef(-1);
   const { scrollRef, contentRef } = useChatScroll();
-  const keys = useRef<Passkey[] | null>(null);
+  const passkeys = usePasskeys();
   const { remote } = useApp();
   const asked = recall(id);
 
   useEffect(() => {
-    api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => { keys.current = r.passkeys; }).catch(() => {});
     after.current = -1;
     setEvents([]); setJob(null);
     let busy = false;
@@ -241,11 +240,9 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
 
   const send = async (text: string, images: Attachment[] = [], again = false) => {
     if (!job || !(canContinue || again)) return;
-    if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
-    if (!keys.current.length) throw new Error("Add a passkey on your account page first.");
     // Sending again goes where the first one was meant to: the same
     // conversation if it had one, a new one if not.
-    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, keys.current, job.session ?? undefined, images);
+    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, await passkeys.get(), job.session ?? undefined, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -317,6 +314,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
 
         <div className="chat-compose">
           <LaptopNotice machine={machine} />
+          {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
           <Composer
             chat={job?.session ?? id}
             placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}

@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, type Attachment, imagesFor, jobState, type Job, type Passkey, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
+import { active, type Attachment, imagesFor, jobState, type Job, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, useChatScroll } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack } from "@/components/app/icons";
 import { SessionRow } from "../Overview";
 
@@ -68,12 +68,9 @@ export default function Session() {
   const [decideError, setDecideError] = useState("");
   const cursor = useRef<string | null>(null);
   const { scrollRef, contentRef } = useChatScroll();
-  const keys = useRef<Passkey[] | null>(null);
+  const passkeys = usePasskeys();
 
   useEffect(() => {
-    // Ready before you tap send: on an iPhone a network call between the tap
-    // and Face ID can cost the tap its right to ask for Face ID.
-    api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => { keys.current = r.passkeys; }).catch(() => {});
     const sid = new URLSearchParams(window.location.search).get("id") ?? "";
     setId(sid);
     let busy = false;
@@ -122,15 +119,10 @@ export default function Session() {
   const working = s?.light === "working" || sent.some((x) => active(x.status));
 
   const blocked = !s ? "Loading…"
-    : !cont ? "To reply from here, turn on remote for this project on your laptop: trackline remote enable"
-    : cont.machine.stopped ? `Remote is stopped on ${cont.machine.name}. Turn it on again on the laptop.`
+    : !cont ? "One step left. On your laptop, run: trackline remote enable"
+    : cont.machine.stopped ? `Stopped on ${cont.machine.name}. To start again, run there: trackline remote enable`
+    : passkeys.missing ? "Add a passkey to send."
     : undefined;
-
-  const passkeys = async () => {
-    if (!keys.current) keys.current = (await api<{ passkeys: Passkey[] }>("/app/remote/passkeys")).passkeys;
-    if (!keys.current.length) throw new Error("Add a passkey on your account page first: every decision is signed with it.");
-    return keys.current;
-  };
 
   // Allow once, or keep blocked: signed here, decided on the laptop, and the
   // agent is told in this same session.
@@ -139,7 +131,7 @@ export default function Session() {
     if (!cont || !f?.target) return;
     setDeciding(e.id); setDecideError("");
     try {
-      const body = await signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, f.target, await passkeys());
+      const body = await signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, f.target, await passkeys.get());
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
       setDecided((d) => ({ ...d, [e.id]: kind }));
       setSent((x) => [...x, { job: r.id, text: kind === "allow" ? `Allow once: ${f.target}` : `Keep blocked: ${f.target}`, status: "queued", code: null, reason: null }]);
@@ -152,7 +144,7 @@ export default function Session() {
 
   const send = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys(), cont.session, images);
+    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -241,6 +233,7 @@ export default function Session() {
 
         <div className="chat-compose">
           <LaptopNotice machine={cont?.machine} />
+          {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
           <Composer
             chat={id || undefined}
             placeholder={`Reply to ${agentName(s?.host)}…`}

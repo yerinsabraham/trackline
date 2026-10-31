@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -81,8 +82,8 @@ const (
 	MaxLife = 5 * time.Minute
 	// Skew allows for the phone's clock and the laptop's disagreeing.
 	Skew = 2 * time.Minute
-	// Idle is how long a project may go without a job before it has to be
-	// enabled again on the laptop.
+	// Idle is how long a project may go unused, by a job or by an agent at the
+	// desk, before it has to be enabled again on the laptop.
 	Idle = 30 * 24 * time.Hour
 	// MaxText is far more than any instruction a person types on a phone.
 	MaxText = 32 << 10
@@ -114,6 +115,23 @@ func (r *Refusal) Error() string { return r.Reason }
 
 func refuse(code, format string, a ...any) *Refusal {
 	return &Refusal{Code: code, Reason: fmt.Sprintf(format, a...)}
+}
+
+// usedRecently reports whether a project has seen a job, or an agent at the
+// desk, within Idle. The rule is for a project forgotten about, and it used to
+// stop one in daily use that had simply never been reached from a phone. The
+// hook writes this file on every action.
+func usedRecently(p Enabled, now time.Time) bool {
+	last := p.EnabledAt
+	if p.LastJobAt.After(last) {
+		last = p.LastJobAt
+	}
+	// An agent can write here, so this only ever keeps a project from pausing,
+	// and a time in the future counts for nothing.
+	if fi, err := os.Stat(filepath.Join(p.Root, ".trackline", "events.jsonl")); err == nil && fi.ModTime().After(last) && !fi.ModTime().After(now) {
+		last = fi.ModTime()
+	}
+	return now.Sub(last) <= Idle
 }
 
 // Accepted is a job that passed, with the folder it belongs to.
@@ -214,13 +232,8 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	if !ok {
 		return Accepted{}, refuse("project-not-enabled", "remote is not enabled for that project on this laptop")
 	}
-	last := p.EnabledAt
-	if p.LastJobAt.After(last) {
-		last = p.LastJobAt
-	}
-	if now.Sub(last) > Idle {
-		delete(s.Projects, j.Project)
-		return Accepted{}, refuse("project-idle", "unused for %d days, so remote was turned off for %s; run trackline remote enable there to turn it on", int(Idle.Hours()/24), p.Root)
+	if !usedRecently(p, now) {
+		return Accepted{}, refuse("project-idle", "unused for %d days, so remote is paused for %s; run trackline remote enable there to start it again", int(Idle.Hours()/24), p.Root)
 	}
 	if fi, err := os.Stat(p.Root); err != nil || !fi.IsDir() {
 		return Accepted{}, refuse("project-missing", "the project folder is no longer there")

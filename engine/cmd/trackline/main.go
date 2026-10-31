@@ -206,7 +206,7 @@ and counts. Never what a customer or the model said.
 
 Listens on localhost unless told otherwise: traces carry customer messages.
 `,
-	"connect": `trackline connect [--share | --no-requests] [--root DIR] [--yes] [--no-browser] [--api URL]
+	"connect": `trackline connect [--share | --no-requests] [--no-remote] [--root DIR] [--yes] [--no-browser] [--api URL]
 
 Connect this project to a trackline account. Optional: trackline works fully
 without an account.
@@ -219,6 +219,9 @@ share if there is none. Sharing is never turned on without you. Then, only if th
 in and approve it. That happens once per computer; later projects skip it.
 The credential is kept in your user config directory, readable only by you,
 never inside a project. File contents and command text are never sent.
+
+The project then takes messages from your phone. A laptop not paired yet is
+paired here, at a terminal, with one code. --no-remote leaves that alone.
 `,
 	"account": `trackline account
 
@@ -238,18 +241,20 @@ Revoke this machine's credential on the account and remove it from here.
 trackline remote disable [--root DIR] [--all]
 trackline remote status
 
-Let a prompt sent from your phone run in this project, on this laptop, with
-your own agent. Off unless enabled here; the website cannot turn it on.
+Let a message sent from your phone run in your projects on this laptop, with
+your own agent. Pair once, here, and every project you connect takes messages;
+the website cannot turn it on.
 
-enable   turn it on for this project. The first time, it shows a code to
-         enter on your phone, which pairs your passkey with this laptop.
+enable   pair your phone. The first time, it shows a code to enter there, which
+         pairs your passkey with this laptop. Inside a project, also turns that
+         project back on, and lifts a stop made from the site.
          --pair pairs another passkey. Starts the runner at login (macOS).
-disable  turn it off for this project. --all turns it off everywhere on this
-         laptop and forgets every paired passkey.
-status   paired passkeys, enabled projects, and whether the runner is running.
+disable  turn it off for this project, and keep it off, on or not yet on. --all turns it off
+         everywhere on this laptop and forgets every paired passkey.
+status   paired passkeys, projects, and whether the runner is running.
 
 A job runs only if a passkey paired here signed it, it is for this laptop and
-an enabled project, it is under five minutes old, and it was never seen before.
+a project that is on, it is under five minutes old, and it was never seen before.
 Anything else is refused and shown on this screen.
 `,
 	"mcp": `trackline mcp [--root DIR]

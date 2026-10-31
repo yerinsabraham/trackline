@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
@@ -23,6 +25,17 @@ type State struct {
 	RP       *RP                `json:"rp,omitempty"`
 	Keys     []Key              `json:"keys"`
 	Projects map[string]Enabled `json:"projects"`
+	// All means every project connected on this laptop takes jobs, so a new
+	// one needs no step of its own. Pairing a passkey here is the consent: it
+	// is done at this laptop, and no job passes without that passkey's
+	// signature.
+	All bool `json:"all,omitempty"`
+	// Off are projects the person turned off by hand. All never brings one
+	// back; only turning it on again in that project does.
+	Off []string `json:"off,omitempty"`
+	// OffRoots are their folders, as the same folder can be connected again
+	// under another name and id.
+	OffRoots []string `json:"offRoots,omitempty"`
 	// Seen holds each job id until it could no longer pass the expiry check,
 	// which keeps this small.
 	Seen map[string]int64 `json:"seen"`
@@ -49,6 +62,10 @@ type Enabled struct {
 	LastJobAt time.Time `json:"lastJobAt,omitzero"`
 	// Guard is config.Guard of the project when remote was enabled: what the
 	// person agreed to be watched by. A job is refused once it differs.
+	// Accepting a difference by itself between jobs is not safe, however much
+	// friction it would save: a job can leave a process behind that rewrites
+	// these files after it ends, and the next job then runs unwatched (shown
+	// in the review of 2026-10-31).
 	Guard string `json:"guard,omitempty"`
 	// Sessions are the agent sessions remote jobs started here, newest last,
 	// so one can be continued even if it never took an action trackline saw.
@@ -107,10 +124,94 @@ func (s *State) AddKey(k Key) {
 	s.Keys = append(s.Keys, k)
 }
 
-// Enable lets remote jobs run in a project. Enabling again restarts the idle
-// clock.
+// Enable lets remote jobs run in a project, and is the person saying so: it
+// clears any turning off. Enabling again accepts the guarded files as they
+// are, restarts the idle clock and keeps the project's conversations.
 func (s *State) Enable(id, root, name, guard string, now time.Time) {
-	s.Projects[id] = Enabled{Root: root, Name: name, EnabledAt: now, Guard: guard}
+	s.Off = slices.DeleteFunc(s.Off, func(x string) bool { return x == id })
+	s.OffRoots = slices.DeleteFunc(s.OffRoots, func(x string) bool { return within(root, x) })
+	s.Projects[id] = Enabled{Root: root, Name: name, EnabledAt: now, Guard: guard, Sessions: s.Projects[id].Sessions}
+}
+
+// TurnOff stops jobs in a project, whether or not it was on yet, and keeps it
+// off when All would otherwise bring it in.
+func (s *State) TurnOff(id, root string) {
+	delete(s.Projects, id)
+	if !slices.Contains(s.Off, id) {
+		s.Off = append(s.Off, id)
+	}
+	if !slices.Contains(s.OffRoots, root) {
+		s.OffRoots = append(s.OffRoots, root)
+	}
+}
+
+// within reports whether path is folder or inside it, whatever links lead there.
+func within(path, folder string) bool {
+	rel, err := filepath.Rel(resolved(folder), resolved(path))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolved follows links as far as the path exists, so a path not there yet
+// still compares properly with one under a linked folder such as macOS's /var.
+func resolved(p string) string {
+	p = filepath.Clean(p)
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	parent := filepath.Dir(p)
+	if parent == p {
+		return p
+	}
+	return filepath.Join(resolved(parent), filepath.Base(p))
+}
+
+// Within is within, for the laptop's other checks of what lies in a project.
+func Within(path, folder string) bool { return within(path, folder) }
+
+// knownFolder reports whether root is a project already on or turned off, or
+// inside one. Connected again by another name it would get a new id and the
+// guard as it stands, walking past both a turning off and a changed guard.
+func (s *State) knownFolder(root string, on []string) bool {
+	for _, r := range on {
+		if within(root, r) {
+			return true
+		}
+	}
+	return slices.ContainsFunc(s.OffRoots, func(r string) bool { return within(root, r) })
+}
+
+// Enroll enables every connected project that is not on yet, and returns their
+// names. It adds nothing unless a passkey is paired here and All is set, skips
+// what the person turned off, and skips a folder that has gone.
+func (s *State) Enroll(connected map[string]account.Project, guard func(root string) string, now time.Time) []string {
+	if !s.All || len(s.Keys) == 0 {
+		return nil
+	}
+	var on []string
+	for _, p := range s.Projects {
+		on = append(on, p.Root)
+	}
+	var added []string
+	for root, p := range connected {
+		if _, already := s.Projects[p.ID]; already || p.ID == "" || slices.Contains(s.Off, p.ID) || s.knownFolder(root, on) {
+			continue
+		}
+		if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+			continue
+		}
+		name := filepath.Base(root)
+		s.Enable(p.ID, root, name, guard(root), now)
+		added = append(added, name)
+	}
+	slices.Sort(added)
+	return added
+}
+
+// WouldEnroll names what Enroll would add once All is set.
+func (s State) WouldEnroll(connected map[string]account.Project) []string {
+	s.All = true
+	s.Projects = maps.Clone(s.Projects)
+	return s.Enroll(connected, func(string) string { return "" }, time.Now())
 }
 
 // GrantsPath is where approvals made from the phone for a project are kept:
@@ -217,6 +318,7 @@ func Forget() error {
 	return Update(func(s *State) error {
 		s.Keys, s.RP = nil, nil
 		s.Projects = map[string]Enabled{}
+		s.All, s.Off, s.OffRoots = false, nil, nil
 		return nil
 	})
 }

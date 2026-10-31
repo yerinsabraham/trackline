@@ -23,14 +23,14 @@ export default function Machines() {
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 860 }}>
       <header className="rise">
         <h1 className="app-h1">Machines</h1>
-        <p className="app-sub">Laptops that take tasks from you. Only the laptop can turn remote on.</p>
+        <p className="app-sub">Laptops that take tasks from you. Every message needs your passkey.</p>
       </header>
       {!remote && <div className="skel" style={{ height: 160 }} />}
       {remote?.machines.length === 0 && (
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
           <strong>No laptop takes tasks yet.</strong>
-          <span>On your laptop, in a project: <code>trackline remote enable</code>. It shows a code; this app asks for it.</span>
+          <span>On your laptop, in a project: <code>trackline connect</code>. It shows a code; this app asks for it.</span>
         </div>
       )}
       {remote?.machines.map((m, i) => (

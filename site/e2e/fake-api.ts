@@ -4,10 +4,10 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 const iso = (minsAgo: number) => new Date(Date.now() - minsAgo * 60_000).toISOString();
 
-export const TABLE = "Here is the result:\n\n| Metric | Before | After |\n|---|---|---|\n| Bundle | 412 KB | 288 KB |\n\n```\nconst a = 1;\n```";
+export const TABLE = "Here is the result:\n\n| Metric | Before | After |\n|---|---|---|\n| Bundle | 412 KB | 288 KB |\n\n```\nconst a = 1;\n```\n\nSee [the docs](https://example.com/docs).";
 
 const event = (i: number, minsAgo: number) => ({
-  id: `e${i}`, at: iso(minsAgo), turn: `t${i}`, request: `Request number ${i}: please do the next piece of the work`,
+  id: `e${i}`, at: iso(minsAgo), turn: `t${i}`, request: `Request number ${i}: please do the next piece of the work, see https://example.com/ticket`,
   action: "edit-file", tool: "Edit", paths: ["site/app/page.tsx"], installs: [], pathsUnknown: false,
   commandUnderstood: null, blocked: false, severity: null, checked: true, findings: [], unmeasured: [],
 });
@@ -20,10 +20,10 @@ const summary = (id: string, request: string | null, light: string) => ({
 
 export const REMOTE_ON = { machine: { id: "m1", name: "MacBook", online: true, stopped: false }, project: "cp", agent: "claude", session: "abc" };
 
-export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; extra: { id: string; at: string; turn: string; text: string }[] };
+export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[] };
 
 export async function fakeAccount(context: BrowserContext, over: Partial<Fake> = {}): Promise<Fake> {
-  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, extra: [], ...over };
+  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], ...over };
   await context.addInitScript(() => localStorage.setItem("trackline.session", "fake"));
   await context.route("https://api.creovine.com/**", (route) => {
     const url = new URL(route.request().url());
@@ -38,7 +38,7 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
     if (path === "/app/overview") return json({ historyDays: 30, projects: [{ id: "p1", name: "trackline", lastSeenAt: iso(1), agents: [{ host: "claude-code", wired: true, reported: true, lastAt: iso(1) }], sessions: [summary("s1", "Fix the login page", "done"), summary("s2", "yes", "needs-you")] }] });
     if (path === "/app/remote") return json({ machines: [{ id: "m1", name: "MacBook", online: true, lastSeenAt: iso(0), stopped: false, projects: [{ id: "cp", name: "trackline", agents: ["claude"] }], passkeys: [{ id: "k", name: "Phone" }] }], pairings: [], jobs: [] });
     if (path === "/app/ontrack") return json({ score: { percent: 90 } });
-    if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: [] }); }
+    if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: fake.passkeys }); }
     if (path === "/app/alerts") return json({ prefs: { red: true, finished: true, drifting: false }, devices: [], slack: false, vapidPublicKey: null });
     if (path.startsWith("/app/sessions/")) {
       const after = url.searchParams.get("after");

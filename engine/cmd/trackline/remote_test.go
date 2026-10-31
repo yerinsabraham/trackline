@@ -113,6 +113,9 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // remoteEnv is a connected machine with one connected project, its config in
 // a temporary folder and launchctl replaced.
 func remoteEnv(t *testing.T, f *fakeAccount) (root string) {
+	was := interactive
+	interactive = func() bool { return true }
+	t.Cleanup(func() { interactive = was })
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
@@ -470,6 +473,9 @@ func TestAPromptIsRefusedWhereTracklineIsNotWatching(t *testing.T) {
 // trackline's settings live in the project, where a remote agent writes. A
 // change since remote was enabled could be the agent switching off its own
 // checks, so nothing runs until the person accepts it on the laptop.
+// What R6 found, and the review of 2026-10-31 proved again when this was
+// relaxed: a remote agent must not be able to rewrite what watches it, and a
+// process it leaves behind can do that between jobs. Any change refuses.
 func TestAPromptIsRefusedWhenTracklineSettingsChanged(t *testing.T) {
 	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
 	root, out, phone, proj := promptEnv(t, f)
@@ -482,6 +488,47 @@ func TestAPromptIsRefusedWhenTracklineSettingsChanged(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "prompt")); err == nil {
 		t.Fatal("the agent ran under changed settings")
+	}
+}
+
+func TestEnableNeedsAPersonAtATerminal(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	root := remoteEnv(t, f)
+	interactive = func() bool { return false }
+	if err := remoteEnable([]string{"--root", root, "--no-start"}); err == nil || !strings.Contains(err.Error(), "terminal") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// Only a person at a terminal says which agents the runner starts.
+func TestNoTerminalLeavesTheAgentsAlone(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	remoteEnv(t, f)
+	relay.Update(func(s *relay.State) error {
+		s.All, s.Keys, s.Agents = true, []relay.Key{{ID: "k"}}, map[string]string{"claude": "/safe/claude"}
+		return nil
+	})
+	interactive = func() bool { return false }
+	client, _, err := remoteClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := enrollAll(client, true); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := relay.Load(); s.Agents["claude"] != "/safe/claude" {
+		t.Fatalf("agents rewritten without a person: %v", s.Agents)
+	}
+}
+
+func TestAnAgentInsideAProjectIsNotRecorded(t *testing.T) {
+	connected := map[string]account.Project{"/work/app": {ID: "a"}}
+	kept := outsideProjects(map[string]string{"claude": "/work/app/node_modules/.bin/claude", "cursor": "/work/app/..bin/cursor", "codex": "/usr/local/bin/codex"}, connected)
+	if len(kept) != 1 || kept["codex"] == "" {
+		t.Fatalf("kept %v", kept)
+	}
+	if got := pathOutsideProjects("/work/app/node_modules/.bin:/usr/bin", connected); got != "/usr/bin" {
+		t.Fatalf("path %q", got)
 	}
 }
 

@@ -85,8 +85,7 @@ trackline mcp             # let any MCP agent ask before it acts (advisory)
 trackline traces DIR      # check exported production traces (OTLP)
 trackline serve           # receive a deployed agent's traces live
 trackline serve --connect # ...and show it on the dashboard, never what customers said
-trackline connect         # optional: link to an account and a live dashboard
-trackline remote enable   # optional: run and approve tasks from your phone
+trackline connect         # optional: a live dashboard, and tasks from your phone
 ```
 
 ### What it can do in each agent
@@ -119,12 +118,13 @@ code to a third party to use it.
 
 ### From your phone
 
-Optional, and off until you turn it on. `trackline remote enable` pairs your
-phone with a passkey. From the app you can send a task to Claude Code, Codex or
+Optional. `trackline connect` pairs your phone once, with a passkey and a code
+on your laptop's screen, and every project you connect is then ready. From the app you can send a task to Claude Code, Codex or
 Cursor on your own laptop, watch it run, reply to it, and answer **Allow once** or
 **Keep blocked** when trackline stops something. Every message is signed by your
 passkey and checked on the laptop, so the server that carries it cannot write
-one. `trackline remote disable --all` turns it off everywhere.
+one. `trackline remote disable` turns one project off, and `--all` turns it off
+everywhere.
 
 ---
 

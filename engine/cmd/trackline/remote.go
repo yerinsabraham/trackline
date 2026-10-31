@@ -92,21 +92,31 @@ func remoteEnable(args []string) error {
 			start = false
 		}
 	}
+	named := root != ""
 	if root == "" {
 		root, _ = os.Getwd()
 	}
 	root, _ = filepath.Abs(root)
 
+	// A person at this laptop, not a process: this accepts changed settings,
+	// undoes a turning off, and lifts a stop made from the site. A task from
+	// the phone has no terminal, whatever it does to its environment.
+	if remoteJob() || !interactive() {
+		return errors.New("run this yourself, in a terminal on this laptop")
+	}
 	client, creds, err := remoteClient()
 	if err != nil {
 		return err
 	}
-	projRoot, proj, ok := account.ProjectFor(root)
-	if !ok {
+	// Checked first: a code on the screen is a promise there is something to
+	// reach once it is entered.
+	connected, err := account.Projects()
+	if err != nil {
+		return err
+	}
+	if _, _, here := account.ProjectFor(root); len(connected) == 0 || (named && !here) {
 		return fmt.Errorf("%s is not connected. Run trackline connect there first", root)
 	}
-	name := filepath.Base(projRoot)
-
 	s, err := relay.Load()
 	if err != nil {
 		return err
@@ -117,24 +127,126 @@ func remoteEnable(args []string) error {
 		}
 	}
 
-	found := findAgents()
-	if err := relay.Update(func(s *relay.State) error {
-		s.Enable(proj.ID, projRoot, name, config.Guard(projRoot), time.Now())
-		s.Agents, s.Path = found, os.Getenv("PATH")
-		return nil
-	}); err != nil {
-		return err
+	// Run here, it is also the person turning this one project back on, and
+	// lifting a stop made from the site.
+	projRoot, proj, here := account.ProjectFor(root)
+	if here {
+		name := filepath.Base(projRoot)
+		if err := relay.Update(func(s *relay.State) error {
+			s.Enable(proj.ID, projRoot, name, config.Guard(projRoot), time.Now())
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err := client.SetRemoteProject(proj.ID, name); err != nil {
+			fmt.Fprintf(os.Stderr, "Turned on here, but the account could not be told (%v). The runner tells it when it starts.\n", err)
+		}
 	}
-	if err := client.SetRemoteProject(proj.ID, name); err != nil {
-		fmt.Fprintf(os.Stderr, "Turned on here, but the account could not be told (%v). The runner tells it when it starts.\n", err)
+	// Moving a laptop from one project at a time to all of them is said out
+	// loud, by name, and answered here.
+	every := s.All
+	if !every {
+		fresh, _ := relay.Load()
+		if names := fresh.WouldEnroll(connected); len(names) == 0 {
+			every = true
+		} else {
+			fmt.Printf("\nThis also lets your phone reach: %s\n", strings.Join(names, ", "))
+			every = prompter(false)("Turn on every connected project on this laptop?", true)
+		}
+	}
+	added, found, err := enrollAll(client, every)
+	if err != nil {
+		return err
 	}
 	if start {
 		if err := startAtLogin(); err != nil {
 			fmt.Fprintf(os.Stderr, "Could not start the runner: %v\nRun it yourself: trackline remote run\n", err)
 		}
 	}
-	fmt.Printf("\nRemote is on for %s. Agents it can start: %s.\nTurn it off: trackline remote disable\n", name, agentList(found))
+	on, _ := relay.Load()
+	fmt.Printf("\nYour phone can reach %d project(s) on this laptop", len(on.Projects))
+	if len(added) > 0 {
+		fmt.Printf(", newly: %s", strings.Join(added, ", "))
+	}
+	fmt.Printf(".\nAgents it can start: %s.\nEvery message still needs your passkey. Turn one project off, inside it: trackline remote disable\n", agentList(found))
 	return nil
+}
+
+// remoteJob reports whether this process is inside a task sent from a phone.
+// Such a task may never widen what tasks can reach. It is an environment
+// variable, so this stops mistakes, not an attacker: interactive() is the check
+// that does.
+func remoteJob() bool { return os.Getenv(config.RemoteEnv) != "" }
+
+// enrollAll makes every connected project on this laptop take jobs, and tells
+// the account about all of them at once. It needs a paired passkey, and leaves
+// alone anything the person turned off. Only a person at a terminal may record
+// which agents to start: the runner runs them outside any sandbox trackline
+// sets up, so where they are found is not something a process may decide.
+func enrollAll(client remote.Client, every bool) (added []string, agents map[string]string, err error) {
+	connected, err := account.Projects()
+	if err != nil {
+		return nil, nil, err
+	}
+	found, safePath := map[string]string{}, ""
+	atTerminal := interactive()
+	if atTerminal {
+		found = outsideProjects(findAgents(), connected)
+		safePath = pathOutsideProjects(os.Getenv("PATH"), connected)
+	}
+	var known []remote.RemoteProject
+	err = relay.Update(func(s *relay.State) error {
+		if atTerminal {
+			s.All = s.All || every
+			s.Agents, s.Path = found, safePath
+		}
+		added = s.Enroll(connected, config.Guard, time.Now())
+		for id, p := range s.Projects {
+			known = append(known, remote.RemoteProject{ID: id, Name: p.Name})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := client.SetRemoteProjects(known); err != nil {
+		fmt.Fprintf(os.Stderr, "Turned on here, but the account could not be told (%v). The runner tells it when it starts.\n", err)
+	}
+	return added, found, nil
+}
+
+// outsideProjects drops any agent found inside a connected project, such as
+// one in node_modules/.bin, which anything working in that project could
+// replace.
+func outsideProjects(found map[string]string, connected map[string]account.Project) map[string]string {
+	kept := map[string]string{}
+	for name, path := range found {
+		if !insideAny(path, connected) {
+			kept[name] = path
+		}
+	}
+	return kept
+}
+
+// pathOutsideProjects is PATH without its folders in a connected project: the
+// runner starts agents with it, and they find their tools on it.
+func pathOutsideProjects(path string, connected map[string]account.Project) string {
+	var kept []string
+	for _, dir := range filepath.SplitList(path) {
+		if !insideAny(dir, connected) {
+			kept = append(kept, dir)
+		}
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
+}
+
+func insideAny(path string, connected map[string]account.Project) bool {
+	for root := range connected {
+		if relay.Within(path, root) {
+			return true
+		}
+	}
+	return false
 }
 
 // pairPasskey shows a code, waits for the phone to sign it, and trusts the
@@ -162,7 +274,7 @@ func pairPasskey(client remote.Client, creds account.Credentials, s *relay.State
 	for {
 		if time.Now().After(deadline) {
 			fmt.Println()
-			return errors.New("the code expired. Run trackline remote enable again")
+			return errors.New("the code expired. Run trackline remote enable to try again")
 		}
 		time.Sleep(pairPoll)
 		fmt.Print(".")
@@ -234,15 +346,19 @@ func remoteDisable(args []string) error {
 		root, _ = os.Getwd()
 	}
 	root, _ = filepath.Abs(root)
-	if r, _, ok := account.ProjectFor(root); ok {
-		root = r
-	}
 	var id string
+	if r, p, ok := account.ProjectFor(root); ok {
+		root, id = r, p.ID
+	}
 	left := 0
 	if err := relay.Update(func(s *relay.State) error {
-		var ok bool
-		if id, _, ok = s.ProjectAt(root); ok {
-			delete(s.Projects, id)
+		if on, _, ok := s.ProjectAt(root); ok {
+			id = on
+		}
+		// A project not on yet is turned off too, or it would come on with
+		// the rest.
+		if id != "" {
+			s.TurnOff(id, root)
 		}
 		left = len(s.Projects)
 		return nil
@@ -259,7 +375,7 @@ func remoteDisable(args []string) error {
 	if left == 0 {
 		stopAtLogin()
 	}
-	fmt.Printf("Remote is off for %s.\n", filepath.Base(root))
+	fmt.Printf("Remote is off for %s, and stays off until you run trackline remote enable there.\n", filepath.Base(root))
 	return nil
 }
 
@@ -269,8 +385,11 @@ func remoteStatus() error {
 		return err
 	}
 	if len(s.Projects) == 0 && len(s.Keys) == 0 {
-		fmt.Println("Remote is off. Turn it on inside a project: trackline remote enable")
+		fmt.Println("Remote is off. Pair your phone: trackline remote enable")
 		return nil
+	}
+	if s.All {
+		fmt.Println("Every connected project on this laptop takes messages from your phone.")
 	}
 	fmt.Println("Passkeys that can send jobs here:")
 	for _, k := range s.Keys {
@@ -286,6 +405,9 @@ func remoteStatus() error {
 			last = "last job " + ago(time.Since(p.LastJobAt))
 		}
 		fmt.Printf("  %s  (%s)\n", p.Root, last)
+	}
+	if len(s.Off) > 0 {
+		fmt.Printf("\nTurned off by you: %d project(s)\n", len(s.Off))
 	}
 	fmt.Println()
 	fmt.Println(statusAgents(s))
@@ -315,6 +437,12 @@ type runnerStatus struct {
 func statusPath() string {
 	d, _ := account.Dir()
 	return filepath.Join(d, "remote.status")
+}
+
+func runnerRunning() bool {
+	var st runnerStatus
+	b, err := os.ReadFile(statusPath())
+	return err == nil && json.Unmarshal(b, &st) == nil && alive(st.PID)
 }
 
 func runnerLine() string {
@@ -367,14 +495,24 @@ func remoteRun() error {
 	if err != nil {
 		return err
 	}
+	// Projects connected while the runner was not looking, then the account,
+	// which may have missed an enable made while offline. Never a lift of a
+	// stop made from the site: that takes a person at the laptop.
+	if connected, err := account.Projects(); err == nil {
+		relay.Update(func(s *relay.State) error { s.Enroll(connected, config.Guard, time.Now()); return nil })
+	}
+	if s, err = relay.Load(); err != nil {
+		return err
+	}
 	if len(s.Projects) == 0 {
 		fmt.Println("Remote is not on for any project. Nothing to run.")
 		return nil
 	}
-	// The account may have missed an enable made while offline.
+	var known []remote.RemoteProject
 	for id, p := range s.Projects {
-		client.SetRemoteProject(id, p.Name)
+		known = append(known, remote.RemoteProject{ID: id, Name: p.Name})
 	}
+	client.SetRemoteProjects(known)
 	logf("runner started for %d project(s)", len(s.Projects))
 	writeStatus(runnerStatus{PID: os.Getpid()})
 	r := newRuns()

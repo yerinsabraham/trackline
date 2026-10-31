@@ -3,6 +3,23 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.12.0 · 2026-10-31
+
+- **Reply from your phone in every project.** Pair your phone once, during
+  `trackline connect`, and every project you connect takes messages, with no
+  command per project. Every message still needs your passkey, and your laptop
+  still checks it. **On a laptop already paired, run `trackline remote enable`
+  once in a terminal after updating**; you get one email listing the projects.
+  `trackline remote disable` turns a project off, and it stays off.
+- **The reply box is never locked.** You can always type, and a line underneath
+  says what would let it send.
+- **A project in use at your desk no longer pauses after 30 days.**
+- **`trackline remote enable` needs a real terminal.** It accepts changed
+  settings and lifts a stop made from the site, so only a person may run it. A
+  stop made from the site now also survives the runner restarting at login.
+- **`trackline connect` never shares without you.** Run by an agent with no
+  terminal, it keeps the answer you gave before, or does not share.
+
 ## 0.11.0 · 2026-09-27
 
 - **Send images from your phone.** Attach up to four screenshots or photos to

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import ReplyText, { plain } from "../components/ReplyText";
+import ReplyText, { LinkedText, plain } from "../components/ReplyText";
 
 const html = (text: string) => renderToStaticMarkup(<ReplyText text={text} />);
 
@@ -43,11 +43,46 @@ test("raw HTML is shown as text, never as markup", () => {
   assert.match(h, /&lt;script&gt;/);
 });
 
-test("a link cannot take anyone anywhere", () => {
-  for (const t of ["[click](https://evil.example)", "[x](javascript:alert(1))", "<https://evil.example>", "https://evil.example"]) {
-    assert.doesNotMatch(html(t), /<a\b|href=/, t);
+test("a link opens in a new tab that gets nothing from this page", () => {
+  for (const t of ["[docs](https://example.com/a)", "<https://example.com/a>", "https://example.com/a"]) {
+    const h = html(t);
+    assert.match(h, /href="https:\/\/example\.com\/a"/, t);
+    assert.match(h, /target="_blank"/, t);
+    assert.match(h, /rel="noopener noreferrer nofollow"/, t);
   }
-  assert.match(html("[click](https://evil.example)"), /click/);
+});
+
+test("only a web address becomes a link", () => {
+  for (const t of ["[x](javascript:alert(1))", "[x](data:text/html,hi)", "[x](file:///etc/passwd)", "[x](vbscript:msgbox(1))", "[x](/app/account)", "[x](mailto:a@b.co)"]) {
+    const h = html(t);
+    assert.doesNotMatch(h, /<a\b|href=/, t);
+    assert.match(h, />x</, t);
+  }
+});
+
+test("a link cannot hide where it goes", () => {
+  assert.match(html("[click here](https://evil.example)"), /\(evil\.example\)/);
+  assert.match(html("[paypal.com](https://evil.example)"), /\(evil\.example\)/);
+  assert.match(html("[paypal.com/evil.example](https://evil.example)"), /\(evil\.example\)/);
+  assert.match(html("[https://paypal.com](https://evil.example)"), /\(evil\.example\)/);
+  assert.doesNotMatch(html("https://example.com/a"), /link-site/);
+  assert.doesNotMatch(html("[www.example.com](https://example.com)"), /link-site/);
+});
+
+test("a link cannot hide behind a login part or look-alike letters", () => {
+  assert.doesNotMatch(html("https://paypal.com@evil.example"), /<a\b/);
+  assert.doesNotMatch(html("[x](https://paypal.com@evil.example)"), /<a\b/);
+  assert.doesNotMatch(renderToStaticMarkup(<LinkedText text="https://paypal.com@evil.example" />), /<a\b/);
+  assert.match(html("https://аpple.com"), /link-site/);
+});
+
+test("addresses in what a person typed become links, and nothing else changes", () => {
+  const typed = (t: string) => renderToStaticMarkup(<LinkedText text={t} />);
+  assert.match(typed("see https://example.com/a, please"), /<a href="https:\/\/example\.com\/a"[^>]*target="_blank"[^>]*>https:\/\/example\.com\/a<\/a>, please/);
+  assert.match(typed("(https://example.com/a)."), /<\/a>\)\./);
+  assert.equal(typed("no address here"), "no address here");
+  assert.equal(typed("<b>not markup</b>"), "&lt;b&gt;not markup&lt;/b&gt;");
+  assert.doesNotMatch(typed("javascript:alert(1)"), /<a/);
 });
 
 test("an image is never loaded, so it cannot carry anything out", () => {
