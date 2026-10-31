@@ -42,16 +42,42 @@ test("a new reply is followed when you are at the bottom", async ({ page, contex
   await expect(page.getByText("The newest reply")).toBeInViewport({ timeout: 8000 });
 });
 
+// As a finger does: many small moves. One jump of the whole distance is a single
+// scroll event, which the follower can lose if it lands as the page changes height.
+const swipeUp = (page: Page, steps: number) => page.locator(".chat-scroll").evaluate(async (el, n) => {
+  for (let i = 0; i < n; i++) {
+    el.scrollTop -= 60;
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+}, steps);
+const NEW_REPLY = () => [{ id: "new", at: new Date().toISOString(), turn: "new", text: "The newest reply" }];
+const position = (page: Page) => page.locator(".chat-scroll").evaluate((el) => el.scrollTop);
+
 test("scrolling up to read is not undone by a new reply", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await openChat(page);
   await expect.poll(() => atBottom(page)).toBeLessThan(4);
-  await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 800; });
-  await page.waitForTimeout(300);
-  fake.extra = [{ id: "new", at: new Date().toISOString(), turn: "new", text: "The newest reply" }];
+  await swipeUp(page, 30);
+  await page.waitForTimeout(100);
+  const reading = await position(page);
+  fake.extra = NEW_REPLY();
   await page.getByText("The newest reply").waitFor({ state: "attached", timeout: 8000 });
   await page.waitForTimeout(300);
-  expect(await page.locator(".chat-scroll").evaluate((el) => el.scrollTop)).toBeLessThan(1200);
+  expect(await position(page)).toBe(reading);
+});
+
+test("a reply landing in the middle of a swipe does not pull you back", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await openChat(page);
+  await expect.poll(() => atBottom(page)).toBeLessThan(4);
+  fake.extra = NEW_REPLY();
+  // The next poll arrives while the finger is moving.
+  for (let i = 0; i < 12; i++) await swipeUp(page, 15);
+  await page.getByText("The newest reply").waitFor({ state: "attached", timeout: 8000 });
+  const reading = await position(page);
+  await page.waitForTimeout(300);
+  expect(await position(page)).toBe(reading);
+  expect(await atBottom(page)).toBeGreaterThan(400);
 });
 
 test("a table renders as a table and does not widen the page", async ({ page, context }) => {
