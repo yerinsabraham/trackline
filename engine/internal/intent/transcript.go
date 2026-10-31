@@ -2,9 +2,12 @@ package intent
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,6 +26,10 @@ import (
 // Reader consumes a host transcript incrementally.
 type Reader struct {
 	Path string
+	// Peers are hashes of text one agent wrote to another. Resuming an agent
+	// delivers such text exactly as a person's words would arrive, so without
+	// this a peer could quietly become what a change is measured against.
+	Peers map[string]bool
 	// Tail, when set, reads only about this many bytes from the end. The first
 	// read then costs the same however long the session has grown.
 	Tail int64
@@ -37,6 +44,41 @@ type Reader struct {
 	// codexTurn is the turn a Codex request belongs to. Codex writes it on a
 	// task_started line just before the request, not on the request itself.
 	codexTurn string
+}
+
+func (r *Reader) add(in *Intent, id string, at time.Time, text string) {
+	if !r.Peers[PeerHash(text)] {
+		in.Add(id, at, text)
+	}
+}
+
+// PeerFile names the list of peer text, one hash a line, in the account folder.
+const PeerFile = "peer-results"
+
+// peersKept bounds what the hook reads before every action.
+const peersKept = 2000
+
+// PeerHash is how peer text is recognised, whatever whitespace a host trims.
+func PeerHash(text string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	return hex.EncodeToString(sum[:16])
+}
+
+// LoadPeers reads the list. No list means no peer text, the usual case.
+func LoadPeers(dir string) map[string]bool {
+	b, err := os.ReadFile(filepath.Join(dir, PeerFile))
+	if err != nil {
+		return nil
+	}
+	lines := strings.Fields(string(b))
+	if len(lines) > peersKept {
+		lines = lines[len(lines)-peersKept:]
+	}
+	peers := make(map[string]bool, len(lines))
+	for _, l := range lines {
+		peers[l] = true
+	}
+	return peers
 }
 
 // Unrecognised reports a transcript with lines in it, none of which were in a
@@ -298,7 +340,7 @@ func (r *Reader) Read(in *Intent) error {
 					break
 				}
 				at, _ := time.Parse(time.RFC3339, e.Timestamp)
-				in.Add(r.codexTurn, at, req)
+				r.add(in, r.codexTurn, at, req)
 			case e.Type == "response_item" && c.Type == "message" && c.Role == "assistant":
 				r.sawAssistant++
 			}
@@ -308,7 +350,7 @@ func (r *Reader) Read(in *Intent) error {
 			// No id and no timestamp on the line. Turns stay in order, which is
 			// what Anchor and Recent need; matching a turn to its actions by id
 			// is not available for Cursor, and review says so.
-			in.Add("", time.Time{}, req)
+			r.add(in, "", time.Time{}, req)
 			continue
 		}
 		if !e.isHumanTurn() {
@@ -322,7 +364,7 @@ func (r *Reader) Read(in *Intent) error {
 		if err != nil {
 			at = time.Time{}
 		}
-		in.Add(e.PromptID, at, txt)
+		r.add(in, e.PromptID, at, txt)
 	}
 	if err := sc.Err(); err != nil {
 		// Advance past what was read successfully so the next call makes

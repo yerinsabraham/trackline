@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
+	"github.com/yerinsabraham/trackline/engine/internal/intent"
 )
 
 // State is what this laptop trusts for remote jobs. It lives beside the
@@ -29,6 +30,9 @@ type State struct {
 	// chat keeps its own permissions, not the narrow ones a phone run gets, so
 	// only a person at a terminal here turns it on.
 	OpenChats bool `json:"openChats,omitempty"`
+	// Handoffs are the handoffs this laptop has started, by id, so one runs
+	// once whatever is delivered again, and a result survives a failed report.
+	Handoffs map[string]Handoff `json:"handoffs,omitempty"`
 	// All means every project connected on this laptop takes jobs, so a new
 	// one needs no step of its own. Pairing a passkey here is the consent: it
 	// is done at this laptop, and no job passes without that passkey's
@@ -74,6 +78,41 @@ type Enabled struct {
 	// Sessions are the agent sessions remote jobs started here, newest last,
 	// so one can be continued even if it never took an action trackline saw.
 	Sessions []string `json:"sessions,omitempty"`
+}
+
+// Handoff is what this laptop remembers of one handoff.
+type Handoff struct {
+	Job     string    `json:"job"`
+	Project string    `json:"project"`
+	At      time.Time `json:"at"`
+	// Finished is set with Result, Reason and Session once the receiver has
+	// ended. Reported is set once the account has that.
+	Finished bool   `json:"finished,omitempty"`
+	Result   string `json:"result,omitempty"`
+	Failed   string `json:"failed,omitempty"`
+	Session  string `json:"session,omitempty"`
+	Reported bool   `json:"reported,omitempty"`
+}
+
+// handoffsKept is far longer than any job may wait to arrive.
+const handoffsKept = 30 * 24 * time.Hour
+
+// ClaimHandoff records a handoff as started, and reports whether it was the
+// first to. A retry would otherwise repeat the task to recover an answer.
+func (s *State) ClaimHandoff(id, job, project string, now time.Time) bool {
+	if _, done := s.Handoffs[id]; done {
+		return false
+	}
+	if s.Handoffs == nil {
+		s.Handoffs = map[string]Handoff{}
+	}
+	for k, h := range s.Handoffs {
+		if now.Sub(h.At) > handoffsKept {
+			delete(s.Handoffs, k)
+		}
+	}
+	s.Handoffs[id] = Handoff{Job: job, Project: project, At: now}
+	return true
 }
 
 // sessionsKept bounds Enabled.Sessions.
@@ -228,6 +267,23 @@ func GrantsPath(project string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(project))
 	return filepath.Join(d, "remote-grants", hex.EncodeToString(sum[:8])+".json"), nil
+}
+
+// RecordPeer notes text that one agent wrote to another, by its hash, so the
+// checks never read it as something the person asked for. It lives here, beside
+// the approvals, and not in the project, where an agent could edit it.
+func RecordPeer(text string) error {
+	d, err := account.Dir()
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(d, intent.PeerFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(intent.PeerHash(text) + "\n")
+	return err
 }
 
 // ProjectAt finds the enabled project whose folder is root.

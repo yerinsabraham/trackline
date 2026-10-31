@@ -16,6 +16,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/claudecode"
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/codex"
 	"github.com/yerinsabraham/trackline/engine/internal/adapter/cursor"
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/engine"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
@@ -132,7 +133,7 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	var in intent.Intent
 	var intentUnavailable string
 	if ev.TranscriptPath != "" {
-		reader := &intent.Reader{Path: ev.TranscriptPath}
+		reader := &intent.Reader{Path: ev.TranscriptPath, Peers: peers()}
 		if err := reader.Read(&in); err != nil {
 			intentUnavailable = fmt.Sprintf("the session transcript could not be read: %v", err)
 		} else if len(in.Turns) == 0 {
@@ -173,6 +174,9 @@ func decide(ev event.Event, in intent.Intent, intentUnavailable string, opts Opt
 	remote := os.Getenv(config.RemoteEnv) != ""
 	if remote {
 		cfg = cfg.ForRemote()
+	}
+	if os.Getenv(config.HandoffEnv) != "" {
+		cfg = cfg.ForHandoff()
 	}
 	rules, rulesErr := config.LoadRules(root, cfg)
 
@@ -453,4 +457,13 @@ func blockedWhat(ev event.Event, target string) string {
 		return tool + " `" + c + "`"
 	}
 	return tool + " " + target
+}
+
+// peers is the text agents wrote to each other, never a person's request.
+func peers() map[string]bool {
+	dir, err := account.Dir()
+	if err != nil {
+		return nil
+	}
+	return intent.LoadPeers(dir)
 }

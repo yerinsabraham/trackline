@@ -410,7 +410,8 @@ func lastRequest(path string) string {
 		return ""
 	}
 	var in intent.Intent
-	r := intent.Reader{Path: path, Tail: tailBytes}
+	dir, _ := account.Dir()
+	r := intent.Reader{Path: path, Tail: tailBytes, Peers: intent.LoadPeers(dir)}
 	_ = r.Read(&in)
 	t, _ := in.Latest()
 	return t.Text

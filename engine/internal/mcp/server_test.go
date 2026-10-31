@@ -236,3 +236,34 @@ func TestUnlikelyRoots(t *testing.T) {
 		t.Error("an ordinary directory must not be flagged")
 	}
 }
+
+func TestTheAskServerOffersOneToolAndAnswersAtOnce(t *testing.T) {
+	var to, task string
+	s := mcp.Server{Version: "t", Ask: func(a, b string) (string, error) { to, task = a, b; return "waiting", nil }}
+	in := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"check_action","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ask_agent","arguments":{"to":"Reviewer","task":"Check the tests"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ask_agent","arguments":{"to":"Reviewer"}}}`,
+	}, "\n")
+	var out strings.Builder
+	if err := s.Serve(strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("answers: %q", lines)
+	}
+	if !strings.Contains(lines[0], "ask_agent") || strings.Contains(lines[0], "check_action") {
+		t.Errorf("a phone run's server must offer one tool: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "unknown tool") {
+		t.Errorf("check_action must not exist here: %s", lines[1])
+	}
+	if to != "Reviewer" || task != "Check the tests" || !strings.Contains(lines[2], "waiting") {
+		t.Errorf("to=%q task=%q said %s", to, task, lines[2])
+	}
+	if !strings.Contains(lines[3], `"isError":true`) {
+		t.Errorf("no task must be an error: %s", lines[3])
+	}
+}

@@ -222,7 +222,7 @@ func group(events []event.Event, root string) ([]groupedTurn, int) {
 			continue
 		}
 		seen[ev.TranscriptPath] = true
-		_ = (&intent.Reader{Path: ev.TranscriptPath}).Read(&in)
+		_ = (&intent.Reader{Path: ev.TranscriptPath, Peers: peerResults()}).Read(&in)
 	}
 
 	order := []string{}

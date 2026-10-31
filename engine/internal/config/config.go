@@ -186,6 +186,20 @@ func (c Config) ForRemote() Config {
 	return c
 }
 
+// HandoffEnv marks a run one agent asked for and the person approved.
+const HandoffEnv = "TRACKLINE_HANDOFF"
+
+// handoffLimits are what tell an agent how to behave, and which tools it has.
+// Agents have used these files to free each other, and an approved task is the
+// one route another agent has to this run. Blocked here, never at the desk.
+var handoffLimits = []string{"CLAUDE.md", "AGENTS.md", ".mcp.json", ".codex/**", ".claude/**"}
+
+// ForHandoff tightens a remote run that came from another agent.
+func (c Config) ForHandoff() Config {
+	c.OffLimits = append(append([]string{}, c.OffLimits...), handoffLimits...)
+	return c
+}
+
 // Where a remote session reads the fingerprint of its guarded files, and the
 // approvals made from the phone. Both are set by the runner on the agent's
 // environment, which the agent cannot change for the hook: the host starts

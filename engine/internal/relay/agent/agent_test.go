@@ -268,3 +268,26 @@ func TestAPositionSaysItWidensNothing(t *testing.T) {
 		t.Fatalf("argv = %q", argv)
 	}
 }
+
+func TestTheAskToolIsGivenToOneRunOnly(t *testing.T) {
+	plain, _ := agent.Command("codex", "codex", "/work/app", "sess-1", "")
+	with := agent.WithAskTool("codex", plain, "/bin/trackline", "job_1")
+	if len(plain) >= len(with) || with[0] != "codex" || with[1] != "exec" {
+		t.Fatalf("argv = %q", with)
+	}
+	if last := with[len(with)-2:]; last[0] != "sess-1" || last[1] != "-" {
+		t.Fatalf("the session and stdin moved: %q", with)
+	}
+	if !strings.Contains(strings.Join(with, " "), `["remote","ask-tool","job_1"]`) {
+		t.Fatalf("argv = %q", with)
+	}
+	claude, _ := agent.Command("claude", "claude", "/work/app", "", "")
+	got := strings.Join(agent.WithAskTool("claude", claude, "/bin/trackline", "job_1"), " ")
+	if !strings.Contains(got, "--allowedTools=mcp__trackline__ask_agent") || !strings.Contains(got, "--mcp-config=") {
+		t.Fatalf("argv = %q", got)
+	}
+	cursor := []string{"cursor-agent", "-p"}
+	if !reflect.DeepEqual(agent.WithAskTool("cursor", cursor, "/bin/trackline", "job_1"), cursor) {
+		t.Fatal("cursor gets no tool")
+	}
+}

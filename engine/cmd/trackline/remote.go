@@ -45,6 +45,8 @@ func cmdRemote(args []string) error {
 		return remoteStatus()
 	case "run":
 		return remoteRun()
+	case "ask-tool":
+		return remoteAskTool(args[1:])
 	}
 	return fmt.Errorf("unknown: trackline remote %s. Try: enable, disable, status", args[0])
 }
@@ -541,6 +543,7 @@ func remoteRun() error {
 		os.Exit(0)
 	}()
 
+	resendHandoffs(client)
 	backoff := time.Second
 	for {
 		next, err := client.NextJob(pollWait)

@@ -39,6 +39,10 @@ type Server struct {
 	Root    string
 	Version string
 	Now     func() time.Time
+	// Ask, when set, makes this the server given to an agent run from the
+	// phone: ask_agent and nothing else. It answers with what to tell the
+	// agent, or an error it should see.
+	Ask func(to, task string) (string, error)
 }
 
 type request struct {
@@ -116,6 +120,13 @@ func (s *Server) handle(req request) (any, *rpcError) {
 				v = known
 			}
 		}
+		if s.Ask != nil {
+			return map[string]any{
+				"protocolVersion": v,
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "trackline", "version": s.Version},
+			}, nil
+		}
 		return map[string]any{
 			"protocolVersion": v,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
@@ -127,6 +138,9 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
+		if s.Ask != nil {
+			return map[string]any{"tools": askTools}, nil
+		}
 		return map[string]any{"tools": tools}, nil
 	case "tools/call":
 		var p struct {
@@ -135,6 +149,12 @@ func (s *Server) handle(req request) (any, *rpcError) {
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, &rpcError{Code: -32602, Message: "invalid params"}
+		}
+		if s.Ask != nil {
+			if p.Name != "ask_agent" {
+				return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("unknown tool %q", p.Name)}
+			}
+			return s.askAgent(p.Arguments), nil
 		}
 		switch p.Name {
 		case "check_action":
@@ -173,6 +193,38 @@ var tools = []map[string]any{
 		"description": "The project's rules: protected paths, how each check acts, and the rules files trackline read.",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 	},
+}
+
+// askTools answers at once: a tool that waited for a person would outlive the
+// agent's own tool timeout, and hold the project the receiver needs.
+var askTools = []map[string]any{{
+	"name": "ask_agent",
+	"description": "Ask another agent on the person's team to do a task. The person reads it in full " +
+		"and approves it first. This returns at once with a handoff number, and nothing has happened yet. " +
+		"Then end your turn: the other agent cannot start until you stop.",
+	"inputSchema": map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"to":   map[string]any{"type": "string", "description": "the team member's name"},
+			"task": map[string]any{"type": "string", "description": "exactly what you want done, in full"},
+		},
+		"required": []string{"to", "task"},
+	},
+}}
+
+func (s *Server) askAgent(raw json.RawMessage) map[string]any {
+	var a struct {
+		To   string `json:"to"`
+		Task string `json:"task"`
+	}
+	if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.To) == "" || strings.TrimSpace(a.Task) == "" {
+		return toolError("ask_agent needs who to ask and what to do")
+	}
+	said, err := s.Ask(a.To, a.Task)
+	if err != nil {
+		return toolError(err.Error())
+	}
+	return map[string]any{"content": []map[string]any{{"type": "text", "text": said}}}
 }
 
 type checkArgs struct {

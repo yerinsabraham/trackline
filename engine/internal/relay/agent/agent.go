@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -112,6 +113,33 @@ func Command(name, binary, root, session, position string, images ...string) ([]
 		return argv, nil
 	}
 	return nil, errors.New("unknown agent: " + name)
+}
+
+// WithAskTool gives one run the ask_agent tool, for this run only and with no
+// settings changed. Only a run a person started gets it. job says which run is
+// asking, and the account checks it: nothing the agent says names the sender.
+func WithAskTool(name string, argv []string, trackline, job string) []string {
+	var extra []string
+	var at int
+	switch name {
+	case "claude":
+		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"trackline": map[string]any{
+			"command": trackline, "args": []string{"remote", "ask-tool", job},
+		}}})
+		extra, at = []string{"--mcp-config=" + string(cfg), "--allowedTools=mcp__trackline__ask_agent"}, 2
+	case "codex":
+		bin, _ := json.Marshal(trackline)
+		args, _ := json.Marshal([]string{"remote", "ask-tool", job})
+		extra = []string{
+			"-c", "mcp_servers.trackline.command=" + string(bin),
+			"-c", "mcp_servers.trackline.args=" + string(args),
+			"-c", `mcp_servers.trackline.default_tools_approval_mode="approve"`,
+		}
+		at = slices.Index(argv, "--json") + 1
+	default:
+		return argv
+	}
+	return slices.Insert(slices.Clone(argv), at, extra...)
 }
 
 // standing is what an agent is told about its position. The words around the

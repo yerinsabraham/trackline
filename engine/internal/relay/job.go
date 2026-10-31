@@ -45,6 +45,15 @@ type Job struct {
 	// that stopped an action, and what it stopped.
 	Check  string `json:"check,omitempty"`
 	Target string `json:"target,omitempty"`
+	// A handoff is one agent's approved request to another, and these are all
+	// it signs beyond the receiver, project, task and expiry above. Handoff is
+	// its one id, From and FromAgent the sender as the account recorded it, and
+	// Return whether the result may go back to the sender, once. What the
+	// receiver may do is the runner's to say, so none of that is here.
+	Handoff   string `json:"handoff,omitempty"`
+	From      string `json:"from,omitempty"`
+	FromAgent string `json:"fromAgent,omitempty"`
+	Return    bool   `json:"return,omitempty"`
 	// Images attached on the phone. The bytes travel separately; what is
 	// signed is each one's hash, so the laptop takes only the exact images
 	// the person chose, whatever the server hands it.
@@ -107,12 +116,17 @@ const (
 
 // Kinds a job may be: a test job proves the path and runs nothing; a prompt
 // starts an agent.
-var kinds = map[string]bool{"test": true, "prompt": true, "allow": true, "deny": true}
+var kinds = map[string]bool{"test": true, "prompt": true, "allow": true, "deny": true, "handoff": true}
 
 // Continues is whether a kind of job runs the agent in an existing session.
-func Continues(kind string) bool { return kind == "prompt" || kind == "allow" || kind == "deny" }
+func Continues(kind string) bool {
+	return kind == "prompt" || kind == "allow" || kind == "deny" || kind == "handoff"
+}
 
-var checkName = regexp.MustCompile(`^[a-z][a-z-]{0,39}$`)
+var (
+	checkName = regexp.MustCompile(`^[a-z][a-z-]{0,39}$`)
+	handoffID = regexp.MustCompile(`^hf_[A-Za-z0-9_-]{8,64}$`)
+)
 
 var sessionID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
@@ -222,7 +236,7 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	if len(j.Text) > MaxText || strings.ContainsRune(j.Text, 0) {
 		return Accepted{}, refuse("unsupported", "the instruction is too long or not text")
 	}
-	if len(j.Position) > MaxPosition || strings.ContainsRune(j.Position, 0) || j.Position != "" && j.Kind != "prompt" {
+	if len(j.Position) > MaxPosition || strings.ContainsRune(j.Position, 0) || j.Position != "" && j.Kind != "prompt" && j.Kind != "handoff" {
 		return Accepted{}, refuse("bad-job", "the position is not one a job can carry")
 	}
 	if len(j.Images) > 0 && j.Kind != "prompt" || len(j.Images) > MaxImages {
@@ -252,6 +266,14 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 		}
 	} else if j.Check != "" || j.Target != "" {
 		return Accepted{}, refuse("unsupported", "only a decision names a check")
+	}
+
+	if j.Kind == "handoff" {
+		if j.Agent == "" || strings.TrimSpace(j.Text) == "" || !handoffID.MatchString(j.Handoff) || !sessionID.MatchString(j.From) || !agents[j.FromAgent] {
+			return Accepted{}, refuse("unsupported", "a handoff needs a receiver, a task, its id and its sender")
+		}
+	} else if j.Handoff != "" || j.From != "" || j.FromAgent != "" || j.Return {
+		return Accepted{}, refuse("unsupported", "only a handoff names a sender")
 	}
 
 	p, ok := s.Projects[j.Project]

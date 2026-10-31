@@ -841,3 +841,87 @@ func TestASwappedImageIsRefused(t *testing.T) {
 		t.Fatal("the swapped image was kept")
 	}
 }
+
+func handoffJob(phone *relaytest.Phone, id, project string) remote.Delivery {
+	now := time.Now()
+	return remote.Delivery{ID: id, Envelope: phone.Send(relay.Job{V: 1, ID: id, Machine: "dev_laptop", Project: project,
+		Kind: "handoff", Agent: "claude", Text: "Review the login change", Handoff: "hf_abcdefgh12", From: "sess-1", FromAgent: "claude",
+		IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Minute).UnixMilli()})}
+}
+
+func TestAHandoffRunsMarkedAndKeepsItsResult(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{handoffJob(phone, "job_handoff", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+
+	if res := f.results["job_handoff"]; res.Status != "done" || res.Output != "all done" {
+		t.Fatalf("result: %+v", res)
+	}
+	if got := read(t, filepath.Join(out, "prompt")); !strings.HasPrefix(got, "Another agent asked for this") || !strings.HasSuffix(got, "Review the login change") {
+		t.Errorf("told: %q", got)
+	}
+	if strings.Contains(read(t, filepath.Join(out, "argv")), "ask-tool") {
+		t.Error("a receiver must not get the tool, or two agents can loop")
+	}
+	s, _ := relay.Load()
+	if h := s.Handoffs["hf_abcdefgh12"]; !h.Finished || h.Result != "all done" || !h.Reported {
+		t.Fatalf("kept: %+v", h)
+	}
+}
+
+func TestAPromptGetsTheToolAndADecisionDoesNot(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{prompt(phone, "job_tool", proj, "hello")}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if got := read(t, filepath.Join(out, "argv")); !strings.Contains(got, "ask-tool") || !strings.Contains(got, "job_tool") {
+		t.Fatalf("argv: %s", got)
+	}
+}
+
+func TestAHandoffDeliveredTwiceRunsOnce(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	_, out, phone, proj := promptEnv(t, f)
+	f.queue = []remote.Delivery{handoffJob(phone, "job_first", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	os.Remove(filepath.Join(out, "prompt"))
+
+	// A new signature for the same handoff: a different job, the same work.
+	f.queue = []remote.Delivery{handoffJob(phone, "job_second", proj)}
+	f.stopAfter = 1
+	runUntilStopped(t)
+	if res := f.results["job_second"]; res.Code != "handoff-repeat" {
+		t.Fatalf("result: %+v", res)
+	}
+	if read(t, filepath.Join(out, "prompt")) != "" {
+		t.Fatal("the task ran twice")
+	}
+}
+
+func TestAResultTheAccountNeverGotIsSentAgainNotRunAgain(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}}
+	promptEnv(t, f)
+	relay.Update(func(s *relay.State) error {
+		s.ClaimHandoff("hf_done", "job_lost_report", "p", time.Now())
+		h := s.Handoffs["hf_done"]
+		h.Finished, h.Result = true, "the result"
+		s.Handoffs["hf_done"] = h
+		s.ClaimHandoff("hf_gone", "job_lost_run", "p", time.Now().Add(-time.Hour))
+		return nil
+	})
+	client, _, err := remoteClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resendHandoffs(client)
+	if res := f.results["job_lost_report"]; res.Status != "done" || res.Output != "the result" {
+		t.Fatalf("report: %+v", res)
+	}
+	if res := f.results["job_lost_run"]; res.Status != "failed" || res.Code != "lost" {
+		t.Fatalf("lost: %+v", res)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
@@ -108,6 +109,16 @@ type Result struct {
 	// Session is the agent's own session id, which joins the job to the
 	// session trackline watched, and is what R4 resumes.
 	Session string `json:"session,omitempty"`
+}
+
+// AskAgent files a handoff. job is the run asking: the account takes the sender
+// from its own record of that job. It answers with the handoff's number.
+func (c Client) AskAgent(job, to, task string) (string, error) {
+	var out struct {
+		Number int `json:"number"`
+	}
+	err := c.do("POST", "/remote/handoffs", map[string]any{"job": job, "to": to, "task": task}, &out)
+	return strconv.Itoa(out.Number), err
 }
 
 // JobEvents sends what a running agent did, numbered from from so a batch

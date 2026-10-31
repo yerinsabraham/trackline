@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -162,5 +163,18 @@ func TestForRemoteOnlyTightens(t *testing.T) {
 	}
 	if c.Modes["off-limits"] != config.ModeWarn || !c.IsDisabled("dependency-added") {
 		t.Error("ForRemote changed the configuration it was given")
+	}
+}
+
+func TestAHandoffCannotTouchWhatTellsAnAgentHowToBehave(t *testing.T) {
+	c := config.Config{OffLimits: []string{"secrets/**"}}
+	got := c.ForHandoff()
+	for _, want := range []string{"secrets/**", "CLAUDE.md", "AGENTS.md", ".mcp.json", ".codex/**", ".claude/**"} {
+		if !slices.Contains(got.OffLimits, want) {
+			t.Errorf("%s is not protected", want)
+		}
+	}
+	if len(c.OffLimits) != 1 {
+		t.Fatal("the caller's list changed")
 	}
 }

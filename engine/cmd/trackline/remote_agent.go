@@ -186,6 +186,10 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	// A session to continue must be one that ran in this project. The id
 	// comes from the server, and resuming another project's conversation here
 	// would bring its context with it (Codex looks sessions up globally).
+	if j.Kind == "handoff" && !knownSession(got.Root, s.Projects[j.Project].Sessions, j.From) {
+		refuse("unknown-session", fmt.Sprintf("the agent asking did not work in %s", filepath.Base(got.Root)))
+		return
+	}
 	if j.Session != "" && !knownSession(got.Root, s.Projects[j.Project].Sessions, j.Session) {
 		refuse("unknown-session", fmt.Sprintf("that conversation did not happen in %s, so it cannot be continued there. Start a new task instead", filepath.Base(got.Root)))
 		return
@@ -221,11 +225,28 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		refuse("unsupported", fmt.Sprintf("%s: %v", name, err))
 		return
 	}
+	// Only a person's own message gets the tool: a receiver and a returned
+	// result have no way to set off another handoff.
+	if j.Kind == "prompt" {
+		if self, err := os.Executable(); err == nil {
+			argv = agent.WithAskTool(j.Agent, argv, self, d.ID)
+		}
+	}
 	ctx, cancel := context.WithCancelCause(context.Background())
 	if !r.start(j.Project, cancel) {
 		cancel(nil)
 		refuse("busy", "an agent is already working in this project; wait for it or stop it")
 		return
+	}
+	if j.Kind == "handoff" {
+		first := false
+		if err := relay.Update(func(s *relay.State) error { first = s.ClaimHandoff(j.Handoff, d.ID, j.Project, time.Now()); return nil }); err != nil || !first {
+			r.finish(j.Project)
+			cancel(nil)
+			refuse("handoff-repeat", "this handoff already started once, so it will not run again")
+			return
+		}
+		j.Text = delegatedText(j)
 	}
 	if j.Kind == "allow" || j.Kind == "deny" {
 		if err := decide(got, grants); err != nil {
@@ -242,6 +263,15 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 		defer r.finish(j.Project)
 		defer cancel(nil)
 		res := runAgent(ctx, cancel, client, d.ID, j, got.Root, argv, s.Path, guard, grants)
+		if j.Kind == "handoff" && agent.Locked(res.Reason) {
+			yieldHandoff(j.Handoff)
+			client.JobResult(d.ID, remote.Result{Status: "refused", Code: "in-use", Reason: "the agent you approved is open on your computer. Close it there and approve this again"})
+			return
+		}
+		if j.Kind == "handoff" {
+			finishHandoff(ctx, cancel, client, d.ID, j, res, got.Root, binaryOf(s, j.FromAgent), s.Path, guard, grants)
+			return
+		}
 		if j.Session != "" && j.Agent == "codex" && agent.Locked(res.Reason) {
 			res = joinOpenChat(ctx, j, got.Root, binary, s.Path, s.OpenChats)
 		}
@@ -399,7 +429,7 @@ func agentEnv(base []string, path, job, guard, grants string) []string {
 		k, _, _ := strings.Cut(kv, "=")
 		// CLAUDECODE marks a shell inside Claude Code, where claude declines
 		// to start another session.
-		if k == "PATH" && path != "" || k == config.RemoteEnv || k == config.RemoteGuardEnv || k == config.RemoteGrantsEnv || k == "CLAUDECODE" {
+		if k == "PATH" && path != "" || k == config.RemoteEnv || k == config.RemoteGuardEnv || k == config.RemoteGrantsEnv || k == config.HandoffEnv || k == "CLAUDECODE" {
 			continue
 		}
 		env = append(env, kv)
@@ -418,6 +448,9 @@ func runAgent(ctx context.Context, cancel context.CancelCauseFunc, client remote
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = root
 	cmd.Env = agentEnv(os.Environ(), path, id, guard, grants)
+	if j.Kind == "handoff" {
+		cmd.Env = append(cmd.Env, config.HandoffEnv+"=1")
+	}
 	// On stdin, never in argv: an instruction that looks like a flag is text.
 	cmd.Stdin = strings.NewReader(j.Text)
 	var stderr tail

@@ -412,3 +412,65 @@ func TestOnlyAPromptMayWaitForASleepingLaptop(t *testing.T) {
 		t.Fatalf("a prompt nothing collected in time: %s", got)
 	}
 }
+
+func handoff() relay.Job {
+	j := job()
+	j.Kind, j.Handoff, j.From, j.FromAgent, j.Agent = "handoff", "hf_abcdefgh12", "sess-from", "claude", "codex"
+	return j
+}
+
+func TestAHandoffIsSignedLikeAnyJob(t *testing.T) {
+	f := setup(t)
+	got, err := relay.Check(f.state, f.phone.Send(handoff()), machine, now)
+	if err != nil {
+		t.Fatalf("refused: %v", err)
+	}
+	if got.Job.From != "sess-from" || got.Job.Agent != "codex" {
+		t.Fatalf("accepted the wrong thing: %+v", got.Job)
+	}
+	other := relaytest.New("attacker")
+	other.ID = f.phone.ID
+	forged := handoff()
+	forged.ID = "job_abcdefghijklmnopqrst"
+	if _, err := relay.Check(f.state, other.Send(forged), machine, now); err == nil {
+		t.Fatal("a handoff signed by anyone else must be refused")
+	}
+}
+
+func TestAHandoffMustNameItsSender(t *testing.T) {
+	cases := map[string]func(*relay.Job){
+		"no id":          func(j *relay.Job) { j.Handoff = "" },
+		"a bad id":       func(j *relay.Job) { j.Handoff = "--flag" },
+		"no sender":      func(j *relay.Job) { j.From = "" },
+		"a flag":         func(j *relay.Job) { j.From = "--yolo" },
+		"no sender tool": func(j *relay.Job) { j.FromAgent = "" },
+		"no task":        func(j *relay.Job) { j.Text = "  " },
+	}
+	for name, change := range cases {
+		f := setup(t)
+		j := handoff()
+		change(&j)
+		if _, err := relay.Check(f.state, f.phone.Send(j), machine, now); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	f := setup(t)
+	j := job()
+	j.From = "sess-from"
+	if _, err := relay.Check(f.state, f.phone.Send(j), machine, now); err == nil {
+		t.Error("a prompt must not name a sender")
+	}
+}
+
+func TestAHandoffRunsOnce(t *testing.T) {
+	var s relay.State
+	if !s.ClaimHandoff("hf_1", "job_1", "p", now) {
+		t.Fatal("the first claim failed")
+	}
+	if s.ClaimHandoff("hf_1", "job_2", "p", now) {
+		t.Fatal("a second job ran the same handoff")
+	}
+	if !s.ClaimHandoff("hf_2", "job_3", "p", now.Add(40*24*time.Hour)) || len(s.Handoffs) != 1 {
+		t.Fatalf("old ones are not dropped: %v", s.Handoffs)
+	}
+}
