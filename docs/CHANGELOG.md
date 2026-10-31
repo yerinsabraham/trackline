@@ -3,7 +3,7 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
-## Unreleased
+## 0.13.0 · 2026-10-31
 
 - **Agents are individuals.** Every reply and chat shows its agent's name in
   bold, with the model that answered. Tap a name to rename it, add it to your
