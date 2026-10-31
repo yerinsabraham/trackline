@@ -160,3 +160,103 @@ test("the page is set up for the iPhone's safe areas", async ({ page, context })
   await page.goto("/app");
   expect(await page.locator('meta[name="viewport"]').getAttribute("content")).toContain("viewport-fit=cover");
 });
+
+const at = (mins: number) => new Date(Date.now() - mins * 60_000).toISOString();
+const job = (id: string, status: string, over = {}) => ({ id, kind: "prompt", status, code: null, reason: null, createdAt: at(1), stopRequestedAt: null, asked: null, permission: null, ...over });
+const remembered = (page: Page, id: string, text: string) => page.addInitScript((sent) => localStorage.setItem("trackline.sent", sent), JSON.stringify([[id, text]]));
+
+test("a turn answered in words shows what was asked, with every reply in it", async ({ page, context }) => {
+  await fakeAccount(context, { events: [], replies: [
+    { id: "a", at: at(5), turn: "t1", text: "First part.", request: "What does the hook do?" },
+    { id: "b", at: at(4), turn: "t1", text: "Second part.", request: "What does the hook do?" },
+  ] });
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".bubble-me")).toHaveText("What does the hook do?");
+  await expect(page.locator(".bubble-agent")).toHaveCount(2);
+});
+
+test("a reply that was cut says so", async ({ page, context }) => {
+  await fakeAccount(context, { events: [], replies: [{ id: "a", at: at(5), turn: "t1", text: "A long report", cut: true }] });
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".reply-cut")).toBeVisible();
+});
+
+test("a message stays after its job is done, even with nothing to replace it", async ({ page, context }) => {
+  await fakeAccount(context, { events: [], replies: [{ id: "a", at: at(0), turn: "t1", text: "Done." }], jobs: [job("job_1", "done")] });
+  await remembered(page, "job_1", "Keep this message");
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".bubble-me")).toHaveText("Keep this message");
+});
+
+test("a message the laptop reported back shows once", async ({ page, context }) => {
+  await fakeAccount(context, { events: [], replies: [{ id: "a", at: at(0), turn: "t1", text: "Done.", request: "Fix the footer" }], jobs: [job("job_1", "done")] });
+  await remembered(page, "job_1", "Fix the footer");
+  await page.goto("/app/session?id=s1");
+  await page.locator(".bubble-agent").first().waitFor();
+  await expect(page.locator(".bubble-me")).toHaveCount(1);
+});
+
+test("a running task can be stopped from the chat", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { light: "working", jobs: [job("job_1", "delivered")] });
+  await openChat(page);
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => fake.stops.length).toBe(1);
+  expect(fake.stops[0]).toContain("job_1");
+});
+
+test("a message written while the agent works waits, and sends when it finishes", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { light: "working" });
+  await openChat(page);
+  await page.fill("textarea", "Also fix the footer");
+  await page.locator(".composer-send").click();
+  const held = page.locator(".bubble-me", { hasText: "Also fix the footer" });
+  await expect(held).toContainText("to finish");
+  await expect(held.getByRole("button", { name: "Send now" })).toBeDisabled();
+  await expect(page.locator("textarea")).toHaveValue("");
+
+  await page.reload();
+  await expect(held).toBeVisible();
+
+  fake.light = "done";
+  await expect(held.getByRole("button", { name: "Send now" })).toBeEnabled();
+  await held.getByRole("button", { name: "Remove" }).click();
+  await expect(held).toHaveCount(0);
+});
+
+test("the agent's question is answered in the chat", async ({ page, context }) => {
+  await fakeAccount(context, { jobs: [job("job_1", "done", { asked: { question: "Which colour?", options: ["Red", "Blue"] } })] });
+  await openChat(page);
+  await expect(page.getByRole("group", { name: "The agent is asking you" })).toContainText("Which colour?");
+  await expect(page.getByRole("button", { name: "Red" })).toBeVisible();
+});
+
+test("scrolling to the top loads earlier messages and keeps your place", async ({ page, context }) => {
+  await fakeAccount(context, { more: true, older: Array.from({ length: 30 }, (_, i) => ({ id: `old${i}`, at: at(2000 - i), turn: `o${i}`, text: `Earlier reply ${i}, with enough words to take up some of the screen when it is read on a phone.` })) });
+  await openChat(page);
+  const reading = page.locator(".bubble-agent", { hasText: "Reply number 0," });
+  await page.locator(".chat-scroll").evaluate((el) => { el.scrollTop = 0; });
+  await expect(page.locator(".bubble-agent", { hasText: "Earlier reply 0" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Load earlier" })).toHaveCount(0);
+  await expect(reading).toBeInViewport();
+});
+
+test("coming back opens at the new messages, with a way to the newest", async ({ page, context }) => {
+  await fakeAccount(context);
+  // The last visit read up to the reply about 80 minutes before the fake's newest.
+  await page.addInitScript((t) => localStorage.setItem("trackline.read.s1", String(t)), Date.now() - 100 * 60_000);
+  await page.goto("/app/session?id=s1");
+  const line = page.locator(".new-line");
+  await expect(line).toBeInViewport();
+  const jump = page.getByRole("button", { name: "Jump to the newest message" });
+  await expect(jump).toBeVisible();
+  await jump.click();
+  await expect.poll(() => atBottom(page)).toBeLessThan(3);
+  await expect(jump).toHaveCount(0);
+});
+
+test("a task whose session is known opens as that conversation", async ({ page, context }) => {
+  await fakeAccount(context, { job: { id: "job_1", kind: "prompt", agent: "claude", status: "done", code: null, reason: null, output: null, session: "abc", createdAt: at(1), finishedAt: at(0), dashboardSession: "s1" } });
+  await page.goto("/app/remote?job=job_1");
+  await page.waitForURL(/\/app\/session\?id=s1/);
+  await page.locator(".bubble-agent").first().waitFor();
+});

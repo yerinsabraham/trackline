@@ -256,6 +256,14 @@ body:has(.app-shell) > footer.dark { display: none; }
 .md-table th + th, .md-table td + td { border-left: 1px solid var(--line-2); }
 .md-code { position: relative; }
 .md-code .copy-btn { position: absolute; top: 6px; right: 6px; z-index: 1; min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: #2b2b2f; color: #ededec; font: 500 12px var(--sans); letter-spacing: 0; text-transform: none; }
+.bubble-me > div.bubble-actions { background: none; padding: 0; display: flex; gap: 8px; }
+.reply-cut { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); font-style: italic; }
+.new-line { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; color: var(--orange-ink, #c8321a); }
+.new-line::before, .new-line::after { content: ""; flex-grow: 1; height: 1px; background: currentColor; opacity: .35; }
+.load-earlier { align-self: center; min-height: 44px; font-size: 13px; color: var(--muted); background: none; border: 0; }
+.chat-scroll-wrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.jump-newest { position: absolute; right: 14px; bottom: 12px; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #fff; color: var(--ink); border: 1px solid rgba(0,0,0,.12); box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+.chat-stop { flex: none; min-height: 44px; padding: 0 14px; }
 .chat-divider { align-self: center; font-size: 12px; color: var(--muted); }
 
 .composer { display: flex; flex-direction: column; gap: 6px; }

@@ -48,6 +48,13 @@ type Reply struct {
 	Session string  `json:"session"`
 	Turn    string  `json:"turn,omitempty"`
 	Text    string  `json:"text"`
+	// Request is what the person said in this turn. A turn answered in words
+	// has no action to carry it, and without it the reply arrives with nothing
+	// above it. Sent only with the same consent as an event's request.
+	Request string `json:"request,omitempty"`
+	// Cut says the text is not all of it, so nobody reads a sentence that ends
+	// halfway as the agent's last word.
+	Cut bool `json:"cut,omitempty"`
 }
 
 // Setup says which agents are wired into a project, so an agent that is set
@@ -112,7 +119,7 @@ const (
 	maxSession, maxRequest, maxTool             = 128, 2000, 64
 	maxPath, maxPaths, maxInstall, maxInstalls  = 512, 50, 214, 50
 	maxResults, maxFindings, maxText, maxEvents = 12, 10, 300, 100
-	maxReply                                    = 8000
+	maxReply, maxReplyRequest                   = 32000, 8000
 )
 
 // Options are what Build needs beyond the event itself.
@@ -124,6 +131,8 @@ type Options struct {
 	ProjectID string
 	// ShareRequest is the user's answer at connect time.
 	ShareRequest bool
+	// Request is what the person said, for a reply. An event has its own.
+	Request string
 	// Mode and Blocked are what the hook decided.
 	Mode    string
 	Blocked bool
@@ -239,15 +248,21 @@ func BuildReply(host event.Host, session, turn, text string, at time.Time, o Opt
 		o.Home, _ = os.UserHomeDir()
 	}
 	c := cleaner{root: filepath.Clean(o.Root), home: o.Home}
-	return Reply{
+	clean := redact(c.text(text))
+	r := Reply{
 		ID:      cut(o.ID, maxID),
 		At:      cut(at.UTC().Format(time.RFC3339Nano), maxAt),
 		Project: Project{ID: cut(o.ProjectID, maxProjectID), Name: cut(filepath.Base(c.root), maxProjectName)},
 		Host:    h,
 		Session: cut(session, maxSession),
 		Turn:    cut(turn, maxSession),
-		Text:    cut(redact(c.text(text)), maxReply),
-	}, nil
+		Text:    cut(clean, maxReply),
+		Cut:     len(clean) > maxReply,
+	}
+	if o.ShareRequest {
+		r.Request = cut(redact(c.text(o.Request)), maxReplyRequest)
+	}
+	return r, nil
 }
 
 // HostName is how the contract names a host, or "" for one that does not

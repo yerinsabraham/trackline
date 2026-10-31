@@ -6,7 +6,8 @@ import { api, readDraft, saveDraft } from "@/lib/account";
 import { addPasskey, withStepUp } from "@/lib/security";
 import ReplyText, { LinkedText } from "@/components/ReplyText";
 import AgentLogo from "./AgentLogo";
-import { IconAlert, IconClip, IconClose, IconShield, IconTerminal, IconUp } from "./icons";
+import { Cmd } from "./FirstRun";
+import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconTerminal, IconUp } from "./icons";
 import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
@@ -19,6 +20,11 @@ import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage } from "@/
  */
 export function useChatScroll() {
   return useStickToBottom({ initial: "instant", resize: "instant" });
+}
+
+/** Back to the newest message, when you have scrolled away from it. */
+export function JumpToNewest({ onClick }: { onClick: () => void }) {
+  return <button type="button" className="jump-newest" aria-label="Jump to the newest message" onClick={onClick}><IconDown size={18} /></button>;
 }
 
 /**
@@ -68,9 +74,26 @@ export function PasskeyNeeded({ onAdded }: { onAdded: () => void }) {
   return <div className="passkey-needed"><span>Add a passkey to send from this device.</span><AddPasskey onAdded={onAdded} /></div>;
 }
 
+const RESUME: Record<string, string> = { claude: "claude --resume", codex: "codex resume", cursor: "cursor-agent --resume" };
+
+/**
+ * The VS Code panels of Claude Code and Codex list only sessions started
+ * there, by design, so a conversation started here is picked up on the laptop
+ * from a terminal.
+ */
+export function ResumeHere({ agent, session }: { agent: string | null; session: string }) {
+  if (!agent || !RESUME[agent]) return null;
+  return (
+    <div className="resume-here">
+      <span>Carry on at your laptop, in a terminal in this project:</span>
+      <Cmd text={`${RESUME[agent]} ${session}`} />
+    </div>
+  );
+}
+
 export type Line = { key: string; time?: string; verb: string; text: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
 
-export function MyMessage({ text, note, images }: { text: string; note?: string; images?: string[] }) {
+export function MyMessage({ text, note, images, actions }: { text: string; note?: string; images?: string[]; actions?: ReactNode }) {
   return (
     <div className="bubble-me rise">
       {images && images.length > 0 && (
@@ -78,6 +101,7 @@ export function MyMessage({ text, note, images }: { text: string; note?: string;
       )}
       <div><LinkedText text={text} /></div>
       {note && <span>{note}</span>}
+      {actions && <div className="bubble-actions">{actions}</div>}
     </div>
   );
 }
@@ -173,11 +197,14 @@ function seen(iso: string): string {
 }
 
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
-export function AgentReply({ host, text }: { host: string | null; text: string }) {
+export function AgentReply({ host, text, cut }: { host: string | null; text: string; cut?: boolean }) {
   return (
     <div className="bubble-agent">
       <AgentLogo host={host} size={30} />
-      <div className="body"><ReplyText text={text} /></div>
+      <div className="body">
+        <ReplyText text={text} />
+        {cut && <p className="reply-cut">Cut short. The rest is on your laptop.</p>}
+      </div>
     </div>
   );
 }

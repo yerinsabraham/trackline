@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/account";
-import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionView, whileVisible } from "@/lib/dashboard";
-import { active, type Attachment, imagesFor, jobState, type Job, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { api, readDraft, saveDraft } from "@/lib/account";
+import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionJob, type SessionView, whileVisible } from "@/lib/dashboard";
+import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, useChatScroll, usePasskeys } from "@/components/app/Chat";
-import { IconBack } from "@/components/app/icons";
+import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { plain } from "@/components/ReplyText";
+import { IconBack, IconStop } from "@/components/app/icons";
 import { SessionRow } from "../Overview";
 
 // One session as a conversation: what you asked, what the agent did (as a
@@ -20,7 +21,7 @@ const VERB: Record<string, string> = {
 };
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-function line(e: FeedEvent): Line {
+function toLine(e: FeedEvent): Line {
   const target = e.installs.length ? `install ${e.installs.join(", ")}` : e.paths.length ? e.paths.slice(0, 3).join(", ") + (e.paths.length > 3 ? ` +${e.paths.length - 3}` : "") : e.tool ?? "";
   const tone = e.blocked || e.severity === "block" ? "block" : e.severity === "warn" ? "warn" : undefined;
   return {
@@ -30,49 +31,89 @@ function line(e: FeedEvent): Line {
   };
 }
 
-type Turn = { key: string; request: string | null; events: FeedEvent[]; reply?: Reply };
+type Turn = { key: string; request: string | null; events: FeedEvent[]; replies: Reply[] };
 
-function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
+// A reply carries more of the request than an action can.
+const fuller = (a: string | null, b?: string | null) => ((b?.length ?? 0) > (a?.length ?? 0) ? b ?? null : a);
+const startOf = (t: Turn) => +new Date(t.events[0]?.at ?? t.replies[0].at);
+
+/** Exported for its test: this is the rule that keeps a conversation whole. */
+export function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
   const out: Turn[] = [];
   for (const e of [...events].sort((a, b) => +new Date(a.at) - +new Date(b.at))) {
     const k = e.turn ?? e.request ?? "";
     const last = out[out.length - 1];
     if (last && last.key === k) last.events.push(e);
-    else out.push({ key: k, request: e.request, events: [e] });
+    else out.push({ key: k, request: e.request, events: [e], replies: [] });
   }
   const byTurn = new Map(out.map((t) => [t.key, t]));
-  const loose: Reply[] = [];
-  for (const r of replies) {
-    const t = r.turn ? byTurn.get(r.turn) : undefined;
-    if (t) t.reply = r; else loose.push(r);
+  for (const r of [...replies].sort((a, b) => +new Date(a.at) - +new Date(b.at))) {
+    // A turn answered in words has no actions, so its reply starts it.
+    const key = r.turn ?? `reply-${r.id ?? r.at}`;
+    let t = byTurn.get(key);
+    if (!t) {
+      t = { key, request: null, events: [], replies: [] };
+      byTurn.set(key, t);
+      out.push(t);
+    }
+    t.replies.push(r);
+    t.request = fuller(t.request, r.request);
   }
-  // A reply with no actions of its own (a question answered in words) is a
-  // turn of its own, placed by when it came.
-  for (const r of loose) out.push({ key: `reply-${r.at}`, request: null, events: [], reply: r });
-  return out.sort((a, b) => +new Date(a.events[0]?.at ?? a.reply!.at) - +new Date(b.events[0]?.at ?? b.reply!.at));
+  return out.sort((a, b) => startOf(a) - startOf(b));
 }
 
-type Sent = { job: string; text: string; status: string; code: string | null; reason: string | null };
+type Sent = { job: string; text: string; createdAt: string };
+
+const READ = "trackline.read.";
+function readAt(id: string): number | null {
+  try { const v = localStorage.getItem(READ + id); return v ? +v : null; } catch { return null; }
+}
+function markRead(id: string, at: number) {
+  try { localStorage.setItem(READ + id, String(at)); } catch { /* private mode: every open starts at the newest */ }
+}
+
+// Which conversation turn a sent message became. The clock on the laptop can
+// differ from the server's by a little, and the words can gain a note about
+// attached images on the way.
+const SKEW_MS = 60_000;
+function turnOf(list: Turn[], text: string | null, createdAt: string) {
+  if (!text) return undefined;
+  const from = +new Date(createdAt) - SKEW_MS;
+  return list.find((t) => startOf(t) >= from && !!t.request?.includes(text));
+}
 
 export default function Session() {
-  const { projects, remote } = useApp();
+  const { projects } = useApp();
   const [id, setId] = useState("");
   const [view, setView] = useState<SessionView | null>(null);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Sent[]>([]);
+  const [held, setHeld] = useState<{ text: string; images: Attachment[] } | null>(null);
+  const [heldError, setHeldError] = useState("");
+  const [heldBusy, setHeldBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [more, setMore] = useState(false);
+  const [unreadAt, setUnreadAt] = useState<number | null>(null);
   // Decisions made here, by the action they were about.
   const [decided, setDecided] = useState<Record<string, "allow" | "deny">>({});
   const [deciding, setDeciding] = useState("");
   const [decideError, setDecideError] = useState("");
   const cursor = useRef<string | null>(null);
-  const { scrollRef, contentRef } = useChatScroll();
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom, stopScroll } = useChatScroll();
   const passkeys = usePasskeys();
+  const line = useRef<HTMLDivElement>(null);
+  const top = useRef<HTMLButtonElement>(null);
+  const loadingEarlier = useRef(false);
+  // The height before older messages went in, so you stay on what you were reading.
+  const before = useRef<number | null>(null);
 
   useEffect(() => {
     const sid = new URLSearchParams(window.location.search).get("id") ?? "";
     setId(sid);
+    const waiting = readDraft(`held:${sid}`);
+    if (waiting) setHeld({ text: waiting, images: [] });
     let busy = false;
     const load = async () => {
       if (busy) return;
@@ -82,7 +123,16 @@ export default function Session() {
         const r = await api<SessionView>(`/app/sessions/${encodeURIComponent(sid)}${after}`);
         // The laptop can come and go while this page stays open for days, so
         // where a reply would go is read fresh every time.
-        if (!cursor.current) setView(r); else setView((v) => (v ? { ...v, session: r.session, continueWith: r.continueWith === undefined ? v.continueWith : r.continueWith } : r));
+        if (!cursor.current) {
+          setView(r);
+          setMore(!!r.more);
+          // Away since the last visit: open where the new messages start.
+          const seen = readAt(sid);
+          const first = r.replies.map((x) => +new Date(x.at)).filter((t) => seen !== null && t > seen).sort((a, b) => a - b)[0];
+          if (first) setUnreadAt(first);
+        } else {
+          setView((v) => (v ? { ...v, session: r.session, jobs: r.jobs ?? v.jobs, continueWith: r.continueWith === undefined ? v.continueWith : r.continueWith } : r));
+        }
         cursor.current = r.cursor;
         if (r.events.length) setEvents((old) => [...new Map([...old, ...r.events].map((e) => [e.id, e])).values()]);
         if (r.replies.length) setReplies((old) => [...new Map([...old, ...r.replies].map((x) => [x.id ?? x.at, x])).values()]);
@@ -97,26 +147,75 @@ export default function Session() {
     return whileVisible(load, 2500);
   }, []);
 
-  // Tasks sent from the box: followed until the laptop says how they went.
+  useLayoutEffect(() => {
+    if (unreadAt === null || !line.current || !scrollRef.current) return;
+    const el = scrollRef.current;
+    // After the page's own jump to the bottom, which this replaces.
+    const place = () => {
+      stopScroll();
+      el.scrollTop = line.current ? line.current.offsetTop - el.offsetTop - 56 : el.scrollTop;
+    };
+    place();
+    const t = setTimeout(place, 120);
+    return () => clearTimeout(t);
+    // Once, for the line as it opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadAt]);
+
+  // What you have reached counts as read; what arrives while you read back up
+  // does not.
+  const newest = replies.reduce((m, r) => Math.max(m, +new Date(r.at)), 0);
   useEffect(() => {
-    if (!sent.some((s) => active(s.status))) return;
-    const t = setInterval(async () => {
-      const next = await Promise.all(sent.map(async (s) => {
-        if (!active(s.status)) return s;
-        const j = await api<Job>(`/app/remote/jobs/${encodeURIComponent(s.job)}`).catch(() => null);
-        return j ? { ...s, status: j.status, code: j.code, reason: j.reason } : s;
-      }));
-      setSent(next);
-    }, 1500);
-    return () => clearInterval(t);
-  }, [sent]);
+    if (id && newest && isAtBottom && document.visibilityState === "visible") markRead(id, newest);
+  }, [id, newest, isAtBottom]);
+
+  const earlier = useCallback(async () => {
+    if (loadingEarlier.current) return;
+    const oldest = [...events, ...replies].reduce((m, x) => Math.min(m, +new Date(x.at)), Infinity);
+    if (!Number.isFinite(oldest)) return;
+    loadingEarlier.current = true;
+    try {
+      const r = await api<SessionView>(`/app/sessions/${encodeURIComponent(id)}?before=${encodeURIComponent(new Date(oldest).toISOString())}`);
+      before.current = scrollRef.current?.scrollHeight ?? null;
+      setEvents((old) => [...new Map([...r.events, ...old].map((e) => [e.id, e])).values()]);
+      setReplies((old) => [...new Map([...r.replies, ...old].map((x) => [x.id ?? x.at, x])).values()]);
+      setMore(!!r.more);
+    } catch { /* the button stays, and a tap tries again */ } finally {
+      loadingEarlier.current = false;
+    }
+  }, [events, replies, id, scrollRef]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (before.current === null || !el) return;
+    el.scrollTop += el.scrollHeight - before.current;
+    before.current = null;
+  }, [events, replies, scrollRef]);
+
+  useEffect(() => {
+    const el = top.current;
+    if (!el || !more) return;
+    const seen = new IntersectionObserver((e) => { if (e[0].isIntersecting) earlier(); }, { root: scrollRef.current, rootMargin: "200px 0px 0px 0px" });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [more, earlier, scrollRef]);
 
   const s = view?.session;
   const cont = view?.continueWith ?? null;
   const siblings = (projects ?? []).flatMap((p) => p.sessions.map((x) => ({ ...x, project: p.name })))
     .filter((x) => !s || x.host === s.host).sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
   const list = turns(events, replies);
-  const working = s?.light === "working" || sent.some((x) => active(x.status));
+  // From the server, so every device agrees. A message sent here counts as
+  // queued until the next poll has it.
+  const known = view?.jobs ?? [];
+  const jobs: SessionJob[] = [
+    ...known,
+    ...sent.filter((x) => !known.some((j) => j.id === x.job)).map((x) => ({ id: x.job, kind: "prompt", status: "queued", code: null, reason: null, createdAt: x.createdAt, stopRequestedAt: null, asked: null, permission: null })),
+  ];
+  const running = jobs.find((j) => active(j.status));
+  const working = s?.light === "working" || !!running;
+  const textOf = (j: SessionJob) => sent.find((x) => x.job === j.id)?.text ?? recall(j.id) ?? null;
+  const asked = !working ? jobs[jobs.length - 1]?.asked ?? null : null;
 
   const blocked = !s ? "Loading…"
     : !cont ? "One step left. On your laptop, run: trackline remote enable"
@@ -134,7 +233,7 @@ export default function Session() {
       const body = await signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, f.target, await passkeys.get());
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
       setDecided((d) => ({ ...d, [e.id]: kind }));
-      setSent((x) => [...x, { job: r.id, text: kind === "allow" ? `Allow once: ${f.target}` : `Keep blocked: ${f.target}`, status: "queued", code: null, reason: null }]);
+      setSent((x) => [...x, { job: r.id, text: kind === "allow" ? `Allow once: ${f.target}` : `Keep blocked: ${f.target}`, createdAt: new Date().toISOString() }]);
     } catch (err) {
       setDecideError((err as Error).message);
     } finally {
@@ -142,21 +241,56 @@ export default function Session() {
     }
   };
 
-  const send = async (text: string, images: Attachment[] = []) => {
+  const deliver = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
     const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images);
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
-    setSent((x) => [...x, { job: r.id, text, status: "queued", code: null, reason: null }]);
+    setSent((x) => [...x, { job: r.id, text, createdAt: new Date().toISOString() }]);
   };
-  // Replies sent from here before, perhaps from a page since closed, that
-  // have not become part of the conversation: still on their way, or never
-  // delivered. The server has them; the words are kept on this device.
-  const earlier: Sent[] = (remote?.jobs ?? [])
-    .filter((j) => cont && j.session === cont.session && j.status !== "done" && j.status !== "cancelled" && !sent.some((x) => x.job === j.id))
-    .map((j) => ({ job: j.id, text: recall(j.id) ?? "A message you sent", status: j.status, code: j.code, reason: j.reason }))
-    .reverse();
+
+  // The laptop runs one prompt per project and refuses a second, and a signed
+  // message cannot outlast the agent's work. So a message written while it
+  // works waits here, and Face ID sends it when it has finished.
+  const keep = (next: { text: string; images: Attachment[] } | null) => {
+    setHeld(next);
+    saveDraft(`held:${id}`, next?.text ?? "");
+  };
+  const send = async (text: string, images: Attachment[] = []) => {
+    if (!working) return deliver(text, images);
+    keep({ text: held ? `${held.text}\n\n${text}` : text, images: [...(held?.images ?? []), ...images] });
+  };
+  const sendHeld = async () => {
+    if (!held) return;
+    setHeldBusy(true); setHeldError("");
+    try {
+      await deliver(held.text, held.images);
+      keep(null);
+    } catch (e) {
+      setHeldError((e as Error).message);
+    } finally {
+      setHeldBusy(false);
+    }
+  };
+  const stop = async () => {
+    if (!running) return;
+    setStopping(true);
+    try { await api(`/app/remote/jobs/${encodeURIComponent(running.id)}/stop`, { method: "POST", body: "{}" }); } catch { /* the button stays, and a tap tries again */ } finally { setStopping(false); }
+  };
+
+  const lastTurn = list[list.length - 1]?.key;
+  const jobFor = new Map(jobs.flatMap((j) => { const t = turnOf(list, textOf(j), j.createdAt); return t ? [[t.key, j] as const] : []; }));
+  const landed = new Set([...jobFor.values()].map((j) => j.id));
+  // A message stays where it was sent. It moves into the conversation once the
+  // laptop reports it, and it is never just taken away: without sharing it has
+  // nowhere to move to. A decision shows on the finding it answered.
+  const loose = jobs.filter((j) => !landed.has(j.id) && !(j.kind !== "prompt" && j.status === "done") && (textOf(j) || j.status !== "done"));
+  const timeline = [
+    ...list.map((t) => ({ at: startOf(t), turn: t, job: null })),
+    ...loose.map((j) => ({ at: +new Date(j.createdAt), turn: null, job: j })),
+  ].sort((a, b) => a.at - b.at);
+  const firstNew = unreadAt === null ? null : list.find((t) => t.replies.some((r) => +new Date(r.at) >= unreadAt))?.key ?? null;
 
   return (
     <div className="chat-page">
@@ -176,22 +310,46 @@ export default function Session() {
             <h1>{requestLabel(s?.request ?? null) ?? (error ? "Session" : "Loading…")}</h1>
             <span className="row-meta">{s ? `${agentName(s.host)} · ${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
           </div>
-          {s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
+          {running ? (
+            <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>
+          ) : s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
         </header>
 
+        <div className="chat-scroll-wrap">
         <div className="chat-scroll" ref={scrollRef}>
           <div className="convo" ref={contentRef}>
             {error && <p className="composer-note error">{error}</p>}
             {!view && !error && [0, 1, 2].map((i) => <div key={i} className="skel" style={{ height: i === 1 ? 120 : 56 }} />)}
+            {more && <button ref={top} type="button" className="load-earlier" onClick={earlier}>Load earlier</button>}
             {s && <p className="chat-divider">{scoreLine(s.score.session)}</p>}
-            {view && list.length === 0 && <p className="chat-divider">No actions in the last 30 days.</p>}
-            {list.map((t, i) => {
-              const last = i === list.length - 1;
+            {view && timeline.length === 0 && <p className="chat-divider">No actions in the last 30 days.</p>}
+            {timeline.map((item) => {
+              if (item.job) {
+                const j = item.job;
+                const text = textOf(j);
+                const again = (j.status === "expired" || (j.status === "refused" && j.code === "busy")) && !!text;
+                return (
+                  <div key={j.id} style={{ display: "contents" }}>
+                    <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Laptop"} · ${jobState(j)}`} />
+                    {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
+                    {again && (
+                      <Finding tone="warn" title="Not delivered" actions={<button type="button" className="btn-act" onClick={() => deliver(text, imagesFor(j.id))}>Send again</button>}>
+                        {j.status === "expired" ? `${cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.` : "An agent was already working in this project, so this never started."}
+                      </Finding>
+                    )}
+                  </div>
+                );
+              }
+              const t = item.turn!;
+              const last = t.key === lastTurn;
               const stops = t.events.filter((e) => e.findings.length && (e.blocked || e.severity));
+              const job = jobFor.get(t.key);
               return (
-                <div key={t.key || i} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {t.request && <MyMessage text={requestLabel(t.request)!} />}
-                  <Activity lines={t.events.map(line)} live={last && working && !t.reply} />
+                <div key={t.key} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {firstNew === t.key && <div ref={line} className="new-line">New messages</div>}
+                  {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Laptop"} · ${jobState(job)}` : undefined} />}
+                  {job?.permission && <Finding tone="block" title="Action needed on Mac">{job.permission}</Finding>}
+                  <Activity lines={t.events.map(toLine)} live={last && working && !t.replies.length} />
                   {stops.slice(0, 3).map((e) => {
                     const blocking = e.blocked || e.severity === "block";
                     // Only the latest turn's stops are still open to a decision,
@@ -212,23 +370,25 @@ export default function Session() {
                       </Finding>
                     );
                   })}
-                  {t.reply && <AgentReply host={s?.host ?? null} text={t.reply.text} />}
+                  {/* A reply that is only the question is shown once, in the card below. */}
+                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} />)}
                 </div>
               );
             })}
-            {/* Once the laptop has done it, the conversation above shows it;
-                only what is still on its way, or went wrong, stays here. */}
-            {[...earlier, ...sent].filter((x) => active(x.status) || x.status !== "done").map((x) => (
-              <div key={x.job} style={{ display: "contents" }}>
-                <MyMessage text={x.text} images={previewsFor(x.job)} note={`${cont?.machine.name ?? "Laptop"} · ${jobState(x)}`} />
-                {x.status === "expired" && (
-                  <Finding tone="warn" title="Not delivered" actions={x.text !== "A message you sent" ? <button type="button" className="btn-act" onClick={() => send(x.text, imagesFor(x.job))}>Send again</button> : undefined}>
-                    {cont?.machine.name ?? "The laptop"} was asleep or offline for 3 minutes, so this never reached it. Wake the laptop, then send it again.
-                  </Finding>
-                )}
-              </div>
-            ))}
+            {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
+            {held && (
+              <>
+                <MyMessage text={held.text} note={heldError || (working ? `Waiting for ${agentName(s?.host)} to finish` : "Ready to send")}
+                  actions={<>
+                    <button type="button" className="btn-plain" disabled={heldBusy} onClick={() => keep(null)}>Remove</button>
+                    <button type="button" className="btn-act" disabled={working || heldBusy || !!blocked} onClick={sendHeld}>{heldBusy ? "Waiting for your passkey…" : "Send now"}</button>
+                  </>} />
+              </>
+            )}
+            {cont && !working && known.length > 0 && <ResumeHere agent={cont.agent} session={cont.session} />}
           </div>
+        </div>
+        {!isAtBottom && <JumpToNewest onClick={() => scrollToBottom("instant")} />}
         </div>
 
         <div className="chat-compose">
@@ -238,7 +398,7 @@ export default function Session() {
             chat={id || undefined}
             placeholder={`Reply to ${agentName(s?.host)}…`}
             blocked={blocked}
-            note={cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
+            note={working ? `${agentName(s?.host)} is working. A message waits here until it finishes.` : cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
             onSend={send}
           />
         </div>

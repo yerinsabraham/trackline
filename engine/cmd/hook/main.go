@@ -36,6 +36,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/outbox"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/payload"
 	"github.com/yerinsabraham/trackline/engine/internal/event"
+	"github.com/yerinsabraham/trackline/engine/internal/intent"
 	"github.com/yerinsabraham/trackline/engine/internal/runner"
 	"github.com/yerinsabraham/trackline/engine/internal/verdict"
 )
@@ -232,6 +233,7 @@ type turnEnd struct {
 	host          event.Host
 	session, turn string
 	cwd, text     string
+	transcript    string
 }
 
 // parseTurnEnd recognises the end of a turn. Claude Code and Codex send Stop
@@ -250,6 +252,7 @@ func parseTurnEnd(raw []byte, host string) (turnEnd, bool) {
 		Roots        []string `json:"workspace_roots"`
 		Last         string   `json:"last_assistant_message"`
 		Text         string   `json:"text"`
+		Transcript   string   `json:"transcript_path"`
 	}
 	if json.Unmarshal(raw, &p) != nil {
 		return turnEnd{}, false
@@ -262,13 +265,13 @@ func parseTurnEnd(raw []byte, host string) (turnEnd, bool) {
 		if text == "" {
 			text = p.Text
 		}
-		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), text}, true
+		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), text, p.Transcript}, true
 	case p.Event == "Stop" && host == runner.HostCodex:
-		return turnEnd{event.HostCodex, p.Session, p.Turn, p.CWD, p.Last}, true
+		return turnEnd{event.HostCodex, p.Session, p.Turn, p.CWD, p.Last, p.Transcript}, true
 	case p.Event == "Stop":
-		return turnEnd{event.HostClaudeCode, p.Session, p.Prompt, p.CWD, p.Last}, true
+		return turnEnd{event.HostClaudeCode, p.Session, p.Prompt, p.CWD, p.Last, p.Transcript}, true
 	case p.Event == "afterAgentResponse":
-		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), p.Text}, true
+		return turnEnd{event.HostCursor, first(p.Conversation, p.Session), p.Generation, first(p.CWD, firstOf(p.Roots)), p.Text, p.Transcript}, true
 	}
 	return turnEnd{}, false
 }
@@ -304,11 +307,19 @@ func queueReply(root string, t turnEnd) {
 	if !ok || !p.ShareReplies {
 		return
 	}
-	r, err := payload.BuildReply(t.host, t.session, t.turn, t.text, time.Now(), payload.Options{
-		Root:      projectRoot,
-		ProjectID: p.ID,
-		ID:        "rp_" + strings.TrimPrefix(outbox.NewID(), "ev_"),
-	})
+	o := payload.Options{
+		Root:         projectRoot,
+		ProjectID:    p.ID,
+		ShareRequest: p.ShareRequests,
+		ID:           "rp_" + strings.TrimPrefix(outbox.NewID(), "ev_"),
+	}
+	if p.ShareRequests {
+		if t.transcript == "" && t.host == event.HostCodex {
+			t.transcript = codexTranscript(t.session)
+		}
+		o.Request = lastRequest(t.transcript)
+	}
+	r, err := payload.BuildReply(t.host, t.session, t.turn, t.text, time.Now(), o)
 	if err != nil {
 		return
 	}
@@ -317,6 +328,45 @@ func queueReply(root string, t turnEnd) {
 		return
 	}
 	startSync()
+}
+
+// lastRequest finds what the person last said. It is read here, at the end of
+// the turn, rather than from a hook on each prompt, because a new hook means a
+// changed settings file, and a changed settings file stops replies from the
+// phone until someone runs remote enable in every project. This runs once a
+// turn, so reading the whole transcript is affordable.
+func lastRequest(path string) string {
+	if path == "" {
+		return ""
+	}
+	var in intent.Intent
+	r := intent.Reader{Path: path}
+	if r.Read(&in) != nil {
+		return ""
+	}
+	t, _ := in.Latest()
+	return t.Text
+}
+
+// codexTranscript finds a Codex session's file, for a Stop that does not say
+// where it is. Codex names each one after its session under a dated folder.
+func codexTranscript(session string) string {
+	home := os.Getenv("CODEX_HOME")
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		home = filepath.Join(h, ".codex")
+	}
+	if session == "" || strings.ContainsAny(session, `*?[]/\`) {
+		return ""
+	}
+	found, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*", "rollout-*-"+session+".jsonl"))
+	if len(found) == 0 {
+		return ""
+	}
+	return found[0]
 }
 
 // startSync runs `trackline sync` from beside this binary, detached. Its

@@ -13,6 +13,15 @@ changelog page is built from this file.
   `trackline remote disable` turns a project off, and it stays off.
 - **The reply box is never locked.** You can always type, and a line underneath
   says what would let it send.
+- **One conversation.** A reply from your phone continues on the same screen,
+  with the history above it, and a notification opens there. Your messages stay
+  in place, including ones an agent answered in words alone. Long chats load
+  earlier messages as you scroll up, and coming back opens at a "New messages"
+  line. Any running task has a Stop button.
+- **Write while the agent works.** Your message waits in the chat and Face ID
+  sends it when the agent finishes.
+- **Longer replies.** The limit goes from 8,000 to 32,000 bytes, and a reply cut
+  at the limit says so.
 - **A project in use at your desk no longer pauses after 30 days.**
 - **`trackline remote enable` needs a real terminal.** It accepts changed
   settings and lifts a stop made from the site, so only a person may run it. A

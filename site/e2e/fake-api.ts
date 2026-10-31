@@ -20,10 +20,10 @@ const summary = (id: string, request: string | null, light: string) => ({
 
 export const REMOTE_ON = { machine: { id: "m1", name: "MacBook", online: true, stopped: false }, project: "cp", agent: "claude", session: "abc" };
 
-export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[] };
+export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; job: unknown };
 
 export async function fakeAccount(context: BrowserContext, over: Partial<Fake> = {}): Promise<Fake> {
-  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], ...over };
+  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], light: "done", jobs: [], replies: null, events: null, more: false, older: [], stops: [], job: null, ...over };
   await context.addInitScript(() => localStorage.setItem("trackline.session", "fake"));
   await context.route("https://api.creovine.com/**", (route) => {
     const url = new URL(route.request().url());
@@ -40,13 +40,17 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
     if (path === "/app/ontrack") return json({ score: { percent: 90 } });
     if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: fake.passkeys }); }
     if (path === "/app/alerts") return json({ prefs: { red: true, finished: true, drifting: false }, devices: [], slack: false, vapidPublicKey: null });
+    if (path.startsWith("/app/remote/jobs/") && path.endsWith("/stop")) { fake.stops.push(path); return json({ status: "delivered" }); }
+    if (path.endsWith("/events") && path.startsWith("/app/remote/jobs/")) return json({ status: "done", events: [] });
+    if (path.startsWith("/app/remote/jobs/")) return json(fake.job ?? {});
     if (path.startsWith("/app/sessions/")) {
+      if (url.searchParams.get("before")) { const older = fake.older; fake.older = []; fake.more = false; return json({ events: [], replies: older, more: false }); }
       const after = url.searchParams.get("after");
-      const events = Array.from({ length: fake.turns }, (_, i) => event(i, 400 - i * 8));
-      const replies = events.map((e, i) => ({ id: `r${i}`, at: new Date(+new Date(e.at) + 30_000).toISOString(), turn: e.turn, text: i === fake.turns - 1 ? TABLE : `Reply number ${i}, long enough to take a few lines on a phone so that the page scrolls a good way.` }));
+      const events = (fake.events ?? Array.from({ length: fake.turns }, (_, i) => event(i, 400 - i * 8))) as ReturnType<typeof event>[];
+      const replies = fake.replies ?? events.map((e, i) => ({ id: `r${i}`, at: new Date(+new Date(e.at) + 30_000).toISOString(), turn: e.turn, text: i === fake.turns - 1 ? TABLE : `Reply number ${i}, long enough to take a few lines on a phone so that the page scrolls a good way.` }));
       return json({
-        session: { ...summary("s1", "Fix the login page", "done"), project: { id: "p1", name: "trackline" } },
-        events: after ? [] : events, replies: after ? fake.extra : replies, cursor: "c1", continueWith: fake.continueWith,
+        session: { ...summary("s1", "Fix the login page", fake.light), project: { id: "p1", name: "trackline" } },
+        events: after ? [] : events, replies: after ? fake.extra : replies, cursor: "c1", continueWith: fake.continueWith, jobs: fake.jobs, more: fake.more,
       });
     }
     return json({});

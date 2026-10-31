@@ -8,12 +8,9 @@ import {
 } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import AppShell, { useApp } from "@/components/app/AppShell";
-import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
-import { Cmd } from "@/components/app/FirstRun";
-
-const RESUME: Record<string, string> = { claude: "claude --resume", codex: "codex resume", cursor: "cursor-agent --resume" };
 
 // A task for an agent on your laptop: choose where, say what, sign and send.
 // Then the same conversation view as a session, fed by the laptop as it goes.
@@ -232,6 +229,12 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     return whileVisible(load, 1200);
   }, [id]);
 
+  // One conversation, one screen: once the session is known this page has
+  // nothing the session does not, and it has all the history besides.
+  useEffect(() => {
+    if (job?.dashboardSession) window.location.replace(`/app/session?id=${encodeURIComponent(job.dashboardSession)}`);
+  }, [job?.dashboardSession]);
+
   const machine = remote?.machines.find((m) => m.id === job?.machine);
   const machineName = machine?.name ?? "your laptop";
   const live = !!job && active(job.status);
@@ -297,18 +300,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {job?.asked && !live && canContinue && (
               <Question host={job.agent} question={job.asked.question} options={job.asked.options} onAnswer={send} />
             )}
-            {job?.session && !live && RESUME[job.agent ?? ""] && (
-              // The VS Code panels of Claude Code and Codex list only
-              // sessions started there, by design, so a conversation started
-              // here is picked up on the laptop from a terminal.
-              <div className="resume-here">
-                <span>Carry on at your laptop, in a terminal in this project:</span>
-                <Cmd text={`${RESUME[job.agent!]} ${job.session}`} />
-              </div>
-            )}
-            {job?.dashboardSession && !live && (
-              <a className="chat-divider" href={`/app/session?id=${encodeURIComponent(job.dashboardSession)}`} style={{ textDecoration: "underline" }}>Open the full session</a>
-            )}
+            {job?.session && !live && <ResumeHere agent={job.agent} session={job.session} />}
           </div>
         </div>
 

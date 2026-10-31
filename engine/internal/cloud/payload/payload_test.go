@@ -391,3 +391,31 @@ func TestAReplyNeedsTextAndASession(t *testing.T) {
 		t.Error("a production event built a reply")
 	}
 }
+
+func TestAReplyCarriesTheRequestOnlyWithConsent(t *testing.T) {
+	o := payload.Options{Root: "/work/app", ProjectID: "p", ID: "rp_1", Home: "/Users/someone", Request: "fix /work/app/a.go, key sk-abcdefghijklmnopqrstuvwxyz"}
+	r, err := payload.BuildReply(event.HostClaudeCode, "s", "t", "done", at("2026-09-25T10:00:00Z"), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Request != "" {
+		t.Fatalf("sent without consent: %q", r.Request)
+	}
+	o.ShareRequest = true
+	r, err = payload.BuildReply(event.HostClaudeCode, "s", "t", "done", at("2026-09-25T10:00:00Z"), o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Request != "fix a.go, key [redacted]" {
+		t.Fatalf("not cleaned: %q", r.Request)
+	}
+}
+
+func TestAReplyPastTheLimitSaysItWasCut(t *testing.T) {
+	o := payload.Options{Root: "/work/app", ProjectID: "p", ID: "rp_1", Home: "/Users/someone"}
+	short, _ := payload.BuildReply(event.HostClaudeCode, "s", "t", "done", at("2026-09-25T10:00:00Z"), o)
+	long, _ := payload.BuildReply(event.HostClaudeCode, "s", "t", strings.Repeat("word ", 8000), at("2026-09-25T10:00:00Z"), o)
+	if short.Cut || !long.Cut || len(long.Text) > 32000 {
+		t.Fatalf("short cut=%v, long cut=%v at %d bytes", short.Cut, long.Cut, len(long.Text))
+	}
+}

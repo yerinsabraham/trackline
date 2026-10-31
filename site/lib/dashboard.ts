@@ -4,7 +4,7 @@ export type Light = "needs-you" | "drifting" | "working" | "done" | "idle";
 export type Score = { checked: number; aligned: number; notCheckable: number; percent: number | null };
 export type Status = { light: Light; request: string | null; score: { request: Score; session: Score } };
 
-export type Reply = { id?: string; at: string; turn: string | null; text: string };
+export type Reply = { id?: string; at: string; turn: string | null; text: string; request?: string | null; cut?: boolean };
 export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
 export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
@@ -23,9 +23,22 @@ export type SessionView = {
   session: Status & { id: string; host: string; startedAt: string; lastAt: string; project: { id: string; name: string } };
   events: FeedEvent[];
   replies: (Reply & { id: string })[];
+  /** Older messages exist above this page. */
+  more?: boolean;
   cursor: string | null;
-  // Where a reply would go; only on the first page. Null: no laptop can take it.
+  // Where a reply would go. Null: no laptop can take it.
   continueWith?: Continuation | null;
+  /** Messages sent to this conversation from any device, oldest first. */
+  jobs?: SessionJob[];
+};
+
+export type SessionJob = {
+  id: string; kind: string; status: string; code: string | null; reason: string | null; createdAt: string;
+  stopRequestedAt: string | null;
+  /** What the agent stopped to ask. Only on the latest job. */
+  asked: { question: string; options: string[] } | null;
+  /** A macOS prompt the agent may be waiting behind. */
+  permission: string | null;
 };
 
 export const LIGHT_LABEL: Record<Light, string> = {

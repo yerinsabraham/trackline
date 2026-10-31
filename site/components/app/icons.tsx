@@ -24,6 +24,7 @@ export const IconBack = ({ size }: Size) => <svg {...base(size)} strokeWidth={2}
 export const IconChevron = ({ size }: Size) => <svg {...base(size)} strokeWidth={2}><path d="m9 18 6-6-6-6" /></svg>;
 export const IconClose = ({ size }: Size) => <svg {...base(size)} strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>;
 export const IconUp = ({ size }: Size) => <svg {...base(size)} strokeWidth={2.2}><path d="M12 19V5M5 12l7-7 7 7" /></svg>;
+export const IconDown = ({ size }: Size) => <svg {...base(size)} strokeWidth={2.2}><path d="M12 5v14M5 12l7 7 7-7" /></svg>;
 export const IconStop = ({ size = 20 }: Size) => <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: "none" }}><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" /></svg>;
 export const IconFace = ({ size }: Size) => <svg {...base(size)}><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>;
 export const IconKey = ({ size }: Size) => <svg {...base(size)}><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.3-9.3M17 6l3 3" /></svg>;

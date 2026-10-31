@@ -38,7 +38,9 @@
         "host": { "enum": ["claude-code", "codex", "cursor"] },
         "session": { "type": "string", "maxLength": 128 },
         "turn": { "type": "string", "maxLength": 128 },
-        "text": { "type": "string", "maxLength": 8000, "description": "The agent's final message for the turn. Paths made relative, the home directory replaced, token shapes redacted." }
+        "text": { "type": "string", "maxLength": 32000, "description": "The agent's final message for the turn. Paths made relative, the home directory replaced, token shapes redacted." },
+        "request": { "type": "string", "maxLength": 8000, "description": "What the user said in this turn, so a turn answered in words still shows it. Absent unless they agreed to share it. Cleaned like the text." },
+        "cut": { "type": "boolean", "description": "True when the text was longer than its limit and is not all of it." }
       }
     },
     "setup": {
