@@ -40,7 +40,7 @@ export default function FirstRun({ projects }: { projects: Project[] }) {
     <section className="card fr rise rise-1" aria-labelledby="fr-title">
       <div className="fr-head">
         <h2 id="fr-title">Set up trackline</h2>
-        <p className="fr-laptop"><IconLaptop size={16} />Do this on your laptop.</p>
+        <p className="fr-laptop"><IconLaptop size={16} />Do this on your computer.</p>
       </div>
 
       <ol className="fr-steps">
@@ -73,7 +73,7 @@ export default function FirstRun({ projects }: { projects: Project[] }) {
               : <>
                   <p>In the same project. It opens this site to approve.</p>
                   <Cmd text="trackline connect" />
-                  <p className="fr-wait"><span className="dot working" />Waiting for your laptop</p>
+                  <p className="fr-wait"><span className="dot working" />Waiting for your computer</p>
                 </>}
           </div>
         </li>
@@ -83,11 +83,11 @@ export default function FirstRun({ projects }: { projects: Project[] }) {
           <div className="fr-body">
             <strong>Give your agent a task</strong>
             {step === 3 && <>
-              <p>Its first session shows up here as it happens.</p>
+              <p>Its first chat shows up here as it happens.</p>
               {waiting.map((a) => (
                 <p key={a.host} className="fr-hint"><AgentLogo host={a.host} size={22} />{WAKE[a.host]?.text ?? `Send a message in ${agentName(a.host)}.`}</p>
               ))}
-              <p className="fr-wait"><span className="dot working" />Waiting for the first session</p>
+              <p className="fr-wait"><span className="dot working" />Waiting for the first chat</p>
             </>}
           </div>
         </li>

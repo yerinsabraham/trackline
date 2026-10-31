@@ -32,7 +32,7 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
   };
   return (
     <div className="sheet-back" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label={`Session: ${session.name}`} onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-label={`Chat: ${session.name}`} onClick={(e) => e.stopPropagation()}>
         {naming ? (
           <form onSubmit={(e) => { e.preventDefault(); change({ title: name }); }}>
             <label htmlFor="session-name" className="sheet-label">Name</label>
@@ -41,7 +41,7 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
           </form>
         ) : clearing ? (
           <>
-            <p className="sheet-note">Clear every message from this chat? This can&apos;t be undone. The agent&apos;s own history on your laptop stays.</p>
+            <p className="sheet-note">Clear every message from this chat? This can&apos;t be undone. The agent&apos;s own history on your computer stays.</p>
             <button type="button" className="sheet-item danger" onClick={async () => {
               try {
                 await api(`${path}/clear`, { method: "POST", body: "{}" });
@@ -60,7 +60,7 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
             {onSelect && <button type="button" className="sheet-item" onClick={() => { onSelect(); onClose(); }}>Select several</button>}
             {onCleared && <button type="button" className="sheet-item danger" onClick={() => setClearing(true)}>Clear chat</button>}
             <button type="button" className="sheet-item danger" onClick={() => { onDelete(); onClose(); }}>Delete</button>
-            <p className="sheet-note">Deleting removes it from trackline, not from your laptop.</p>
+            <p className="sheet-note">Deleting removes it from trackline, not from your computer.</p>
           </>
         )}
         {error && <p className="composer-note error">{error}</p>}

@@ -6,10 +6,11 @@ import { api, readDraft, saveDraft } from "@/lib/account";
 import { addPasskey, withStepUp } from "@/lib/security";
 import ReplyText, { LinkedText } from "@/components/ReplyText";
 import CopyButton from "@/components/CopyButton";
-import AgentLogo from "./AgentLogo";
+import { modelLabel } from "@/lib/dashboard";
+import AgentLogo, { agentName } from "./AgentLogo";
 import { Cmd } from "./FirstRun";
 import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconTerminal, IconUp } from "./icons";
-import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage } from "@/lib/remote";
+import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage, proof } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
 // arrived: from trackline's hook in the terminal, or from a task sent here.
@@ -91,7 +92,7 @@ export function AddPasskey({ onAdded }: { onAdded: () => void }) {
         } finally {
           setBusy(false);
         }
-      }}>{busy ? "Waiting for your passkey…" : "Add a passkey"}</button>
+      }}>{busy ? `Waiting for ${proof()}…` : "Add a passkey"}</button>
       {error && <span className="composer-note error">{error}</span>}
     </>
   );
@@ -112,7 +113,7 @@ export function ResumeHere({ agent, session }: { agent: string | null; session: 
   if (!agent || !RESUME[agent]) return null;
   return (
     <div className="resume-here">
-      <span>Carry on at your laptop, in a terminal in this project:</span>
+      <span>Carry on at your computer, in a terminal in this project:</span>
       <Cmd text={`${RESUME[agent]} ${session}`} />
     </div>
   );
@@ -230,7 +231,7 @@ export function LaptopNotice({ machine }: { machine: { name: string; online: boo
       <span>
         {machine.stopped
           ? <>Remote is stopped on <strong>{machine.name}</strong>. Nothing sent now will run until you turn it on there: <code>trackline remote enable</code></>
-          : <><strong>{machine.name}</strong> is asleep or offline{machine.lastSeenAt ? ` (last seen ${seen(machine.lastSeenAt)})` : ""}. A message runs when it wakes, for up to 12 hours, and Stop cancels it. One with images needs it awake.</>}
+          : <><strong>{machine.name}</strong> is offline{machine.lastSeenAt ? ` (last seen ${seen(machine.lastSeenAt)})` : ""}. A message runs when it comes back, for up to 12 hours, and Stop cancels it. One with images needs it online.</>}
       </span>
     </div>
   );
@@ -252,20 +253,37 @@ export function SendAgain({ onSend }: { onSend: () => Promise<void> }) {
       <button type="button" className="btn-act" disabled={busy} onClick={async () => {
         setBusy(true); setError("");
         try { await onSend(); setSent(true); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-      }}>{busy ? "Waiting for your passkey…" : "Send again"}</button>
+      }}>{busy ? `Waiting for ${proof()}…` : "Send again"}</button>
       {error && <span className="composer-note error">{error}</span>}
     </>
   );
 }
 
+/** Who said this: the name in bold, which opens the agent, then what it runs on. */
+function Sender({ host, name, model, onName }: { host: string | null; name: string; model?: string | null; onName?: () => void }) {
+  return (
+    <p className="reply-from">
+      <button type="button" onClick={onName} disabled={!onName}><strong>{name}</strong></button>
+      <span>{[agentName(host), modelLabel(model)].filter(Boolean).join(" · ")}</span>
+    </p>
+  );
+}
+
+/** A helper is another agent's short-lived hand, so it gets one quiet line. */
+export function HelperLine({ name, helpers }: { name: string; helpers: string[] }) {
+  if (!helpers.length) return null;
+  return <p className="helper-line"><strong>{name}</strong> used {helpers.length === 1 ? "a helper" : `${helpers.length} helpers`}: {helpers.join(", ")}</p>;
+}
+
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
-export function AgentReply({ host, text, cut }: { host: string | null; text: string; cut?: boolean }) {
+export function AgentReply({ host, text, cut, name, model, onName }: { host: string | null; text: string; cut?: boolean; name?: string; model?: string | null; onName?: () => void }) {
   return (
     <div className="bubble-agent">
       <AgentLogo host={host} size={30} />
       <div className="body">
+        {name && <Sender host={host} name={name} model={model} onName={onName} />}
         <ReplyText text={text} />
-        {cut && <p className="reply-cut">Cut short. The rest is on your laptop.</p>}
+        {cut && <p className="reply-cut">Cut short. The rest is on your computer.</p>}
         <div className="reply-tools"><CopyButton text={text} /></div>
       </div>
     </div>
@@ -395,7 +413,7 @@ export function Composer({ chat, placeholder, onSend, blocked, note }: {
         </button>
       </div>
       <span className={`composer-note ${error ? "error" : ""}`}>
-        {error || attach.error || blocked || (busy ? "Waiting for your passkey…" : note)}
+        {error || attach.error || blocked || (busy ? `Waiting for ${proof()}…` : note)}
       </span>
     </form>
   );

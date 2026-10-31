@@ -167,7 +167,7 @@ export default function OnTrack() {
 
       {data && data.sessions.length > 0 && (
         <section className="card rise" aria-labelledby="sessions">
-          <div className="card-head"><h2 id="sessions">Sessions, least on track first</h2></div>
+          <div className="card-head"><h2 id="sessions">Chats, least on track first</h2></div>
           {data.sessions.map((x) => (
             <a key={x.id} href={`/app/session?id=${encodeURIComponent(x.id)}`} className="row-link" style={{ alignItems: "center" }}>
               <Ring percent={x.score.percent} size={44} stroke={5} label={false} />

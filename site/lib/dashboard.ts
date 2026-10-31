@@ -4,14 +4,16 @@ export type Light = "needs-you" | "drifting" | "working" | "done" | "idle";
 export type Score = { checked: number; aligned: number; notCheckable: number; percent: number | null };
 export type Status = { light: Light; request: string | null; score: { request: Score; session: Score } };
 
-export type Reply = { id?: string; at: string; turn: string | null; text: string; request?: string | null; cut?: boolean };
-export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
+export type Reply = { id?: string; at: string; turn: string | null; text: string; request?: string | null; cut?: boolean; model?: string | null };
+/** Who a chat is with. agentId is set once the agent is on the team. */
+export type Who = { agentName?: string; agentId?: string | null; onTeam?: boolean; model?: string | null };
+export type SessionSummary = Status & Who & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
 export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
 
 export type Finding = { check: string; severity: string; summary: string; target?: string; suggestion?: string };
 export type FeedEvent = {
-  id: string; at: string; turn: string | null; request: string | null;
+  id: string; at: string; turn: string | null; request: string | null; helper?: string | null;
   action: string; tool: string | null; paths: string[]; installs: string[];
   pathsUnknown: boolean; commandUnderstood: boolean | null; blocked: boolean;
   severity: "block" | "warn" | null; checked: boolean;
@@ -20,7 +22,7 @@ export type FeedEvent = {
 import type { Continuation } from "./remote";
 
 export type SessionView = {
-  session: Status & { id: string; host: string; startedAt: string; lastAt: string; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null; project: { id: string; name: string } };
+  session: Status & Who & { id: string; host: string; startedAt: string; lastAt: string; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null; project: { id: string; name: string } };
   events: FeedEvent[];
   replies: (Reply & { id: string })[];
   /** Older messages exist above this page. */
@@ -44,12 +46,30 @@ export type SessionJob = {
 };
 
 export const LIGHT_LABEL: Record<Light, string> = {
-  "needs-you": "Needs you",
+  "needs-you": "Needs your OK",
   drifting: "Drifting",
   working: "Working",
   done: "Done",
-  idle: "Idle",
+  idle: "Ready",
 };
+
+export type Member = { id: string; name: string; host: string; createdAt: string; project: { id: string; name: string }; model: string | null; lastAt: string | null; chat: (SessionSummary & { project: { name: string } }) | null };
+export type Profile = {
+  agent: Omit<Member, "model" | "lastAt" | "chat">;
+  model: string | null;
+  chats: (SessionSummary & { project: { name: string } })[];
+  record: { days: number; chats: number; steps: number; replies: number; findings: number; blocked: number; score: Score; partial: boolean };
+};
+
+/** claude-opus-5-5 as "Opus 5.5", gpt-6-astra as "GPT-6 Astra". Unknown ones stand as they are. */
+export function modelLabel(m: string | null | undefined): string | null {
+  if (!m) return null;
+  const claude = m.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/);
+  if (claude) return `${claude[1][0].toUpperCase()}${claude[1].slice(1)} ${claude[2]}${claude[3] ? `.${claude[3]}` : ""}`;
+  const gpt = m.match(/^gpt-([\d.]+)(?:-(.+))?$/);
+  if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ` ${gpt[2][0].toUpperCase()}${gpt[2].slice(1)}` : ""}`;
+  return m;
+}
 
 export const HOST_LABEL: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", cursor: "Cursor" };
 
@@ -108,7 +128,7 @@ export function whileVisible(fn: () => void, ms: number): () => void {
 
 /** What wakes an agent that is set up but has never reported. */
 export const WAKE: Record<string, { text: string; copy?: string }> = {
-  codex: { text: "Codex runs a hook only once you trust it. In the Codex panel: Settings → Hooks → From Projects → Trust." },
+  codex: { text: "Codex runs a hook only once you trust it. In Codex: Settings → Hooks → From Projects → Trust." },
   cursor: { text: "Send a message in Cursor's agent chat in this project." },
   "claude-code": { text: "Send a message in Claude Code in this project." },
 };

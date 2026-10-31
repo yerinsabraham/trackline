@@ -269,7 +269,7 @@ test("a task whose session is known opens as that conversation", async ({ page, 
 test("a chat shows the session's name, and it can be renamed", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await openChat(page);
-  await page.getByRole("button", { name: "Session options" }).click();
+  await page.getByRole("button", { name: "Chat options" }).click();
   await page.getByRole("button", { name: "Rename" }).click();
   await page.fill("#session-name", "Login work");
   await page.getByRole("button", { name: "Save" }).click();
@@ -279,7 +279,7 @@ test("a chat shows the session's name, and it can be renamed", async ({ page, co
 test("clearing a chat asks once, then empties it", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await openChat(page);
-  await page.getByRole("button", { name: "Session options" }).click();
+  await page.getByRole("button", { name: "Chat options" }).click();
   await page.getByRole("button", { name: "Clear chat" }).click();
   await expect(page.getByText("can't be undone")).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Clear chat" }).click();
@@ -290,7 +290,7 @@ test("clearing a chat asks once, then empties it", async ({ page, context }) => 
 test("a deleted session can be undone, and nothing is sent", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Chat options" }).first().click();
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page.locator(".swipe")).toHaveCount(2);
   await page.getByRole("button", { name: "Undo" }).click();
@@ -302,7 +302,7 @@ test("a deleted session can be undone, and nothing is sent", async ({ page, cont
 test("a deleted session is really deleted when the Undo runs out", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Chat options" }).first().click();
   await page.getByRole("button", { name: "Delete" }).click();
   await expect.poll(() => fake.calls.length, { timeout: 9000 }).toBe(1);
   expect(fake.calls[0].body).toContain('"delete"');
@@ -313,7 +313,7 @@ test("leaving the page does not lose a delete", async ({ page, context, browserN
   test.skip(browserName === "chromium", "Playwright does not see Chromium's keepalive request during unload");
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Chat options" }).first().click();
   await page.getByRole("button", { name: "Delete" }).click();
   await page.goto("/app");
   await expect.poll(() => fake.calls.length).toBe(1);
@@ -322,7 +322,7 @@ test("leaving the page does not lose a delete", async ({ page, context, browserN
 test("several sessions can be chosen and deleted", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Chat options" }).first().click();
   await page.getByRole("button", { name: "Select several" }).click();
   await page.getByRole("checkbox").nth(0).check();
   await page.getByRole("checkbox").nth(1).check();
@@ -373,34 +373,32 @@ test("a turn's work reads as one line, and opens to the steps", async ({ page, c
 
 test("moving between tabs keeps the frame and its data", async ({ page, context }) => {
   await fakeAccount(context);
-  let overview = 0;
-  page.on("request", (r) => { if (r.url().endsWith("/app/overview")) overview++; });
   await page.goto("/app");
-  await page.locator(".inbox .row-link").first().waitFor();
-  const reads = overview;
-  await page.locator(".app-tab", { hasText: "Sessions" }).click();
-  await page.waitForURL(/\/app\/sessions/);
-  await page.locator(".swipe").first().waitFor();
-  await page.locator(".app-tab", { hasText: "Home" }).click();
-  await expect(page.locator(".inbox .row-link").first()).toBeVisible({ timeout: 500 });
-  expect(overview).toBe(reads);
+  await page.locator(".swipe .row-link").first().waitFor();
+  await page.evaluate(() => { (window as unknown as { same: boolean }).same = true; });
+  await page.locator(".app-tab", { hasText: "Team" }).click();
+  await page.waitForURL(/\/app\/team/);
+  await page.getByText("Reviewer").waitFor();
+  await page.locator(".app-tab", { hasText: "Chats" }).click();
+  await expect(page.locator(".swipe .row-link").first()).toBeVisible({ timeout: 500 });
+  expect(await page.evaluate(() => (window as unknown as { same?: boolean }).same)).toBe(true);
 });
 
 test("a phone opens on its chats, with what needs you first", async ({ page, context }) => {
   await fakeAccount(context);
   await page.goto("/app");
-  await expect(page.locator(".inbox .row-link").first()).toContainText("needs you".replace("needs you", "Needs you"));
+  await expect(page.locator(".swipe .row-link").first()).toContainText("Needs your OK");
 });
 
 test("with no connection the app says so and shows the last list", async ({ page, context }) => {
   await fakeAccount(context);
   await page.goto("/app");
-  await page.locator(".inbox .row-link").first().waitFor();
+  await page.locator(".swipe .row-link").first().waitFor();
   await context.unroute("https://api.creovine.com/**");
   await context.route("https://api.creovine.com/**", (r) => r.abort());
   await page.reload();
   await expect(page.locator(".offline-bar")).toBeVisible({ timeout: 12000 });
-  await expect(page.locator(".inbox .row-link").first()).toBeVisible();
+  await expect(page.locator(".swipe .row-link").first()).toBeVisible();
 });
 
 test("dark mode leaves nothing dark on dark", async ({ page, context }) => {
@@ -426,7 +424,7 @@ test("stopping a laptop asks in the app, not in a browser box", async ({ page, c
   await fakeAccount(context);
   await page.goto("/app/machines");
   await page.getByRole("button", { name: /^Stop/ }).first().click();
-  await expect(page.getByRole("dialog")).toContainText("Stop remote on this laptop?");
+  await expect(page.getByRole("dialog")).toContainText("Stop remote on this computer?");
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -443,4 +441,72 @@ test("a ping from the server updates a chat at once", async ({ page, context }) 
   fake.extra.push({ id: "live", at: new Date().toISOString(), turn: "t39", text: "Arrived by ping." });
   await page.evaluate(() => window.dispatchEvent(new Event("app:change")));
   await expect(page.locator(".bubble-agent", { hasText: "Arrived by ping." })).toBeVisible({ timeout: 1500 });
+});
+
+test("the tabs are Chats, Team and Settings", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app");
+  await expect(page.locator(".app-tab")).toHaveText(["Chats1", "Team", "Settings"].map((x) => new RegExp(x.replace("1", "\\d?"))));
+  await page.locator(".app-tab", { hasText: "Settings" }).click();
+  await expect(page.getByRole("link", { name: "Computers" })).toBeVisible();
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".chat-who")).toBeVisible();
+});
+
+test("every reply says who sent it, and the name opens the agent", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { events: [], replies: [{ id: "a", at: at(5), turn: "t1", text: "Done.", model: "claude-opus-5-5" }] });
+  await page.goto("/app/session?id=s1");
+  const from = page.locator(".reply-from");
+  await expect(from.locator("strong")).toBeVisible();
+  await expect(from).toContainText("Opus 5.5");
+  await from.locator("button").click();
+  await page.getByRole("button", { name: "Add to team" }).click();
+  await expect.poll(() => fake.calls.some((c) => c.path === "/app/sessions/s1/team")).toBe(true);
+});
+
+test("a helper is one quiet line", async ({ page, context }) => {
+  const step = { id: "h", at: at(5), turn: "t1", request: "Look into it", action: "read-file", tool: "Read", paths: ["a.ts"], installs: [], pathsUnknown: false, commandUnderstood: null, blocked: false, severity: null, checked: true, findings: [], unmeasured: [], helper: "Explore" };
+  await fakeAccount(context, { events: [step, { ...step, id: "h2" }], replies: [{ id: "a", at: at(4), turn: "t1", text: "Found it." }] });
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".helper-line")).toHaveCount(1);
+  await expect(page.locator(".helper-line")).toContainText("used a helper: Explore");
+});
+
+test("a message refused because the chat is open says so and can go again", async ({ page, context }) => {
+  await remembered(page, "j1", "carry on");
+  await fakeAccount(context, { jobs: [job("j1", "refused", { code: "in-use", reason: "open" })] });
+  await page.goto("/app/session?id=s1");
+  await expect(page.getByText("This chat is open on your computer")).toBeVisible();
+});
+
+test("the team lists members, and a profile is their record", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/team");
+  await page.getByRole("link", { name: /Reviewer/ }).click();
+  await page.waitForURL(/\/app\/agent/);
+  await expect(page.locator(".agent-badge")).toHaveText("AI agent");
+  await expect(page.locator(".agent-record")).toContainText("100% aligned");
+  await page.getByRole("button", { name: "Rename" }).click();
+  await page.getByRole("textbox", { name: "Name" }).fill("CTO");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect.poll(() => fake.calls.find((c) => c.method === "PATCH")?.body).toContain("CTO");
+});
+
+test("signing is called Face ID only on an iPhone", async ({ page, context, browserName }) => {
+  await fakeAccount(context, { jobs: [job("j1", "done")] });
+  await page.goto("/app/session?id=s1");
+  await expect(page.locator(".composer-note").first()).toContainText(browserName === "webkit" ? "Face ID" : "Your passkey");
+});
+
+test("an agent that is set up but silent is said out loud", async ({ page, context }) => {
+  await fakeAccount(context, { silent: true });
+  await page.goto("/app/settings");
+  await expect(page.getByText("Not watched yet")).toBeVisible();
+  await expect(page.getByText("Codex in trackline")).toBeVisible();
+});
+
+test("a computer that has gone quiet is said plainly on the chats page", async ({ page, context }) => {
+  await fakeAccount(context, { offline: true });
+  await page.goto("/app");
+  await expect(page.getByText("Computer offline.")).toBeVisible();
 });

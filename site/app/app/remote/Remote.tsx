@@ -72,8 +72,8 @@ function NewTask({ open }: { open: (id: string) => void }) {
   return (
     <div className="new-task">
       <header className="rise">
-        <h1 className="app-h1">New task</h1>
-        <p className="app-sub">It runs on your laptop, with your own agent, watched by trackline.</p>
+        <h1 className="app-h1">New chat</h1>
+        <p className="app-sub">It runs on your computer, with your own agent, watched by trackline.</p>
       </header>
 
       {!passkeysSupported() && <p className="composer-note error" style={{ textAlign: "left" }}>This browser cannot use passkeys, which sending needs.</p>}
@@ -87,8 +87,8 @@ function NewTask({ open }: { open: (id: string) => void }) {
       {machines.length === 0 && (
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
-          <strong>No laptop takes tasks yet.</strong>
-          <span>On your laptop, in a project: <code>trackline connect</code></span>
+          <strong>No computer connected yet.</strong>
+          <span>On your computer, in a project: <code>trackline connect</code></span>
         </div>
       )}
 
@@ -277,7 +277,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {!job && !missing && <div className="skel" style={{ height: 90 }} />}
             {job?.status === "queued" && (
               <p className="chat-divider">{machine && !machine.online
-                ? `Waiting for ${machineName}, which is asleep or offline. It runs when the laptop wakes, for up to 12 hours.`
+                ? `Waiting for ${machineName}, which is offline. It runs when it comes back, for up to 12 hours.`
                 : `Waiting for ${machineName} to pick it up…`}</p>
             )}
             {list.map((it, i) => it.kind === "activity"
@@ -289,7 +289,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
             {job?.status === "expired" && (
               <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, imagesFor(id), true)} /> : undefined}>
-                {machineName} stayed asleep or offline, so this never reached it and nothing ran. Wake the laptop{asked ? ", then send it again" : " and send it again"}.
+                {machineName} stayed offline, so this never reached it and nothing ran. Wake it{asked ? ", then send it again" : " and send it again"}.
               </Finding>
             )}
             {job && !live && job.status !== "done" && job.status !== "expired" && (

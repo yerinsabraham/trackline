@@ -24,15 +24,15 @@ export default function Machines() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 860 }}>
       <header className="rise">
-        <h1 className="app-h1">Machines</h1>
-        <p className="app-sub">Laptops that take tasks from you. Every message needs your passkey.</p>
+        <h1 className="app-h1">Computers</h1>
+        <p className="app-sub">Computers your agents run on. Every message needs your passkey.</p>
       </header>
       {!remote && <div className="skel" style={{ height: 160 }} />}
       {remote?.machines.length === 0 && (
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
-          <strong>No laptop takes tasks yet.</strong>
-          <span>On your laptop, in a project: <code>trackline connect</code>. It shows a code; this app asks for it.</span>
+          <strong>No computer connected yet.</strong>
+          <span>On your computer, in a project: <code>trackline connect</code>. It shows a code; this app asks for it.</span>
         </div>
       )}
       {remote?.machines.map((m, i) => (
@@ -65,14 +65,14 @@ export default function Machines() {
                 <span key={k.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}><IconKey size={16} />{k.name}</span>
               ))}
             </div>
-            {m.stopped && <p className="app-muted" style={{ margin: 0, fontSize: 13.5 }}>To start again, on the laptop: <code className="mono">trackline remote enable</code></p>}
+            {m.stopped && <p className="app-muted" style={{ margin: 0, fontSize: 13.5 }}>To start again, on the computep: <code className="mono">trackline remote enable</code></p>}
           </div>
         </section>
       ))}
       {remote && remote.machines.some((m) => !m.stopped) && remote.machines.length > 1 && (
         <button className="btn-danger-text" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => setAsking({})}>Stop remote on every laptop</button>
       )}
-      {asking && <ConfirmSheet title={`Stop remote on ${asking.machine ? "this laptop" : "every laptop"}? Starting again takes the laptop.`} action="Stop remote" onConfirm={() => stop(asking.machine)} onClose={() => setAsking(null)} />}
+      {asking && <ConfirmSheet title={`Stop remote on ${asking.machine ? "this computer" : "every computer"}? Starting again takes the laptop.`} action="Stop remote" onConfirm={() => stop(asking.machine)} onClose={() => setAsking(null)} />}
     </div>
   );
 }

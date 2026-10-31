@@ -676,3 +676,27 @@ a.metric:active { transform: scale(0.98); }
   .attach-thumb button::after { content: ""; position: absolute; inset: -11px; }
   .copy-btn { min-height: 44px; }
 }
+
+/* Who is who: a name in bold, whoever is speaking, and one tap to the agent. */
+.reply-from { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.reply-from button { all: unset; cursor: pointer; color: var(--ink); font-size: 14px; }
+.reply-from button:disabled { cursor: default; }
+.reply-from button:focus-visible, .chat-who:focus-visible { outline: 2px solid var(--act-deep); outline-offset: 2px; border-radius: 4px; }
+.chat-who { all: unset; cursor: pointer; font: inherit; }
+.row-title { display: block; font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helper-line { margin: 0; font-size: 12.5px; color: var(--muted); }
+.agent-head { display: flex; align-items: center; gap: 12px; padding: 4px 4px 10px; }
+.agent-head > div { display: grid; gap: 2px; min-width: 0; }
+.agent-profile { display: flex; gap: 14px; align-items: center; }
+.agent-profile .app-h1 { overflow-wrap: anywhere; }
+.agent-badge { display: inline-block; margin: 4px 0; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; background: var(--soft); color: var(--ink-2); }
+.agent-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-record dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 12px; margin: 0; padding: 14px 18px; }
+.agent-record dt { font-size: 12px; color: var(--muted); }
+.agent-record dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
+.chats-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.on-track-link { font-size: 13px; color: var(--ink-2); }
+.settings-row { align-items: center; }
+.app-tabs.three { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-tab { position: relative; }
+.app-tab .badge { position: absolute; top: -2px; left: 56%; }

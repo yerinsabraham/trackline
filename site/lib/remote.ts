@@ -236,12 +236,12 @@ export async function signDecision(
 export function jobState(j: { status: string; code: string | null; reason: string | null; asked?: unknown; asking?: boolean }): string {
   if (j.status === "done" && (j.asked || j.asking)) return "Waiting for your answer";
   switch (j.status) {
-    case "queued": return "Waiting for the laptop";
+    case "queued": return "Waiting for your computer";
     case "delivered": return "Working";
     case "done": return "Done";
-    case "expired": return "Not delivered: the laptop was asleep or offline";
+    case "expired": return "Not delivered: your computer was offline";
     case "cancelled": return "Stopped before it started";
-    case "refused": return `The laptop refused it: ${j.reason ?? j.code}`;
+    case "refused": return `Your computer refused it: ${j.reason ?? j.code}`;
     case "failed": return j.code === "stopped" ? "Stopped" : `Failed: ${j.reason ?? "no reason given"}`;
   }
   return j.status;
@@ -266,3 +266,6 @@ export function recall(job: string): string | undefined {
     return (JSON.parse(localStorage.getItem(SENT) ?? "[]") as [string, string][]).find(([id]) => id === job)?.[1];
   } catch { return undefined; }
 }
+
+/** What signing is called here: Face ID on an iPhone, and only there. */
+export const proof = () => (typeof navigator !== "undefined" && /iPhone|iPad/.test(navigator.userAgent) ? "Face ID" : "your passkey");

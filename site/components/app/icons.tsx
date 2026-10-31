@@ -10,6 +10,8 @@ const base = (size = 20) => ({
   strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, style: { flex: "none" },
 });
 
+export const IconTeam = ({ size }: Size) => <svg {...base(size)}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.5a6.5 6.5 0 0 1 3.5 5.5" /></svg>;
+export const IconGear = ({ size }: Size) => <svg {...base(size)}><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" /></svg>;
 export const IconHome = ({ size }: Size) => <svg {...base(size)}><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>;
 export const IconChat = ({ size }: Size) => <svg {...base(size)}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
 export const IconLaptop = ({ size }: Size) => <svg {...base(size)}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M2 20h20" /></svg>;

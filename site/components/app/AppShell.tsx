@@ -10,14 +10,14 @@ import Mark from "@/components/Mark";
 import AgentLogo from "./AgentLogo";
 import InstallHint from "./InstallHint";
 import PairingPrompt from "./PairingPrompt";
-import { IconBell, IconChat, IconHome, IconLaptop, IconPlus, IconServer, IconSignOut, IconTarget, IconUser } from "./icons";
+import { IconChat, IconGear, IconPlus, IconServer, IconSignOut, IconTarget, IconTeam } from "./icons";
 import "./app.css";
 
 // The frame every signed-in page sits in, and what they share: who is signed
 // in, their projects and sessions, and their laptops. Fetched here once and
 // kept fresh, so moving between pages is instant.
 
-export type Section = "overview" | "ontrack" | "production" | "sessions" | "machines" | "alerts" | "account" | "new";
+export type Section = "chats" | "team" | "ontrack" | "production" | "settings" | "account" | "new";
 
 type AppData = {
   user: User | null;
@@ -72,7 +72,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
     window.addEventListener("app:agent", sync);
     return () => window.removeEventListener("app:agent", sync);
   }, []);
-  agent = agent ?? (section === "sessions" ? urlAgent : undefined);
+  agent = agent ?? (section === "chats" ? urlAgent : undefined);
 
   const gone = useCallback((e: unknown) => {
     if ((e as { status?: number }).status === 401) {
@@ -146,17 +146,16 @@ export default function AppShell({ section, agent, flush, chat, children }: {
       <div className={`app-shell ${chat ? "chat-mode" : ""}`}>
         <nav className="app-side" aria-label="Main">
           <Link href="/app" className="app-brand"><Mark />trackline</Link>
-          <Link href="/app/remote" className="app-new"><IconPlus />New task</Link>
+          <Link href="/app/remote" className="app-new"><IconPlus />New chat</Link>
           <div className="app-nav">
-            <Link className="app-link" href="/app" aria-current={here("overview")}><IconHome />Overview</Link>
+            <Link className="app-link" href="/app" aria-current={here("chats")}><IconChat />Chats{needsYou > 0 ? <span className="badge">{needsYou}</span> : <span className="count">{sessions.length || ""}</span>}</Link>
+            <Link className="app-link" href="/app/team" aria-current={here("team")}><IconTeam />Team</Link>
             <Link className="app-link" href="/app/ontrack" aria-current={here("ontrack")}><IconTarget />On track</Link>
             <Link className="app-link" href="/app/production" aria-current={here("production")}><IconServer />Production</Link>
-            <Link className="app-link" href="/app/sessions" aria-current={here("sessions")}><IconChat />All sessions<span className="count">{sessions.length || ""}</span></Link>
-            <Link className="app-link" href="/app/machines" aria-current={here("machines")}><IconLaptop />Machines</Link>
-            <Link className="app-link" href="/app/alerts" aria-current={here("alerts")}><IconBell />Alerts{needsYou > 0 && <span className="badge">{needsYou}</span>}</Link>
+            <Link className="app-link" href="/app/settings" aria-current={here("settings")}><IconGear />Settings</Link>
           </div>
           <div className="app-nav">
-            <div className="app-nav-label">Agents</div>
+            <div className="app-nav-label">By tool</div>
             {HOSTS.map((h) => (
               <Link key={h} className="app-link" href={`/app/sessions?agent=${h}`} aria-current={agent === h ? "page" : undefined}>
                 <AgentLogo host={h} size={22} />
@@ -185,12 +184,11 @@ export default function AppShell({ section, agent, flush, chat, children }: {
           {!chat && <InstallHint />}{children}
         </main>
 
-        <nav className="app-tabs" aria-label="Main">
-          <Link className="app-tab" href="/app" aria-current={section === "overview" || section === "ontrack" || section === "production" ? "page" : undefined}><IconHome />Home</Link>
-          <Link className="app-tab" href="/app/sessions" aria-current={section === "sessions" ? "page" : undefined}><IconChat />Sessions</Link>
-          <Link className="app-tab-new" href="/app/remote" aria-label="New task"><IconPlus /></Link>
-          <Link className="app-tab" href="/app/alerts" aria-current={section === "alerts" ? "page" : undefined}><IconBell />Alerts</Link>
-          <a className="app-tab" href="/account" aria-current={section === "account" ? "page" : undefined}><IconUser />Account</a>
+        <nav className="app-tabs three" aria-label="Main">
+          <Link className="app-tab" href="/app" aria-current={section === "chats" ? "page" : undefined}><IconChat />Chats{needsYou > 0 && <span className="badge">{needsYou}</span>}</Link>
+          <Link className="app-tab" href="/app/team" aria-current={section === "team" ? "page" : undefined}><IconTeam />Team</Link>
+          <Link className="app-tab-new" href="/app/remote" aria-label="New chat"><IconPlus /></Link>
+          <Link className="app-tab" href="/app/settings" aria-current={section !== "chats" && section !== "team" && section !== "new" ? "page" : undefined}><IconGear />Settings</Link>
         </nav>
 
         <PairingPrompt />

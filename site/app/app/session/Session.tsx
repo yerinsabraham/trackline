@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, markRead, readAt, readDraft, saveDraft } from "@/lib/account";
 import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
-import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
+import { active, type Attachment, proof, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, HelperLine, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
 import { IconBack, IconMore, IconStop } from "@/components/app/icons";
+import AgentSheet from "@/components/app/AgentSheet";
 import SessionMenu from "@/components/app/SessionMenu";
-import { SessionRow } from "../Overview";
+import { SessionRow } from "@/components/app/SessionRow";
 
 // One session as a conversation: what you asked, what the agent did (as a
 // terminal would show it), anything trackline stopped, and the agent's reply.
@@ -98,6 +99,7 @@ export default function Session() {
   const [stopping, setStopping] = useState(false);
   const [more, setMore] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [who, setWho] = useState(false);
   const [unreadAt, setUnreadAt] = useState<number | null>(null);
   // Decisions made here, by the action they were about.
   const [decided, setDecided] = useState<Record<string, "allow" | "deny">>({});
@@ -285,6 +287,7 @@ export default function Session() {
 
   // Measured: a second process on one session keeps the file sound but forks
   // the conversation, so the agent open at the desk never learns of this one.
+  const who_ = s?.agentName ?? agentName(s?.host);
   const atDesk = !!s && known.length === 0 && Date.now() - +new Date(s.lastAt) < 30 * 60_000;
   const lastTurn = list[list.length - 1]?.key;
   const jobFor = new Map(jobs.flatMap((j) => { const t = turnOf(list, textOf(j), j.createdAt); return t ? [[t.key, j] as const] : []; }));
@@ -301,7 +304,7 @@ export default function Session() {
 
   return (
     <div className="chat-page">
-      <aside className="chat-list" aria-label={`${agentName(s?.host)} sessions`}>
+      <aside className="chat-list" aria-label={`${agentName(s?.host)} chats`}>
         <div className="chat-list-head">
           {s && <AgentLogo host={s.host} size={28} />}
           <h2>{agentName(s?.host)}</h2>
@@ -311,17 +314,18 @@ export default function Session() {
 
       <section className="chat-pane">
         <header className="chat-head">
-          <Link href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack size={24} /></Link>
+          <Link href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to chats"><IconBack size={24} /></Link>
           {s && <AgentLogo host={s.host} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
-            <h1>{s ? sessionName(s, agentName(s.host), s.project.name) : error ? "Session" : "Loading…"}</h1>
-            <span className="row-meta">{s ? `${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
+            <h1>{s ? <button type="button" className="chat-who" onClick={() => setWho(true)}>{who_}</button> : error ? "Chat" : "Loading…"}</h1>
+            <span className="row-meta">{s ? [sessionName(s, agentName(s.host), s.project.name), s.project.name, cont?.machine.name].filter(Boolean).join(" · ") : ""}</span>
           </div>
           {running ? (
             <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>
           ) : s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
-          {s && <button type="button" className="app-icon-btn" aria-label="Session options" onClick={() => setMenu(true)}><IconMore size={22} /></button>}
+          {s && <button type="button" className="app-icon-btn" aria-label="Chat options" onClick={() => setMenu(true)}><IconMore size={22} /></button>}
         </header>
+        {who && s && <AgentSheet chat={s.id} host={s.host} name={who_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
         {menu && s && (
           <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt }}
             onClose={() => setMenu(false)} onChanged={refresh}
@@ -343,15 +347,15 @@ export default function Session() {
               if (item.job) {
                 const j = item.job;
                 const text = textOf(j);
-                const again = (j.status === "expired" || (j.status === "refused" && j.code === "busy")) && !!text;
+                const again = (j.status === "expired" || (j.status === "refused" && (j.code === "busy" || j.code === "in-use"))) && !!text;
                 return (
                   <div key={j.id} style={{ display: "contents" }}>
                     {divider}
-                    <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Laptop"} · ${jobState(j)}`} />
+                    <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Computer"} · ${jobState(j)}`} />
                     {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
                     {again && (
                       <Finding tone="warn" title="Not delivered" actions={<SendAgain onSend={() => deliver(text, imagesFor(j.id))} />}>
-                        {j.status === "expired" ? `${cont?.machine.name ?? "The laptop"} stayed asleep or offline, so this never reached it. Wake the laptop, then send it again.` : "An agent was already working in this project, so this never started."}
+                        {j.status === "expired" ? `${cont?.machine.name ?? "Your computer"} was offline, so this never reached it. Wake it, then send this again.` : j.code === "in-use" ? "This chat is open on your computer, so this was not sent. Close it there and send this again, or start a new chat." : "An agent was already working in this project, so this never started."}
                       </Finding>
                     )}
                   </div>
@@ -365,9 +369,10 @@ export default function Session() {
                 <div key={t.key} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {divider}
                   {firstNew === t.key && <div ref={line} className="new-line">New messages</div>}
-                  {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Laptop"} · ${jobState(job)}` : undefined} />}
+                  {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Computer"} · ${jobState(job)}` : undefined} />}
                   {job?.permission && <Finding tone="block" title="Action needed on Mac">{job.permission}</Finding>}
                   <Activity lines={t.events.map(toLine)} live={last && working && !t.replies.length} />
+                  <HelperLine name={who_} helpers={[...new Set(t.events.flatMap((e) => (e.helper ? [e.helper] : [])))]} />
                   {stops.slice(0, 3).map((e) => {
                     const blocking = e.blocked || e.severity === "block";
                     // Only the latest turn's stops are still open to a decision,
@@ -379,28 +384,28 @@ export default function Session() {
                         actions={choice ? <span className="decided">{choice === "allow" ? "Allowed once. It is trying again." : "Kept blocked. It has been told."}</span>
                           : open ? (
                             <>
-                              <button className="btn-act" disabled={!!deciding} onClick={() => decide(e, "allow")}>{deciding === e.id ? "Waiting for your passkey…" : "Allow once"}</button>
+                              <button className="btn-act" disabled={!!deciding} onClick={() => decide(e, "allow")}>{deciding === e.id ? `Waiting for ${proof()}…` : "Allow once"}</button>
                               <button className="btn-plain" disabled={!!deciding} onClick={() => decide(e, "deny")}>Keep blocked</button>
                             </>
                           ) : undefined}>
-                        {e.findings[0].suggestion ?? (e.blocked ? `${agentName(s?.host)} was told why and carried on.` : undefined)}
+                        {e.findings[0].suggestion ?? (e.blocked ? `${who_} was told why and carried on.` : undefined)}
                         {decideError && open && !choice ? <><br /><span style={{ color: "var(--red-ink)" }}>{decideError}</span></> : null}
                       </Finding>
                     );
                   })}
                   {/* A reply that is only the question is shown once, in the card below. */}
-                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} />)}
+                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} name={who_} model={r.model ?? s?.model} onName={() => setWho(true)} />)}
                 </div>
               );
             })}
-            {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} />}
+            {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} name={who_} model={s?.model} onName={() => setWho(true)} />}
             {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
             {held && (
               <>
-                <MyMessage text={held.text} note={heldError || (working ? `Waiting for ${agentName(s?.host)} to finish` : "Ready to send")}
+                <MyMessage text={held.text} note={heldError || (working ? `Waiting for ${who_} to finish` : "Ready to send")}
                   actions={<>
                     <button type="button" className="btn-plain" disabled={heldBusy} onClick={() => keep(null)}>Remove</button>
-                    <button type="button" className="btn-act" disabled={working || heldBusy || !!blocked} onClick={sendHeld}>{heldBusy ? "Waiting for your passkey…" : "Send now"}</button>
+                    <button type="button" className="btn-act" disabled={working || heldBusy || !!blocked} onClick={sendHeld}>{heldBusy ? `Waiting for ${proof()}…` : "Send now"}</button>
                   </>} />
               </>
             )}
@@ -415,9 +420,9 @@ export default function Session() {
           {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
           <Composer
             chat={id || undefined}
-            placeholder={`Reply to ${agentName(s?.host)}…`}
+            placeholder={`Reply to ${who_}…`}
             blocked={blocked}
-            note={working ? `${agentName(s?.host)} is working. A message waits here until it finishes.` : atDesk ? "Open on your laptop? It won't show a reply sent from here." : cont ? `Signed with your passkey · continues this session on ${cont.machine.name}` : undefined}
+            note={working ? `${who_} is working. A message waits here until it finishes.` : atDesk ? "Open on your computer? Close it there first, or this won't be sent." : cont ? `${proof() === "Face ID" ? "Face ID" : "Your passkey"} · continues this chat on ${cont.machine.name}` : undefined}
             onSend={send}
           />
         </div>
