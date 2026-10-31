@@ -6,6 +6,7 @@ import { api, readAt } from "@/lib/account";
 import { sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
+import AgentSheet from "@/components/app/AgentSheet";
 import FirstRun from "@/components/app/FirstRun";
 import HandoffCards from "@/components/app/HandoffCards";
 import { IconMore } from "@/components/app/icons";
@@ -20,7 +21,7 @@ const AGENTS: [string, string][] = [["", "All"], ["claude-code", "Claude Code"],
 type Filter = "all" | "working" | "needs-you" | "done";
 const FILTERS: [Filter, string][] = [["all", "All"], ["working", "Working"], ["needs-you", "Needs your OK"], ["done", "Done"]];
 
-type Row = SessionSummary & { project: { name: string } };
+type Row = SessionSummary & { project: { name: string }; projectId?: string };
 const UNDO_MS = 6000;
 
 /**
@@ -88,6 +89,7 @@ export default function Sessions() {
   const [more, setMore] = useState(false);
   const [page, setPage] = useState(0);
   const [menu, setMenu] = useState<Row | null>(null);
+  const [who, setWho] = useState<Row | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [undo, setUndo] = useState<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -257,8 +259,10 @@ export default function Sessions() {
       {menu && (
         <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt }}
           onClose={() => setMenu(null)} onChanged={() => { setRows(null); read(0).catch(() => {}); }} onDelete={() => remove([menu.id])}
-          onSelect={() => setChoosing(true)} />
+          onSelect={() => setChoosing(true)} onAgent={() => setWho(menu)} />
       )}
+      {who && <AgentSheet chat={who.id} host={who.host} name={who.agentName ?? agentName(who.host)} model={who.model} agentId={who.agentId} project={who.projectId ?? ""}
+        onClose={() => setWho(null)} onChanged={() => { read(0).catch(() => {}); }} />}
     </div>
   );
 }

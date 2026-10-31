@@ -329,7 +329,7 @@ export default function Session() {
         {who && s && <AgentSheet chat={s.id} host={s.host} name={name_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
         {menu && s && (
           <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt }}
-            onClose={() => setMenu(false)} onChanged={refresh}
+            onClose={() => setMenu(false)} onChanged={refresh} onAgent={() => setWho(true)}
             onDelete={() => window.location.assign(`/app/sessions?deleted=${encodeURIComponent(s.id)}`)}
             onCleared={() => { setEvents([]); setReplies([]); setMore(false); refresh(); }} />
         )}

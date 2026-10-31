@@ -575,3 +575,12 @@ test("one nobody approved says so", async ({ page, context }) => {
   await page.goto("/app");
   await expect(page.getByText("Nobody approved this in time")).toBeVisible();
 });
+
+test("the three dots also reach add to team", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await page.getByRole("button", { name: "Chat options" }).first().click();
+  await page.getByRole("button", { name: "Agent and team" }).click();
+  await page.getByRole("button", { name: "Add to team" }).click();
+  await expect.poll(() => fake.calls.some((c) => c.path.endsWith("/team"))).toBe(true);
+});

@@ -9,7 +9,7 @@ import { api } from "@/lib/account";
 
 export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean };
 
-export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect }: {
+export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect, onAgent }: {
   session: MenuSession;
   onClose: () => void;
   /** After a rename, pin or archive: read it again. */
@@ -17,6 +17,8 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
   onDelete: () => void;
   onCleared?: () => void;
   onSelect?: () => void;
+  /** Open who this chat is with: add to team, rename, move. */
+  onAgent?: () => void;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState(session.name);
@@ -54,7 +56,8 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
         ) : (
           <>
             <strong className="sheet-title">{session.name}</strong>
-            <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename</button>
+            {onAgent && <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>Agent and team</button>}
+            <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename chat</button>
             <button type="button" className="sheet-item" onClick={() => change({ pinned: !session.pinned })}>{session.pinned ? "Unpin" : "Pin"}</button>
             <button type="button" className="sheet-item" onClick={() => change({ archived: !session.archived })}>{session.archived ? "Unarchive" : "Archive"}</button>
             {onSelect && <button type="button" className="sheet-item" onClick={() => { onSelect(); onClose(); }}>Select several</button>}
