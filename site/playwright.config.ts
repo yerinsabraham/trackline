@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: true,
+  // WebKit is slow to start, and more of them at once fail by timing out.
+  workers: 3,
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: "http://localhost:4173", trace: "off" },
   webServer: { command: "node e2e/serve.mjs", url: "http://localhost:4173/app", reuseExistingServer: !process.env.CI },

@@ -18,6 +18,14 @@ changelog page is built from this file.
   in place, including ones an agent answered in words alone. Long chats load
   earlier messages as you scroll up, and coming back opens at a "New messages"
   line. Any running task has a Stop button.
+- **Sessions have names.** A session takes the agent's own title, or its first
+  real request, and keeps it. Rename, pin and archive from the three dots.
+- **Delete and clear.** Swipe left or use the three dots, with six seconds to
+  undo. Hold a row to choose several. Clearing a chat keeps its name. Both remove
+  the words from trackline only, never from your laptop, and your on-track
+  numbers do not change.
+- **Search** names and replies, filter by project, and see every session rather
+  than the latest 50.
 - **Write while the agent works.** Your message waits in the chat and Face ID
   sends it when the agent finishes.
 - **Longer replies.** The limit goes from 8,000 to 32,000 bytes, and a reply cut

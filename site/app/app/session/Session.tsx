@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, readDraft, saveDraft } from "@/lib/account";
-import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, type SessionJob, type SessionView, whileVisible } from "@/lib/dashboard";
+import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileVisible } from "@/lib/dashboard";
 import { active, type Attachment, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
-import { IconBack, IconStop } from "@/components/app/icons";
+import { IconBack, IconMore, IconStop } from "@/components/app/icons";
+import SessionMenu from "@/components/app/SessionMenu";
 import { SessionRow } from "../Overview";
 
 // One session as a conversation: what you asked, what the agent did (as a
@@ -95,6 +96,7 @@ export default function Session() {
   const [heldBusy, setHeldBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [more, setMore] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [unreadAt, setUnreadAt] = useState<number | null>(null);
   // Decisions made here, by the action they were about.
   const [decided, setDecided] = useState<Record<string, "allow" | "deny">>({});
@@ -273,6 +275,7 @@ export default function Session() {
       setHeldBusy(false);
     }
   };
+  const refresh = () => { api<SessionView>(`/app/sessions/${encodeURIComponent(id)}?after=${encodeURIComponent(cursor.current ?? "")}`).then((r) => setView((v) => (v ? { ...v, session: r.session } : r))).catch(() => {}); };
   const stop = async () => {
     if (!running) return;
     setStopping(true);
@@ -307,13 +310,20 @@ export default function Session() {
           <a href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to sessions"><IconBack size={24} /></a>
           {s && <AgentLogo host={s.host} size={32} />}
           <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
-            <h1>{requestLabel(s?.request ?? null) ?? (error ? "Session" : "Loading…")}</h1>
+            <h1>{s ? sessionName(s, agentName(s.host), s.project.name) : error ? "Session" : "Loading…"}</h1>
             <span className="row-meta">{s ? `${agentName(s.host)} · ${s.project.name}${cont ? ` · ${cont.machine.name}` : ""}` : ""}</span>
           </div>
           {running ? (
             <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>
           ) : s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
+          {s && <button type="button" className="app-icon-btn" aria-label="Session options" onClick={() => setMenu(true)}><IconMore size={22} /></button>}
         </header>
+        {menu && s && (
+          <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt }}
+            onClose={() => setMenu(false)} onChanged={refresh}
+            onDelete={() => window.location.assign(`/app/sessions?deleted=${encodeURIComponent(s.id)}`)}
+            onCleared={() => { setEvents([]); setReplies([]); setMore(false); refresh(); }} />
+        )}
 
         <div className="chat-scroll-wrap">
         <div className="chat-scroll" ref={scrollRef}>

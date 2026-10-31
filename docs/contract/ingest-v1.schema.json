@@ -40,7 +40,8 @@
         "turn": { "type": "string", "maxLength": 128 },
         "text": { "type": "string", "maxLength": 32000, "description": "The agent's final message for the turn. Paths made relative, the home directory replaced, token shapes redacted." },
         "request": { "type": "string", "maxLength": 8000, "description": "What the user said in this turn, so a turn answered in words still shows it. Absent unless they agreed to share it. Cleaned like the text." },
-        "cut": { "type": "boolean", "description": "True when the text was longer than its limit and is not all of it." }
+        "cut": { "type": "boolean", "description": "True when the text was longer than its limit and is not all of it." },
+        "title": { "type": "string", "maxLength": 200, "description": "The name the agent gave this session, where it keeps one. Absent unless the user agreed to share their requests. Cleaned like the text." }
       }
     },
     "setup": {

@@ -260,3 +260,98 @@ test("a task whose session is known opens as that conversation", async ({ page, 
   await page.waitForURL(/\/app\/session\?id=s1/);
   await page.locator(".bubble-agent").first().waitFor();
 });
+
+test("a chat shows the session's name, and it can be renamed", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await openChat(page);
+  await page.getByRole("button", { name: "Session options" }).click();
+  await page.getByRole("button", { name: "Rename" }).click();
+  await page.fill("#session-name", "Login work");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => fake.calls.find((c) => c.method === "PATCH")?.body).toContain("Login work");
+});
+
+test("clearing a chat asks once, then empties it", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await openChat(page);
+  await page.getByRole("button", { name: "Session options" }).click();
+  await page.getByRole("button", { name: "Clear chat" }).click();
+  await expect(page.getByText("can't be undone")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Clear chat" }).click();
+  await expect(page.locator(".bubble-agent")).toHaveCount(0);
+  expect(fake.calls.some((c) => c.path.endsWith("/clear"))).toBe(true);
+});
+
+test("a deleted session can be undone, and nothing is sent", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator(".swipe")).toHaveCount(2);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator(".swipe")).toHaveCount(3);
+  await page.waitForTimeout(6500);
+  expect(fake.calls).toEqual([]);
+});
+
+test("a deleted session is really deleted when the Undo runs out", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect.poll(() => fake.calls.length, { timeout: 9000 }).toBe(1);
+  expect(fake.calls[0].body).toContain('"delete"');
+  await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+});
+
+test("leaving the page does not lose a delete", async ({ page, context, browserName }) => {
+  test.skip(browserName === "chromium", "Playwright does not see Chromium's keepalive request during unload");
+  const fake = await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await page.goto("/app");
+  await expect.poll(() => fake.calls.length).toBe(1);
+});
+
+test("several sessions can be chosen and deleted", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await page.getByRole("button", { name: "Session options" }).first().click();
+  await page.getByRole("button", { name: "Select several" }).click();
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("toolbar")).toContainText("2 chosen");
+  await page.getByRole("toolbar").getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator(".swipe")).toHaveCount(1);
+  await expect.poll(() => fake.calls.length, { timeout: 9000 }).toBe(1);
+});
+
+test("swiping a row left shows Delete", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app/sessions");
+  const row = page.locator(".swipe-row").first();
+  await row.waitFor();
+  const box = (await row.boundingBox())!;
+  await row.evaluate((el, b) => {
+    // Built by hand: WebKit on a Mac has no Touch to construct.
+    const fire = (type: string, x: number) => {
+      const e = new Event(type, { bubbles: true });
+      Object.defineProperty(e, "touches", { value: type === "touchend" ? [] : [{ clientX: x, clientY: b.y + 20 }] });
+      el.dispatchEvent(e);
+    };
+    fire("touchstart", b.x + 300); fire("touchmove", b.x + 240); fire("touchmove", b.x + 180); fire("touchend", b.x + 180);
+  }, box);
+  await expect(page.locator(".swipe-delete").first()).toBeVisible();
+  await expect.poll(() => row.evaluate((el) => el.style.transform)).toContain("-96");
+});
+
+test("search narrows the list", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app/sessions");
+  // Typed after the page is live, as a person would.
+  await expect(page.locator(".swipe")).toHaveCount(3);
+  await page.fill(".list-search", "dark");
+  await expect(page.locator(".swipe")).toHaveCount(1);
+  await expect(page.locator(".swipe")).toContainText("Add dark mode");
+});

@@ -21,6 +21,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -318,6 +319,7 @@ func queueReply(root string, t turnEnd) {
 			t.transcript = codexTranscript(t.session)
 		}
 		o.Request = lastRequest(t.transcript)
+		o.Title = agentTitle(t)
 	}
 	r, err := payload.BuildReply(t.host, t.session, t.turn, t.text, time.Now(), o)
 	if err != nil {
@@ -348,18 +350,73 @@ func lastRequest(path string) string {
 	return t.Text
 }
 
+// agentTitle is the name the agent itself gave the session. Neither format is
+// documented, so this is best effort: anything it cannot find, the site names
+// from the first request instead. The latest entry wins, as both hosts append.
+func agentTitle(t turnEnd) string {
+	var path, id string
+	var pick func(line []byte) string
+	switch t.host {
+	case event.HostClaudeCode:
+		path = t.transcript
+		pick = func(line []byte) string {
+			var e struct {
+				Type  string `json:"type"`
+				Title string `json:"aiTitle"`
+			}
+			if json.Unmarshal(line, &e) != nil || e.Type != "ai-title" {
+				return ""
+			}
+			return e.Title
+		}
+	case event.HostCodex:
+		path = filepath.Join(codexHome(), "session_index.jsonl")
+		id = t.session
+		pick = func(line []byte) string {
+			var e struct {
+				ID    string `json:"id"`
+				Title string `json:"thread_name"`
+			}
+			if json.Unmarshal(line, &e) != nil || e.ID != id {
+				return ""
+			}
+			return e.Title
+		}
+	default:
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	title := ""
+	for _, line := range bytes.Split(b, []byte{'\n'}) {
+		if !bytes.Contains(line, []byte("itle")) && !bytes.Contains(line, []byte("thread_name")) {
+			continue
+		}
+		if got := pick(line); got != "" {
+			title = got
+		}
+	}
+	return title
+}
+
+func codexHome() string {
+	if h := os.Getenv("CODEX_HOME"); h != "" {
+		return h
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(h, ".codex")
+}
+
 // codexTranscript finds a Codex session's file, for a Stop that does not say
 // where it is. Codex names each one after its session under a dated folder.
 func codexTranscript(session string) string {
-	home := os.Getenv("CODEX_HOME")
-	if home == "" {
-		h, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		home = filepath.Join(h, ".codex")
-	}
-	if session == "" || strings.ContainsAny(session, `*?[]/\`) {
+	home := codexHome()
+	if home == "" || session == "" || strings.ContainsAny(session, `*?[]/\`) {
 		return ""
 	}
 	found, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*", "rollout-*-"+session+".jsonl"))

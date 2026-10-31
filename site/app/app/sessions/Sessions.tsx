@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import AgentLogo from "@/components/app/AgentLogo";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
+import { api } from "@/lib/account";
+import { sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard";
+import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
+import { IconMore } from "@/components/app/icons";
+import SessionMenu from "@/components/app/SessionMenu";
 import { SessionRow } from "../Overview";
 
 // Every session, by agent: Claude Code, Codex and Cursor each as their own
@@ -12,35 +16,148 @@ const AGENTS: [string, string][] = [["", "All"], ["claude-code", "Claude Code"],
 type Filter = "all" | "working" | "needs-you" | "done";
 const FILTERS: [Filter, string][] = [["all", "All"], ["working", "Working"], ["needs-you", "Needs you"], ["done", "Done"]];
 
+type Row = SessionSummary & { project: { name: string } };
+const UNDO_MS = 6000;
+
+/**
+ * One row: tap to open, swipe left for Delete, hold to start choosing several,
+ * or the three dots for everything. In choosing mode a tap ticks it instead.
+ */
+function ListRow({ s, choosing, chosen, onToggle, onMenu, onDelete, onHold }: {
+  s: Row; choosing: boolean; chosen: boolean; onToggle: () => void; onMenu: () => void; onDelete: () => void; onHold: () => void;
+}) {
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number; dx: number } | null>(null);
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const stopHold = () => { if (hold.current) clearTimeout(hold.current); hold.current = null; };
+  const down = (e: TouchEvent) => {
+    const t = e.touches[0];
+    start.current = { x: t.clientX, y: t.clientY, dx };
+    held.current = false;
+    hold.current = setTimeout(() => { held.current = true; onHold(); }, 500);
+  };
+  const move = (e: TouchEvent) => {
+    if (!start.current) return;
+    const t = e.touches[0];
+    const x = t.clientX - start.current.x;
+    if (Math.abs(x) > 8 || Math.abs(t.clientY - start.current.y) > 8) stopHold();
+    if (!choosing && Math.abs(x) > Math.abs(t.clientY - start.current.y)) setDx(Math.max(-96, Math.min(0, start.current.dx + x)));
+  };
+  const up = () => {
+    stopHold();
+    start.current = null;
+    setDx((d) => (d < -48 ? -96 : 0));
+  };
+  return (
+    <div className={`swipe ${s.archivedAt ? "archived" : ""}`}>
+      <button type="button" className="swipe-delete" tabIndex={dx ? 0 : -1} aria-hidden={!dx} onClick={onDelete}>Delete</button>
+      <div className="swipe-row" style={{ transform: dx ? `translateX(${dx}px)` : undefined }} onTouchStart={down} onTouchMove={move} onTouchEnd={up} onTouchCancel={up}>
+        {choosing && <input type="checkbox" className="row-tick" checked={chosen} onChange={onToggle} aria-label={`Choose ${s.title ?? "session"}`} />}
+        <SessionRow s={s} project={s.project.name} onClick={(e) => {
+          if (dx) { e.preventDefault(); setDx(0); }
+          else if (held.current || choosing) { e.preventDefault(); if (choosing && !held.current) onToggle(); held.current = false; }
+        }} />
+        {!choosing && <button type="button" className="row-more" aria-label="Session options" onClick={onMenu}><IconMore size={20} /></button>}
+      </div>
+    </div>
+  );
+}
+
 export default function Sessions() {
   const { projects } = useApp();
   const [agent, setAgent] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [q, setQ] = useState("");
+  const [project, setProject] = useState("");
+  const [archived, setArchived] = useState(false);
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [more, setMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [menu, setMenu] = useState<Row | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [undo, setUndo] = useState<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const undoing = useRef(undo);
+  undoing.current = undo;
+
+  const asked = useRef(0);
+  const pages = useRef(0);
+  const read = useCallback(async (at: number) => {
+    const mine = at === 0 ? ++asked.current : asked.current;
+    const u = new URLSearchParams({ page: String(at) });
+    if (q.trim()) u.set("q", q.trim());
+    if (agent) u.set("host", agent);
+    if (project) u.set("project", project);
+    if (archived) u.set("archived", "1");
+    const r = await api<{ sessions: Row[]; total: number; more: boolean }>(`/app/sessions?${u}`);
+    // Typing outruns the network: only the latest question gets to answer.
+    if (mine !== asked.current) return;
+    setTotal(r.total);
+    setMore(r.more);
+    setRows((old) => {
+      const fresh = new Set(r.sessions.map((x) => x.id));
+      if (at > 0) return [...(old ?? []).filter((x) => !fresh.has(x.id)), ...r.sessions];
+      // A refresh of the top, keeping any further pages already shown.
+      return pages.current === 0 ? r.sessions : [...r.sessions, ...(old ?? []).slice(r.sessions.length).filter((x) => !fresh.has(x.id))];
+    });
+  }, [q, agent, project, archived]);
+
+  // Asking again from the top whenever what is asked for changes.
+  useEffect(() => {
+    setRows(null); setPage(0); pages.current = 0;
+    const t = setTimeout(() => { read(0).catch(() => setRows([])); }, q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [read, q]);
+  useEffect(() => whileVisible(() => { read(0).catch(() => {}); }, 8000), [read]);
+
+  const commit = (ids: string[]) => {
+    const body = JSON.stringify({ ids, action: "delete" });
+    return api("/app/sessions/bulk", { method: "POST", body, keepalive: true }).catch(() => {});
+  };
+  // Gone at once, and truly gone six seconds later, or as you leave the page.
+  const remove = useCallback((ids: string[]) => {
+    const was = undoing.current;
+    if (was) { clearTimeout(was.timer); commit(was.ids); }
+    const timer = setTimeout(() => { setUndo(null); commit(ids).then(() => read(0)); }, UNDO_MS);
+    setUndo({ ids, timer });
+    setChoosing(false); setChosen(new Set());
+  }, [read]);
+  useEffect(() => {
+    const flush = () => { const u = undoing.current; if (u) { clearTimeout(u.timer); commit(u.ids); setUndo(null); } };
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     setAgent(q.get("agent") ?? "");
     const st = q.get("status");
     if (st === "working" || st === "needs-you" || st === "done") setFilter(st);
-  }, []);
+    // Deleted from inside the chat: the Undo lives here, where the row was.
+    const gone = q.get("deleted");
+    if (gone) {
+      window.history.replaceState(null, "", window.location.pathname);
+      remove([gone]);
+    }
+  }, [remove]);
   const pick = (a: string) => {
     setAgent(a);
     window.history.replaceState(null, "", a ? `/app/sessions?agent=${a}` : "/app/sessions");
     window.dispatchEvent(new Event("app:agent"));
   };
 
-  const all = (projects ?? [])
-    .flatMap((p) => p.sessions.map((s) => ({ ...s, project: p.name })))
-    .filter((s) => !agent || s.host === agent)
-    .sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
-  const matches = (s: (typeof all)[number], f: Filter) =>
+  const hidden = new Set(undo?.ids ?? []);
+  const all = (rows ?? []).filter((s) => !hidden.has(s.id));
+  const matches = (s: Row, f: Filter) =>
     f === "all" ? true : f === "done" ? s.light === "done" || s.light === "idle" : s.light === f;
   const shown = all.filter((s) => matches(s, filter));
-  const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-  const groups: [string, typeof shown][] = [
-    ["Today", shown.filter((s) => new Date(s.lastAt) >= startOfDay)],
-    ["Earlier", shown.filter((s) => new Date(s.lastAt) < startOfDay)],
-  ];
+  const toggle = (id: string) => setChosen((c) => { const n = new Set(c); if (!n.delete(id)) n.add(id); return n; });
+  const archive = async () => {
+    await api("/app/sessions/bulk", { method: "POST", body: JSON.stringify({ ids: [...chosen], action: "archive" }) }).catch(() => {});
+    setChoosing(false); setChosen(new Set()); setRows(null); read(0).catch(() => {});
+  };
   const wired = !agent || !!projects?.some((p) => p.agents.some((a) => a.host === agent && a.wired));
 
   return (
@@ -56,15 +173,23 @@ export default function Sessions() {
           </button>
         ))}
       </div>
+      <input type="search" className="list-search rise rise-2" aria-label="Search sessions" placeholder="Search names and replies" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="chips rise rise-2" role="tablist" aria-label="Status">
         {FILTERS.map(([f, label]) => (
           <button key={f} role="tab" className="pick" aria-selected={filter === f} onClick={() => setFilter(f)}>
-            {label} {projects ? all.filter((s) => matches(s, f)).length : ""}
+            {label}{f === "all" && rows ? ` ${total}` : ""}
           </button>
         ))}
+        <button className="pick" aria-pressed={archived} onClick={() => setArchived((a) => !a)}>Archived</button>
+        {(projects?.length ?? 0) > 1 && (
+          <select className="pick" aria-label="Project" value={project} onChange={(e) => setProject(e.target.value)}>
+            <option value="">All projects</option>
+            {projects!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
       </div>
 
-      {!projects && [0, 1, 2, 3].map((i) => <div key={i} className="skel" style={{ height: 72 }} />)}
+      {!rows && [0, 1, 2, 3].map((i) => <div key={i} className="skel" style={{ height: 72 }} />)}
       {projects && !wired && (
         <div className="card empty">
           <AgentLogo host={agent} size={40} />
@@ -72,15 +197,36 @@ export default function Sessions() {
           <span>In a project on your laptop: <code>trackline init --host {agent === "claude-code" ? "claude" : agent}</code></span>
         </div>
       )}
-      {projects && wired && shown.length === 0 && <div className="card empty">No sessions here yet.</div>}
-      {groups.map(([name, list]) => list.length > 0 && (
-        <section key={name} aria-label={name} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div className="app-nav-label" style={{ padding: "6px 2px 0" }}>{name}</div>
-          <div className="card rise">
-            {list.map((s) => <SessionRow key={s.id} s={s} project={s.project} />)}
-          </div>
-        </section>
-      ))}
+      {rows && wired && shown.length === 0 && <div className="card empty">{q ? "Nothing matches that." : archived ? "Nothing archived." : "No sessions here yet."}</div>}
+      {shown.length > 0 && (
+        <div className="card rise">
+          {shown.map((s) => (
+            <ListRow key={s.id} s={s} choosing={choosing} chosen={chosen.has(s.id)} onToggle={() => toggle(s.id)} onMenu={() => setMenu(s)} onDelete={() => remove([s.id])}
+              onHold={() => { setChoosing(true); toggle(s.id); }} />
+          ))}
+        </div>
+      )}
+      {more && <button type="button" className="btn-plain" onClick={() => { const next = page + 1; setPage(next); pages.current = next; read(next).catch(() => {}); }}>Show more</button>}
+
+      {choosing && (
+        <div className="select-bar" role="toolbar" aria-label="Chosen sessions">
+          <span>{chosen.size} chosen</span>
+          <button type="button" className="btn-plain" onClick={() => { setChoosing(false); setChosen(new Set()); }}>Cancel</button>
+          <button type="button" className="btn-plain" disabled={!chosen.size} onClick={archive}>Archive</button>
+          <button type="button" className="btn-act" disabled={!chosen.size} onClick={() => remove([...chosen])}>Delete</button>
+        </div>
+      )}
+      {undo && (
+        <div className="undo-bar" role="status">
+          <span>{undo.ids.length === 1 ? "Session deleted" : `${undo.ids.length} sessions deleted`}</span>
+          <button type="button" onClick={() => { clearTimeout(undo.timer); setUndo(null); }}>Undo</button>
+        </div>
+      )}
+      {menu && (
+        <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt }}
+          onClose={() => setMenu(null)} onChanged={() => { setRows(null); read(0).catch(() => {}); }} onDelete={() => remove([menu.id])}
+          onSelect={() => setChoosing(true)} />
+      )}
     </div>
   );
 }

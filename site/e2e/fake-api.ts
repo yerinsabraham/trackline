@@ -20,10 +20,12 @@ const summary = (id: string, request: string | null, light: string) => ({
 
 export const REMOTE_ON = { machine: { id: "m1", name: "MacBook", online: true, stopped: false }, project: "cp", agent: "claude", session: "abc" };
 
-export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; job: unknown };
+const listRow = (id: string, title: string) => ({ ...summary(id, title, "done"), title, project: { name: "trackline" } });
+
+export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; job: unknown; calls: { method: string; path: string; body: string | null }[]; list: Record<string, unknown>[] };
 
 export async function fakeAccount(context: BrowserContext, over: Partial<Fake> = {}): Promise<Fake> {
-  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], light: "done", jobs: [], replies: null, events: null, more: false, older: [], stops: [], job: null, ...over };
+  const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], light: "done", jobs: [], replies: null, events: null, more: false, older: [], stops: [], job: null, calls: [], list: [listRow("s1", "Fix the login page"), listRow("s2", "Add dark mode"), listRow("s3", "Write the docs")], ...over };
   await context.addInitScript(() => localStorage.setItem("trackline.session", "fake"));
   await context.route("https://api.creovine.com/**", (route) => {
     const url = new URL(route.request().url());
@@ -40,6 +42,20 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
     if (path === "/app/ontrack") return json({ score: { percent: 90 } });
     if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: fake.passkeys }); }
     if (path === "/app/alerts") return json({ prefs: { red: true, finished: true, drifting: false }, devices: [], slack: false, vapidPublicKey: null });
+    const method = route.request().method();
+    if (path.startsWith("/app/sessions") && method !== "GET") {
+      fake.calls.push({ method, path, body: route.request().postData() });
+      if (path === "/app/sessions/bulk") {
+        const { ids, action } = JSON.parse(route.request().postData() ?? "{}");
+        if (action === "delete") fake.list = fake.list.filter((x) => !ids.includes(x.id));
+      }
+      return json({ ok: true });
+    }
+    if (path === "/app/sessions") {
+      const q = url.searchParams.get("q")?.toLowerCase();
+      const sessions = fake.list.filter((x) => !q || String(x.title).toLowerCase().includes(q));
+      return json({ sessions, total: sessions.length, more: false });
+    }
     if (path.startsWith("/app/remote/jobs/") && path.endsWith("/stop")) { fake.stops.push(path); return json({ status: "delivered" }); }
     if (path.endsWith("/events") && path.startsWith("/app/remote/jobs/")) return json({ status: "done", events: [] });
     if (path.startsWith("/app/remote/jobs/")) return json(fake.job ?? {});

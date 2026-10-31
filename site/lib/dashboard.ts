@@ -5,7 +5,7 @@ export type Score = { checked: number; aligned: number; notCheckable: number; pe
 export type Status = { light: Light; request: string | null; score: { request: Score; session: Score } };
 
 export type Reply = { id?: string; at: string; turn: string | null; text: string; request?: string | null; cut?: boolean };
-export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null };
+export type SessionSummary = Status & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
 export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
 
@@ -20,7 +20,7 @@ export type FeedEvent = {
 import type { Continuation } from "./remote";
 
 export type SessionView = {
-  session: Status & { id: string; host: string; startedAt: string; lastAt: string; project: { id: string; name: string } };
+  session: Status & { id: string; host: string; startedAt: string; lastAt: string; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null; project: { id: string; name: string } };
   events: FeedEvent[];
   replies: (Reply & { id: string })[];
   /** Older messages exist above this page. */
@@ -103,6 +103,11 @@ export const WAKE: Record<string, { text: string; copy?: string }> = {
  * the agent as a message the laptop writes (engine/cmd/trackline/remote_agent.go,
  * decisionText); shown whole it would read as something you typed.
  */
+/** A session's name: what is known of it, or where and when it ran. */
+export function sessionName(s: { title?: string | null; host: string; startedAt: string }, agent: string, project?: string): string {
+  return s.title || [agent, project, new Date(s.startedAt).toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
+}
+
 export function requestLabel(text: string | null): string | null {
   if (!text) return text;
   const allow = text.match(/^You were stopped by trackline \([^:]+: (.+?)\)\. The person you are working with has now approved/);

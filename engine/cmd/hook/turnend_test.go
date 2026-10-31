@@ -95,3 +95,32 @@ func TestCodexTranscriptIsFoundFromItsSession(t *testing.T) {
 		}
 	}
 }
+
+func TestTheAgentsOwnTitleIsFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	lines := `{"type":"user","message":{"content":"title this"}}
+{"type":"ai-title","aiTitle":"First name","sessionId":"s"}
+{"type":"ai-title","aiTitle":"Better name","sessionId":"s"}
+`
+	if err := os.WriteFile(path, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := agentTitle(turnEnd{host: event.HostClaudeCode, transcript: path}); got != "Better name" {
+		t.Fatalf("claude: %q", got)
+	}
+	t.Setenv("CODEX_HOME", dir)
+	index := `{"id":"a","thread_name":"Not this one"}
+{"id":"b","thread_name":"Old name"}
+{"id":"b","thread_name":"Guardian review"}
+`
+	if err := os.WriteFile(filepath.Join(dir, "session_index.jsonl"), []byte(index), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := agentTitle(turnEnd{host: event.HostCodex, session: "b"}); got != "Guardian review" {
+		t.Fatalf("codex: %q", got)
+	}
+	if got := agentTitle(turnEnd{host: event.HostCursor, session: "b"}); got != "" {
+		t.Fatalf("cursor: %q", got)
+	}
+}

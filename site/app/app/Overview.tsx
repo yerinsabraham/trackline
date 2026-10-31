@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { api } from "@/lib/account";
-import { ago, LIGHT_LABEL, requestLabel, type SessionSummary, whileVisible } from "@/lib/dashboard";
+import { ago, LIGHT_LABEL, requestLabel, sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
@@ -193,14 +193,14 @@ function Stat({ dot, label, value, note, desktopOnly, href, primary, percent }: 
   );
 }
 
-export function SessionRow({ s, project, current }: { s: SessionSummary; project?: string; current?: boolean }) {
+export function SessionRow({ s, project, current, onClick }: { s: SessionSummary; project?: string; current?: boolean; onClick?: (e: MouseEvent) => void }) {
   const note = s.reply ? plain(s.reply.text) : null;
   return (
-    <a href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link" aria-current={current ? "true" : undefined}>
+    <a href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link" aria-current={current ? "true" : undefined} onClick={onClick}>
       <AgentLogo host={s.host} size={34} />
       <span className="row-main">
         <span className="row-top">
-          <strong>{requestLabel(s.request) ?? "Request not recorded"}</strong>
+          <strong>{s.pinnedAt && <span className="row-pin">Pinned · </span>}{sessionName(s, agentName(s.host), project)}</strong>
           <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>
         </span>
         <span className="row-meta">{project ? `${project} · ` : ""}{ago(s.lastAt)}</span>

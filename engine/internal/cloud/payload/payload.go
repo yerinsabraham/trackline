@@ -55,6 +55,8 @@ type Reply struct {
 	// Cut says the text is not all of it, so nobody reads a sentence that ends
 	// halfway as the agent's last word.
 	Cut bool `json:"cut,omitempty"`
+	// Title is the name the agent gave the session, under the request's consent.
+	Title string `json:"title,omitempty"`
 }
 
 // Setup says which agents are wired into a project, so an agent that is set
@@ -119,7 +121,7 @@ const (
 	maxSession, maxRequest, maxTool             = 128, 2000, 64
 	maxPath, maxPaths, maxInstall, maxInstalls  = 512, 50, 214, 50
 	maxResults, maxFindings, maxText, maxEvents = 12, 10, 300, 100
-	maxReply, maxReplyRequest                   = 32000, 8000
+	maxReply, maxReplyRequest, maxTitle         = 32000, 8000, 200
 )
 
 // Options are what Build needs beyond the event itself.
@@ -133,6 +135,8 @@ type Options struct {
 	ShareRequest bool
 	// Request is what the person said, for a reply. An event has its own.
 	Request string
+	// Title is the name the agent gave the session, for a reply.
+	Title string
 	// Mode and Blocked are what the hook decided.
 	Mode    string
 	Blocked bool
@@ -261,6 +265,7 @@ func BuildReply(host event.Host, session, turn, text string, at time.Time, o Opt
 	}
 	if o.ShareRequest {
 		r.Request = cut(redact(c.text(o.Request)), maxReplyRequest)
+		r.Title = cut(redact(c.text(o.Title)), maxTitle)
 	}
 	return r, nil
 }
