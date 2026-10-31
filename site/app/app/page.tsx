@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Sessions from "./sessions/Sessions";
+import Home from "./Home";
 
-export const metadata: Metadata = { title: "Chats", robots: { index: false } };
+export const metadata: Metadata = { title: "Home", robots: { index: false } };
 
 export default function Page() {
-  return <Sessions />;
+  return <Home />;
 }

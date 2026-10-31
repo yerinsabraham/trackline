@@ -8,16 +8,16 @@ import AppShell, { type Section } from "./AppShell";
 // its data and shows no skeletons. Each page comes from the address alone.
 
 const SECTIONS: [string, Section][] = [
-  ["/app/ontrack", "ontrack"], ["/app/production", "production"], ["/app/sessions", "chats"], ["/app/session", "chats"],
+  ["/app", "home"], ["/app/ontrack", "ontrack"], ["/app/production", "production"], ["/app/sessions", "chats"], ["/app/session", "chats"],
   ["/app/machines", "settings"], ["/app/alerts", "settings"], ["/app/settings", "settings"], ["/app/remote", "new"],
-  ["/app/team", "team"], ["/app/agent", "team"],
+  ["/app/team", "team"], ["/app/agent", "team"], ["/app/approve", "home"],
 ];
 
 export default function AppFrame({ children }: { children: ReactNode }) {
   const path = usePathname().replace(/\/$/, "");
   const q = useSearchParams();
-  const section = SECTIONS.find(([p]) => path === p)?.[1] ?? "chats";
-  const chat = path === "/app/session" || (path === "/app/remote" && !!q.get("job"));
+  const section = SECTIONS.find(([p]) => path === p)?.[1] ?? "home";
+  const chat = path === "/app/session" || path === "/app/approve" || (path === "/app/remote" && !!q.get("job"));
   // A new page starts fresh, as does another session on the same page.
   return <AppShell section={section} chat={chat}><Fragment key={`${path}?${q.get("id") ?? ""}`}>{children}</Fragment></AppShell>;
 }

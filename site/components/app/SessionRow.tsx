@@ -2,26 +2,23 @@
 
 import Link from "next/link";
 import type { MouseEvent } from "react";
-import { ago, LIGHT_LABEL, type SessionSummary, sessionName, titled } from "@/lib/dashboard";
-import { plain } from "@/components/ReplyText";
+import { ago, LIGHT_LABEL, modelLabel, type SessionSummary, sessionName, titled } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "./AgentLogo";
 
-/** One chat in a list: who it is with, in bold, then what it is about. */
+/** One chat: who it is with, what it is about, how it stands. Three lines, no more. */
 export function SessionRow({ s, project, current, onClick, unread }: { s: SessionSummary; project?: string; current?: boolean; onClick?: (e: MouseEvent) => void; unread?: boolean }) {
-  const note = s.reply ? plain(s.reply.text) : null;
-  const name = sessionName(s, agentName(s.host), project);
+  const title = sessionName(s, agentName(s.host), project);
   return (
-    <Link href={`/app/session?id=${encodeURIComponent(s.id)}`} className="row-link" aria-current={current ? "true" : undefined} onClick={onClick}>
-      <AgentLogo host={s.host} size={34} />
-      <span className="row-main">
-        <span className="row-top">
-          <strong>{s.pinnedAt && <span className="row-pin">Pinned · </span>}{s.agentName ? titled(s.agentName, s.agentTitle) : name}</strong>
+    <Link href={`/app/session?id=${encodeURIComponent(s.id)}`} className="chat-row" aria-current={current ? "true" : undefined} onClick={onClick}>
+      <AgentLogo host={s.host} size={46} />
+      <span className="chat-row-main">
+        <span className="chat-row-top">
+          <strong>{s.agentName ? titled(s.agentName, s.agentTitle) : title}</strong>
           {unread && <span className="dot-unread" role="img" aria-label="New messages" />}
-          <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>
+          <time>{ago(s.lastAt)}</time>
         </span>
-        {s.agentName && <span className="row-title">{name}</span>}
-        <span className="row-meta">{project ? `${project} · ` : ""}{ago(s.lastAt)}</span>
-        {note && <span className="row-note">{note}</span>}
+        {s.agentName && <span className="chat-row-title">{s.pinnedAt && <span className="row-pin">Pinned · </span>}{title}</span>}
+        <span className="chat-row-state"><b className={`state-${s.light}`}>{LIGHT_LABEL[s.light]}</b>{modelLabel(s.model) ? ` · ${modelLabel(s.model)}` : ""}</span>
       </span>
     </Link>
   );

@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { type Member, positionText, titled, whileVisible } from "@/lib/dashboard";
 import {
-  active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment,
-} from "@/lib/remote";
+  active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment, proof } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
@@ -46,7 +46,9 @@ function NewTask({ open }: { open: (id: string) => void }) {
   const [error, setError] = useState("");
   // A new chat with a team member: its project, tool and position are settled.
   const [member, setMember] = useState<Member | null>(null);
+  const [team, setTeam] = useState<Member[]>([]);
   useEffect(() => {
+    api<{ team: Member[] }>("/app/team").then((r) => setTeam(r.team)).catch(() => {});
     const id = new URLSearchParams(window.location.search).get("with");
     if (id) api<{ agent: Member }>(`/app/team/${encodeURIComponent(id)}`).then((r) => { setMember(r.agent); setProjectId(r.agent.project.clientId); setAgent(JOB_AGENT[r.agent.host] ?? ""); }).catch((e) => setError((e as Error).message));
   }, []);
@@ -78,18 +80,23 @@ function NewTask({ open }: { open: (id: string) => void }) {
   };
 
   if (!remote) return <div className="skel" style={{ height: 320 }} />;
+  const machineState = !machine ? "" : machine.stopped ? `${machine.name} stopped` : machine.online ? `${machine.name} online` : "Computer offline";
+  const pickMember = (m: Member) => { setMember(m); setProjectId(m.project.clientId); setAgent(JOB_AGENT[m.host] ?? ""); };
+  const pickTool = (a: string) => { setMember(null); setAgent(a); };
+  const name = member ? member.title ?? member.name : agentName(chosen);
   return (
-    <div className="new-task">
-      <header className="rise">
-        <h1 className="app-h1">{member ? `New chat with ${titled(member.name, member.title)}` : "New chat"}</h1>
-        <p className="app-sub">It runs on your computer, with your own agent, watched by trackline.</p>
-      </header>
+    <div className="new-chat">
+      <div className="new-chat-bar">
+        <Link href="/app" className="quiet-link">Cancel</Link>
+        {machine && <span className={machine.online && !machine.stopped ? "online" : ""}>{machineState}</span>}
+      </div>
+      <h1 className="app-h1">{member ? `New chat with ${titled(member.name, member.title)}` : "New chat"}</h1>
 
       {!passkeysSupported() && <p className="composer-note error" style={{ textAlign: "left" }}>This browser cannot use passkeys, which sending needs.</p>}
       {keys?.length === 0 && (
         <div className="card empty">
           <strong>Add a passkey first.</strong>
-          <span>Every task is signed with it, so only you can send one.</span>
+          <span>Every message is signed with it, so only you can send one.</span>
           <AddPasskey onAdded={() => api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys))} />
         </div>
       )}
@@ -102,58 +109,45 @@ function NewTask({ open }: { open: (id: string) => void }) {
       )}
 
       {machine && (
-        <form className="new-task-form rise rise-1" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-            <span className="agent-logo" style={{ width: 40, height: 40 }}><IconLaptop size={20} /></span>
-            <div style={{ display: "grid", gap: 2, flexGrow: 1, minWidth: 0 }}>
-              <strong style={{ fontSize: 14.5 }}>{machine.name}</strong>
-              <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, color: machine.stopped ? "var(--red-ink)" : machine.online ? "var(--ok-ink)" : "var(--muted)" }}>
-                <span className={`dot ${machine.online && !machine.stopped ? "working" : ""}`} />
-                {machine.stopped ? "Stopped. Turn it on again on the computer." : machine.online ? "Online" : "Computer offline. A message waits up to 12 hours."}
-              </span>
-            </div>
-            {machines.length > 1 && (
-              <select aria-label="Computer" className="pick" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); }}>
-                {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            )}
-          </div>
-
+        <form className="new-chat-form" onSubmit={(e) => { e.preventDefault(); send(); }}>
           {machine.projects.length === 0 ? (
-            <p className="app-muted" style={{ margin: 0 }}>No project takes tasks yet. In one, on {machine.name}: <code className="mono">trackline connect</code></p>
+            <p className="app-muted" style={{ margin: 0 }}>No project is connected yet. In one, on {machine.name}: <code className="mono">trackline connect</code></p>
           ) : (
             <>
-              <fieldset className="nt-field">
-                <legend>Project</legend>
-                <div className="chips">
-                  {machine.projects.map((p) => (
-                    <button type="button" key={p.id} className="pick mono" aria-pressed={p.id === project?.id} onClick={() => setProjectId(p.id)}>{p.name}</button>
+              <fieldset className="who-pick">
+                <legend>Who should do it?</legend>
+                <div>
+                  {team.filter((m) => machine.projects.some((p) => p.id === m.project.clientId)).map((m) => (
+                    <button type="button" key={m.id} aria-pressed={member?.id === m.id} onClick={() => pickMember(m)}><AgentLogo host={m.host} size={40} /><strong>{m.title ?? m.name}</strong></button>
+                  ))}
+                  {agents.map((a) => (
+                    <button type="button" key={a} aria-pressed={!member && a === chosen} onClick={() => pickTool(a)}><AgentLogo host={a} size={40} /><strong>{agentName(a)}</strong></button>
                   ))}
                 </div>
-                <p className="nt-hint">Don&apos;t see your project? In its folder: <code className="mono">trackline connect</code></p>
+                {agents.length === 0 && <p className="quiet-note">trackline is not set up for an agent in {project?.name}. There: <code className="mono">trackline init</code></p>}
               </fieldset>
-              <fieldset className="nt-field">
-                <legend>Agent</legend>
-                {agents.length === 0 ? (
-                  <p className="app-muted" style={{ margin: 0, fontSize: 14 }}>trackline is not set up for an agent in {project?.name}. There: <code className="mono">trackline init</code></p>
-                ) : (
-                  <div className="nt-agents">
-                    {agents.map((a) => (
-                      <button type="button" key={a} className="nt-agent" aria-pressed={a === chosen} onClick={() => setAgent(a)}>
-                        <AgentLogo host={a} size={30} />{agentName(a)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </fieldset>
-              <div className="nt-field">
-                {member?.title && <p className="sends-position">Sent with your position for {member.name}: {positionText(member)}</p>}
-                <label htmlFor="task">What should {member?.name ?? agentName(chosen)} do?</label>
-                <textarea id="task" className="nt-text" value={text} onChange={(e) => setText(e.target.value)}
-                  placeholder="Make the contact form's email required and show the error under the field." />
-                {attach.strip}
-                <div className="nt-attach">{attach.button(busy)}<span>{attach.error || "Add screenshots or photos: up to 4, and the agent looks at them first."}</span></div>
+
+              {machines.length > 1 && (
+                <div className="field">
+                  <label htmlFor="computer">Computer</label>
+                  <select id="computer" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); setMember(null); }}>
+                    {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="project">Project</label>
+                <select id="project" value={project?.id ?? ""} disabled={!!member} onChange={(e) => setProjectId(e.target.value)}>
+                  {machine.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
+              <div className="field grow">
+                <label htmlFor="task">What should {name} do?</label>
+                <textarea id="task" value={text} onChange={(e) => setText(e.target.value)} placeholder="Make the contact form's email required." />
+                {attach.strip}
+                <div className="nt-attach">{attach.button(busy)}<span>{attach.error || "Add a photo or screenshot"}</span></div>
+              </div>
+              {member?.title && <p className="sends-position">Sent with your position for {member.name}: {positionText(member)}</p>}
               {protectedArea && (
                 <p className="composer-note warn" style={{ textAlign: "left" }}>
                   This may need local approval on your Mac to access {protectedArea}. If macOS asks, approve it there; the phone will show that it is waiting.
@@ -161,10 +155,10 @@ function NewTask({ open }: { open: (id: string) => void }) {
               )}
               {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
               <LaptopNotice machine={machine} />
-              <button type="submit" className="btn-act nt-send" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || !keys?.length || machine.stopped}>
-                <IconFace size={18} />{busy ? "Waiting for your passkey…" : "Sign and send"}
+              <button type="submit" className="approve-yes" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || !keys?.length || machine.stopped}>
+                {busy ? `Waiting for ${proof()}…` : "Start chat"}
               </button>
-              <p className="composer-note">Secrets and new dependencies stay blocked in tasks sent from here. For unattended work, keep files inside this project when you can.</p>
+              <p className="quiet-note center">Secrets and new dependencies stay blocked in chats started from here.</p>
             </>
           )}
         </form>

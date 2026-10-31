@@ -1,60 +1,40 @@
+import type { Metadata } from "next";
+import { Doto } from "next/font/google";
 import Link from "next/link";
-import { experiments } from "@/lib/experiments";
-import CheckTiles from "@/components/CheckTiles";
-import DotText from "@/components/DotText";
-import HeroActions from "@/components/HeroActions";
-import { ClaudeLogo, CursorLogo, OpenAILogo, TraceBars, TracklineTile } from "@/components/HostLogos";
-import InstallTabs from "@/components/InstallTabs";
-import TypedChat from "@/components/TypedChat";
-import WatchGate from "@/components/WatchGate";
-import OnTrackDemo from "@/components/landing/OnTrackDemo";
-import PhoneDemo from "@/components/landing/PhoneDemo";
+import InstallPrompt from "@/components/landing/InstallPrompt";
 import { SITE } from "@/lib/site";
+import "./landing.css";
 
-const hosts = [
-  { name: <>Claude<br />Code</>, logo: <ClaudeLogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/claude-code" },
-  { name: "Codex", logo: <OpenAILogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/codex" },
-  { name: "Your agent", logo: <TracklineTile />, via: "Any MCP client", state: "Advises", cls: "adv", center: true, href: "/agents/mcp" },
-  { name: "Cursor", logo: <CursorLogo />, via: "Hook", state: "Blocks", cls: "", href: "/agents/cursor" },
-  { name: <>Production<br />traces</>, logo: <TraceBars />, via: "OTLP", state: "Alerts", cls: "alert", href: "/agents/production" },
-];
+// One idea a section, and the product itself in place of a list of features.
+// The numbers in the product shot are an example and say so; every figure under
+// "Measured" is a real result that links to its write-up.
 
-const table = {
-  hosts: ["Claude Code", "Codex", "Cursor", "Any MCP client", "Production traces"],
-  rows: [
-    { label: "Stops an action before it happens", cells: ["yes", "yes", "yes", "no, advises only", "no, alerts after"] },
-    { label: "Tells the agent why", cells: ["yes", "yes", "yes", "yes", "no"] },
-    { label: "Knows what you asked", cells: ["yes", "yes", "yes", "if the agent says", "if content capture is on"] },
-    { label: "Takes a task from your phone", cells: ["yes", "yes, once its hook is trusted", "not yet", "no", "no"] },
-  ],
+const doto = Doto({ subsets: ["latin"], weight: "900", variable: "--font-dot" });
+
+export const metadata: Metadata = {
+  title: { absolute: "trackline: your AI agents, on track" },
+  alternates: { canonical: "/" },
 };
 
+const works = ["Claude Code", "Codex", "Cursor", "Any MCP agent", "Production traces"];
+
 const stats = [
-  { big: "11/11", small: "times a blocked agent corrected itself when told why", n: "01", slug: "do-agents-self-correct", when: "22 Sep 2026" },
-  { big: "14 ms", small: "the cost of every check, before every action", n: "02", slug: "hook-latency", when: "22 Sep 2026" },
-  { big: "60/60", small: "held-out drifts caught by the judge, against 2 for the rules alone", n: "06", slug: "the-judge-measured", when: "23 Sep 2026" },
-  { big: "0 lines", small: "changed in the core engine to add production", n: "07", slug: "production-traces", when: "24 Sep 2026" },
+  { big: "11/11", small: "times a blocked agent corrected itself when told why", slug: "do-agents-self-correct" },
+  { big: "14 ms", small: "the cost of every check, before every action", slug: "hook-latency" },
+  { big: "60/60", small: "held-out drifts caught by the judge", slug: "the-judge-measured" },
+  { big: "0 lines", small: "changed in the core engine to add production", slug: "production-traces" },
 ];
 
-const limits: [string, string][] = [
-  ["In production it alerts, it cannot stop.", "A trace is a record of what already happened."],
-  ["Production needs content capture on.", "Without it, a trace does not say which tool was called, and trackline reports that rather than guessing."],
-  ["Scope stays quiet when your request names no file.", "It will not invent a scope you did not state."],
-  ["Through MCP, the agent chooses whether to ask.", "An agent that does not ask is not watched."],
-  ["Production has not yet met real traffic.", "It was tested on a stream sent by the real OpenTelemetry libraries, with scripted conversations."],
-  ["From your phone, your laptop has to be awake.", "The task runs on your own machine. Asleep or offline, a task waits three minutes, and the app says so."],
-  ["Codex takes tasks from the phone only once its hook is trusted.", "Codex runs a project's hook only after you trust it, and trackline will not start an agent it cannot watch."],
-  ["Cursor cannot take tasks from the phone yet.", "trackline watches Cursor on your laptop as usual."],
+const agents = [
+  { name: "CTO", doing: "Fixing the lobby timer · Opus 5.5", status: "Working", on: true },
+  { name: "Reviewer", doing: "Checking the match tests · GPT-6 Astra", status: "Working", on: true },
+  { name: "Designer", doing: "Updated the pricing page · Sonnet 5.5", status: "Done", on: false },
 ];
-
-function Plus() {
-  return <span className="plus">+</span>;
-}
 
 export default function Home() {
   return (
-    <>
-      {/* Tells search engines this is a developer tool, not an article. */}
+    <div className={`land ${doto.variable}`}>
+            {/* Tells search engines this is a developer tool, not an article. */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -65,266 +45,121 @@ export default function Home() {
             applicationCategory: "DeveloperApplication",
             operatingSystem: "macOS, Linux, Windows",
             description:
-              "Watches what coding agents and production agents do, checks it against the task, the rules and the evidence they were given, and tells you or the agent when they part ways.",
+              "Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.",
             url: SITE,
             downloadUrl: "https://www.npmjs.com/package/trackline",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           }),
         }}
       />
-      <section className="hero wrap">
-        <Link className="badge" href="#phone">
-          <b>New</b> · From your phone <i>›</i>
-        </Link>
-        <h1>
-          <span className="solid">Know when your agent</span>
-          <DotText text="goes off track" max={92} pitch={1 / 16} color="#1c1c1e" interactive drift />
-        </h1>
-        <p className="sub">
-          trackline watches what coding agents and production agents actually do, and tells you, or the agent, the
-          moment it stops matching what you asked. Then steer them from your phone.
-        </p>
-        <HeroActions />
+      <section className="land-hero land-wrap">
+        <h1>Your AI agents.<br /><span className="land-dot">On track.</span></h1>
+        <p className="land-sub">Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.</p>
+        <InstallPrompt second={{ href: "#product", label: "See how it works" }} />
+        <p className="land-small">Free and open source. Your agents keep running on your own computer.</p>
       </section>
 
-      <section className="hosts wrap" aria-label="Where it works">
-        <div className="host-scroll">
-          <div className="host-row">
-            {hosts.map((h, i) => (
-              <Link key={i} href={h.href} className={h.center ? "host center" : "host"}>
-                <div className="thumb"><div className="tile">{h.logo}</div></div>
-                <h3>{h.name}</h3>
-                <div className="host-meta">
-                  <span className="chip">{h.via}</span>
-                  <span className={`state ${h.cls}`}><i />{h.state}</span>
-                </div>
-              </Link>
+      <section className="land-wrap" aria-label="The app">
+        <div className="pshot">
+          <div className="pshot-side" aria-hidden="true">
+            <strong>trackline</strong>
+            <span className="on">Home</span><span>Chats</span><span>Team</span><span>On track</span>
+          </div>
+          <div className="pshot-main">
+            <h2>Good evening</h2>
+            <p>2 agents are working. 1 needs your OK.</p>
+            <div className="pshot-ok"><strong>CTO asks Reviewer to check the timer tests</strong><span>Waiting for your OK</span></div>
+            {agents.map((a) => (
+              <div key={a.name} className="pshot-row">
+                <span><strong>{a.name}</strong><small>{a.doing}</small></span>
+                <em className={a.on ? "on" : ""}>{a.status}</em>
+              </div>
             ))}
           </div>
-          <div className="track" aria-hidden="true">
-            <span className="pulse" />
-            {hosts.map((_, i) => <span key={i} className="node" />)}
+          <div className="pshot-score">
+            <small>On track today</small>
+            <strong>94%</strong>
+            <small>46 of 49 checked steps matched what you asked for.</small>
           </div>
         </div>
-        <p className="track-cap">One set of rules for every agent you use</p>
+        <p className="land-small land-note">Example data</p>
       </section>
 
-      <section className="problem wrap">
-        <div className="problem-grid">
-          <div>
-            <p className="eyebrow">The problem</p>
-            <h2>An agent that goes off task does not crash.</h2>
-          </div>
-          <div>
-            <p>
-              It edits files you never mentioned. It installs a package nobody asked for. It ignores the rules file
-              it read an hour ago. A support agent changes a credit limit it was told never to touch. And the build
-              stays green, because tests check that code does what it was written to do, not whether it is the code
-              you asked for.
-            </p>
-            <p className="kicker">Nothing in the toolchain is watching for that. <span>trackline is.</span></p>
-          </div>
+      <section className="land-wrap land-works" aria-label="Works with">
+        <p className="land-small">Works with the agents you already use</p>
+        <p className="land-works-list">{works.map((w) => <span key={w}>{w}</span>)}</p>
+      </section>
+
+      <section id="product" className="land-wrap land-section">
+        <h2 className="land-h2">A team you can actually see.</h2>
+        <p className="land-sub">Every agent gets a name, a job and a record of what it has done.</p>
+        <div className="feats">
+          <article className="feat">
+            <h3>Know who did what.</h3>
+            <p>Every reply carries the agent&apos;s name and the model behind it.</p>
+            <div className="feat-demo"><strong>CTO · monkey-post-3b</strong> <small>Opus 5.5</small><br />The timer now follows the server&apos;s clock, so a slow phone can&apos;t drift.</div>
+          </article>
+          <article className="feat">
+            <h3>Give each agent a job.</h3>
+            <p>Set a title and a description. It keeps them across every chat.</p>
+            <div className="feat-chips">{["CTO", "Reviewer", "Designer", "QA"].map((c) => <span key={c}>{c}</span>)}</div>
+          </article>
+          <article className="feat feat-dark">
+            <h3>Claude can ask Codex.</h3>
+            <p>One agent asks another for help. Nothing starts until you read the request and say yes.</p>
+            <div className="feat-demo"><span><strong>CTO</strong> asks <strong>Reviewer</strong> to check the timer tests.</span><b>Approve</b></div>
+          </article>
+          <article className="feat">
+            <h3>Stopped before it happens.</h3>
+            <p>Secrets and new dependencies are blocked first, and the agent is told why.</p>
+            <div className="feat-demo warm"><strong>Blocked: writing to .env</strong><br /><small>Allow once, or keep it blocked.</small></div>
+          </article>
         </div>
       </section>
 
-      <section className="dark how" id="how">
-        <div className="wrap">
-          <div className="how-head">
-            <h2>One engine, two places.</h2>
-            <p>Beside a coding agent while it works, and over the traces of an agent in production.</p>
-            <div className="actions">
-              <span className="frame"><Link className="btn btn-quiet" href="/docs"><Plus />Read the docs</Link></span>
-              <span className="frame"><Link className="btn btn-signal" href="#install"><Plus />Install</Link></span>
-            </div>
-          </div>
+      <section className="land-night">
+        <div className="land-wrap">
+          <h2 className="land-h2">One number you can trust.</h2>
+          <p className="land-sub">On track is what share of your agents&apos; checked actions matched what you asked for. Counted, never guessed.</p>
+          <strong className="land-dot big">94%</strong>
+          <p className="land-small">Example figure. By project, by agent and by check, and with nothing checked, there is no number.</p>
+        </div>
+      </section>
 
-          <div className="bento">
-            <article className="slab s-watch">
-              <div className="copy">
-                <b>It watches.</b>Beside a coding agent, a hook sees every action before it runs. In production, it
-                reads the traces your agent already sends.
-              </div>
-              <WatchGate />
-            </article>
-
-            <article className="slab s-compare">
-              <div className="sources">
-                <div className="src" style={{ "--i": 3 } as React.CSSProperties}><span className="tick" />What you asked for<small>request</small></div>
-                <div className="src" style={{ "--i": 2 } as React.CSSProperties}><span className="tick" />AGENTS.md<small>rules file</small></div>
-                <div className="src" style={{ "--i": 1 } as React.CSSProperties}><span className="tick" />Tool policy<small>production</small></div>
-                <div className="src hot" style={{ "--i": 0 } as React.CSSProperties}>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                    <rect x="3" y="7" width="10" height="7.5" rx="1.5" />
-                    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
-                  </svg>
-                  .env<small>protected path</small>
-                </div>
-              </div>
-              <div className="copy bottom">
-                <b>It compares.</b>Each action is checked against what you asked for, your rules files and a tool
-                policy. Most checks are plain rules, not a model.
-              </div>
-            </article>
-
-            <article className="slab s-tell">
-              <TypedChat />
-              <div className="copy bottom">
-                <b>It tells you, or the agent.</b>By default it only writes things down. You choose, check by check,
-                whether it should also stop the agent and explain why, so the agent can correct itself.
-              </div>
-            </article>
-
-            <article className="slab s-catch">
-              <div className="copy inline"><b>What it catches.</b> Six checks, and one question only a model can answer.</div>
-              <CheckTiles />
-            </article>
+      <section className="land-wrap land-section land-phone">
+        <div>
+          <h2 className="land-h2">Leave your desk. Not your work.</h2>
+          <p className="land-sub">Send a message from your phone and it continues on your computer, with the same history. Every message is signed with your passkey.</p>
+        </div>
+        <div className="land-device" aria-hidden="true">
+          <div>
+            <strong>CTO · monkey-post-3b</strong>
+            <p className="mine">Fix the lobby timer, then get it reviewed.</p>
+            <p className="theirs">Fixed. Reviewer is checking the tests now.</p>
+            <span>Message CTO</span>
           </div>
         </div>
       </section>
 
-      <section className="section wrap" id="phone" aria-labelledby="phone-h">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">From your phone</p>
-            <h2 id="phone-h">Send a task. Watch it work. Decide what it may do.</h2>
-          </div>
-          <p>
-            Your agent, on your laptop, with your own subscription, driven from your phone. trackline watches it the
-            same way it does at your desk.
-          </p>
-        </div>
-        <div className="feature-grid">
-          <ul className="feature-points">
-            <li><span className="n">01</span><div><b>Send a task</b><p>Pick the project and the agent, Claude Code, Codex or Cursor, and type what you want. It runs on your laptop, never on a server.</p></div></li>
-            <li><span className="n">02</span><div><b>Watch it work</b><p>Each step as it happens, the agent&apos;s reply when it finishes, and a push when it is done. Reply, and it carries on in the same session.</p></div></li>
-            <li><span className="n">03</span><div><b>Decide what it may do</b><p>Secrets and new dependencies are stopped before they happen, and the agent is told why. You choose: Allow once, or Keep blocked.</p></div></li>
-            <li><span className="n">04</span><div><b>Stop it at any time</b><p>One task, or every laptop at once. Turning remote on again takes the laptop itself.</p></div></li>
-          </ul>
-          <PhoneDemo />
-        </div>
-        <p className="feature-note">
-          Every message is signed with your passkey, and your laptop checks the signature itself, so the server that
-          carries it cannot write one. Pair your phone once, when you connect, and every project you connect is ready.
-          To turn one off, inside it: <code>trackline remote disable</code>.
-        </p>
-      </section>
-
-      <section className="section wrap" aria-labelledby="ontrack-h">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">On track</p>
-            <h2 id="ontrack-h">One number for whether your agents did what you asked.</h2>
-          </div>
-          <p>
-            Of the actions trackline could check, the share that matched the request. Then the evidence behind it:
-            which check caught what, in which project, by which agent, in which session.
-          </p>
-        </div>
-        <div className="feature-grid flip">
-          <OnTrackDemo />
-          <ul className="feature-points">
-            <li><span className="n">01</span><div><b>Counted, not guessed</b><p>Every action is checked as it happens. On track is how many passed, out of how many could be checked.</p></div></li>
-            <li><span className="n">02</span><div><b>Never flattered</b><p>An action no check can judge, like reading a file, counts neither way. With nothing checked, there is no number.</p></div></li>
-            <li><span className="n">03</span><div><b>Explained</b><p>Today, this week or this month; by project, by agent and by check; and every action that went off track, one tap from its session.</p></div></li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="section wrap" aria-labelledby="where-h">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">Where it works</p>
-            <h2 id="where-h">One set of rules for every agent you use.</h2>
-          </div>
-          <p>
-            A vendor can govern its own agent. Only something that belongs to none of them can govern all of them the
-            same way. trackline is neutral by construction, not by promise: open source, on your machine, with no
-            vendor&apos;s model in the path.
-          </p>
-        </div>
-        <div className="table-card">
-          <table>
-            <thead>
-              <tr>
-                <th />
-                {table.hosts.map((h) => <th key={h}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((r) => (
-                <tr key={r.label}>
-                  <td>{r.label}</td>
-                  {r.cells.map((c, i) => <td key={i} className={c === "yes" ? "yes" : "no"}>{c}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="foot-note">
-          <code>trackline doctor --host &lt;name&gt;</code> prints the full list of what it can and cannot see in each.{" "}
-          <Link className="text-link" href="/agents">See each agent</Link>
-        </p>
-      </section>
-
-      <section className="section wrap" aria-labelledby="ev-h">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">The evidence</p>
-            <h2 id="ev-h">Every claim here was measured first.</h2>
-          </div>
-          <p>Each was measured before it was built on. Where a result has limits, the write-up names them next to the number.</p>
-        </div>
-        <div className="stats">
+      <section className="land-wrap land-section">
+        <h2 className="land-h2">Measured, not promised.</h2>
+        <p className="land-sub">Every claim was tested first, and each write-up names its limits.</p>
+        <div className="proofs">
           {stats.map((s) => (
-            <Link key={s.n} className="stat" href={`/evidence/${s.slug}`}>
-              {/* Plain text: a number is read at a glance, and in dots the
-                  tilde of "~14ms" read as a minus sign. */}
-              <b className="stat-num">{s.big}</b>
-              <p>{s.small}</p>
-              <span className="src-link"><span>Experiment {s.n} · {s.when}</span><span>→</span></span>
-            </Link>
+            <Link key={s.slug} href={`/evidence/${s.slug}`}><strong>{s.big}</strong><span>{s.small}</span></Link>
           ))}
         </div>
-        <p className="more"><Link href="/evidence">See all {experiments().length} experiments</Link></p>
+        <Link className="land-link" href="/evidence#limits">Read what it cannot do yet</Link>
       </section>
 
-      <section className="section wrap" aria-labelledby="lim-h">
-        <div className="sec-head">
-          <div>
-            <p className="eyebrow">What it cannot do</p>
-            <h2 id="lim-h">Where it sees less.</h2>
-          </div>
-          <p>Named plainly, because a tool that looks complete stops getting better.</p>
-        </div>
-        <ul className="limits">
-          {limits.map(([b, s]) => <li key={b}><b>{b}</b><span>{s}</span></li>)}
-        </ul>
-      </section>
-
-      <section className="dark install" id="install" aria-labelledby="inst-h">
-        <div className="wrap">
-          <h2 id="inst-h">
-            Install with
-            <DotText text="one paste" max={80} pitch={1 / 15} color="#e4e4e6" board="#1b1b1e" interactive drift introOnView />
-          </h2>
-          <ol className="steps-strip">
-            <li><span>1</span><b>Copy the prompt</b>The button above, or the tab below.</li>
-            <li><span>2</span><b>Paste it into your agent</b>It installs trackline and runs <code>init</code> for itself.</li>
-            <li><span>3</span><b>Check it fired</b>After the next edit, <code>trackline status</code> shows the hook has run.</li>
-          </ol>
-          <InstallTabs />
-          <p className="after">
-            Paste the prompt into your agent, or run the commands yourself. It starts in warn mode: it notices
-            things and writes them down, and never interrupts you. Run{" "}
-            <code>trackline status</code> after your agent&apos;s next edit to see that it fired. For the dashboard and
-            your phone, both optional: <code>trackline connect</code>.
-          </p>
-          <div className="actions">
-            <span className="frame"><Link className="btn btn-quiet" href="/evidence"><Plus />Read the evidence</Link></span>
-            <span className="frame"><Link className="btn btn-signal" href="/docs/install"><Plus />Full install guide</Link></span>
-          </div>
+      <section id="install" className="land-night land-end">
+        <div className="land-wrap">
+          <h2 className="land-h2">Up and running with <span className="land-dot">one paste.</span></h2>
+          <p className="land-sub">Copy the prompt, paste it into your agent, and it installs Trackline for itself.</p>
+          <InstallPrompt second={{ href: "/docs/install", label: "Full install guide" }} />
+          <p className="land-small">Open source under Apache-2.0</p>
         </div>
       </section>
-    </>
+    </div>
   );
 }

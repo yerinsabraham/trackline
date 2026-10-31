@@ -8,7 +8,7 @@ export type Card = { path: string; eyebrow: string; title: string };
 
 export function cards(): Card[] {
   return [
-    { path: "/", eyebrow: "trackline", title: "Know when your agent goes off track." },
+    { path: "/", eyebrow: "trackline", title: "Your AI agents. On track." },
     { path: "/docs", eyebrow: "Docs", title: "Everything trackline does." },
     ...pages().map((p) => ({ path: `/docs/${p.slug}`, eyebrow: "Docs", title: p.title })),
     { path: "/evidence", eyebrow: "Evidence", title: "Every claim here was measured first." },

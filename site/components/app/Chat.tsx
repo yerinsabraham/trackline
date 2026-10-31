@@ -9,7 +9,7 @@ import CopyButton from "@/components/CopyButton";
 import { modelLabel } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "./AgentLogo";
 import { Cmd } from "./FirstRun";
-import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconTerminal, IconUp } from "./icons";
+import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconUp } from "./icons";
 import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage, proof } from "@/lib/remote";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
@@ -134,7 +134,7 @@ export function MyMessage({ text, note, images, actions }: { text: string; note?
   );
 }
 
-const SAID: [RegExp, string, string][] = [[/^Edit/, "Edited", "file"], [/^Write/, "Wrote", "file"], [/^Delete/, "Deleted", "file"], [/^Read/, "Read", "file"], [/^Run/, "Ran", "command"]];
+const SAID: [RegExp, string, string][] = [[/^Edit/, "Changed", "file"], [/^Write/, "Changed", "file"], [/^Delete/, "Deleted", "file"], [/^Read/, "Read", "file"], [/^Run/, "ran", "command"]];
 
 /** A turn's work in a line, for people reading the conversation and not the log. */
 export function summarise(lines: Line[]): string {
@@ -149,17 +149,18 @@ export function summarise(lines: Line[]): string {
   }
   const parts = [...counts].map(([verb, { n, noun }]) => `${verb} ${n} ${noun}${n === 1 ? "" : "s"}`);
   if (other) parts.push(`${other} other step${other === 1 ? "" : "s"}`);
-  return parts.join(", ");
+  const said = parts.join(" · ");
+  return said.charAt(0).toUpperCase() + said.slice(1);
 }
 
 /** What the agent did: one line, opening to the steps, as a terminal showed them. */
-export function Activity({ lines, live }: { lines: Line[]; live?: boolean }) {
+export function Activity({ lines, live, helpers = [] }: { lines: Line[]; live?: boolean; helpers?: string[] }) {
   if (!lines.length && !live) return null;
+  const helped = helpers.length ? `used ${helpers.length === 1 ? "a helper" : `${helpers.length} helpers`}: ${helpers.join(", ")}` : "";
   return (
-    <details className="aterm rise" open={live}>
+    <details className="aterm" open={live}>
       <summary className="term-head">
-        <IconTerminal size={14} />
-        <span>{summarise(lines) || "Working"}</span>
+        <span>{[summarise(lines) || "Working", helped].filter(Boolean).join(" · ")}</span>
         {live && <span className="live">live</span>}
       </summary>
       {lines.map((l) => (
@@ -264,24 +265,17 @@ function Sender({ host, name, model, onName }: { host: string | null; name: stri
   return (
     <p className="reply-from">
       <button type="button" onClick={onName} disabled={!onName}><strong>{name}</strong></button>
-      <span>{[agentName(host), modelLabel(model)].filter(Boolean).join(" · ")}</span>
+      <span>{modelLabel(model) ?? agentName(host)}</span>
     </p>
   );
-}
-
-/** A helper is another agent's short-lived hand, so it gets one quiet line. */
-export function HelperLine({ name, helpers }: { name: string; helpers: string[] }) {
-  if (!helpers.length) return null;
-  return <p className="helper-line"><strong>{name}</strong> used {helpers.length === 1 ? "a helper" : `${helpers.length} helpers`}: {helpers.join(", ")}</p>;
 }
 
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
 export function AgentReply({ host, text, cut, name, model, onName }: { host: string | null; text: string; cut?: boolean; name?: string; model?: string | null; onName?: () => void }) {
   return (
     <div className="bubble-agent">
-      <AgentLogo host={host} size={30} />
+      {name && <Sender host={host} name={name} model={model} onName={onName} />}
       <div className="body">
-        {name && <Sender host={host} name={name} model={model} onName={onName} />}
         <ReplyText text={text} />
         {cut && <p className="reply-cut">Cut short. The rest is on your computer.</p>}
         <div className="reply-tools"><CopyButton text={text} /></div>

@@ -22,8 +22,8 @@ export default function AccountButton() {
     return () => navigator.serviceWorker.removeEventListener("message", go);
   }, []);
   return signedIn ? (
-    <Link className="btn btn-quiet" href="/app"><span className="plus">+</span>Dashboard</Link>
+    <Link className="nav-signin" href="/app">Open app</Link>
   ) : (
-    <Link className="btn btn-quiet" href="/signin"><span className="plus">+</span>Sign in</Link>
+    <Link className="nav-signin" href="/signin">Sign in</Link>
   );
 }

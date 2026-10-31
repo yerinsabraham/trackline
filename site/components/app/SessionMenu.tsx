@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { api } from "@/lib/account";
+import { modelLabel } from "@/lib/dashboard";
+import AgentLogo, { agentName } from "./AgentLogo";
 
 // What can be done to a session, as a sheet: three dots are always there, since
 // a phone has no hover. Deleting takes no confirmation here, because it comes
 // with an Undo; clearing has no Undo, so it asks once.
 
-export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean; onTeam?: boolean };
+export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean; onTeam?: boolean; host?: string; agent?: string; model?: string | null };
 
 export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect, onAgent }: {
   session: MenuSession;
@@ -55,23 +57,32 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
           </>
         ) : (
           <>
-            <strong className="sheet-title">{session.name}</strong>
-            {onAgent && (session.onTeam
-              ? <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>View agent</button>
-              : <button type="button" className="sheet-item" onClick={async () => {
-                try {
-                  await api(`${path}/team`, { method: "POST", body: "{}" });
-                  onChanged();
-                  onClose();
-                } catch (e) { setError((e as Error).message); }
-              }}>Add to team</button>)}
-            <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename chat</button>
-            <button type="button" className="sheet-item" onClick={() => change({ pinned: !session.pinned })}>{session.pinned ? "Unpin" : "Pin"}</button>
-            <button type="button" className="sheet-item" onClick={() => change({ archived: !session.archived })}>{session.archived ? "Unarchive" : "Archive"}</button>
-            {onSelect && <button type="button" className="sheet-item" onClick={() => { onSelect(); onClose(); }}>Select several</button>}
-            {onCleared && <button type="button" className="sheet-item danger" onClick={() => setClearing(true)}>Clear chat</button>}
-            <button type="button" className="sheet-item danger" onClick={() => { onDelete(); onClose(); }}>Delete</button>
+            <div className="sheet-who">
+              <AgentLogo host={session.host} size={46} />
+              <span><strong>{session.agent ?? session.name}</strong><small>AI agent · {[agentName(session.host), modelLabel(session.model)].filter(Boolean).join(" · ")}</small></span>
+            </div>
+            <div className="sheet-group">
+              {onAgent && (session.onTeam
+                ? <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>View agent</button>
+                : <button type="button" className="sheet-item accent" onClick={async () => {
+                  try {
+                    await api(`${path}/team`, { method: "POST", body: "{}" });
+                    onChanged();
+                    onClose();
+                  } catch (e) { setError((e as Error).message); }
+                }}>Add to team</button>)}
+              {onAgent && !session.onTeam && <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>Rename or move agent</button>}
+              <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename chat</button>
+            </div>
+            <div className="sheet-group">
+              <button type="button" className="sheet-item" onClick={() => change({ pinned: !session.pinned })}>{session.pinned ? "Unpin" : "Pin"}</button>
+              <button type="button" className="sheet-item" onClick={() => change({ archived: !session.archived })}>{session.archived ? "Unarchive" : "Archive"}</button>
+              {onSelect && <button type="button" className="sheet-item" onClick={() => { onSelect(); onClose(); }}>Select several</button>}
+              {onCleared && <button type="button" className="sheet-item danger" onClick={() => setClearing(true)}>Clear chat</button>}
+              <button type="button" className="sheet-item danger" onClick={() => { onDelete(); onClose(); }}>Delete chat</button>
+            </div>
             <p className="sheet-note">Deleting removes it from trackline, not from your computer.</p>
+            <button type="button" className="sheet-cancel" onClick={onClose}>Cancel</button>
           </>
         )}
         {error && <p className="composer-note error">{error}</p>}

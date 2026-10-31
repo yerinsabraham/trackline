@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, markRead, readAt, readDraft, saveDraft } from "@/lib/account";
-import { LIGHT_LABEL, positionText, titled, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
+import { LIGHT_LABEL, modelLabel, positionText, titled, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
 import { active, type Attachment, proof, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, HelperLine, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
-import { IconBack, IconMore, IconStop } from "@/components/app/icons";
+import { IconBack, IconForward, IconMore, IconStop } from "@/components/app/icons";
 import AgentSheet from "@/components/app/AgentSheet";
+import { useHandoffs, WaitingCards } from "@/components/app/HandoffCards";
 import SessionMenu from "@/components/app/SessionMenu";
 import { SessionRow } from "@/components/app/SessionRow";
 
@@ -100,6 +101,7 @@ export default function Session() {
   const [more, setMore] = useState(false);
   const [menu, setMenu] = useState(false);
   const [who, setWho] = useState(false);
+  const handoffs = useHandoffs();
   const [unreadAt, setUnreadAt] = useState<number | null>(null);
   // Decisions made here, by the action they were about.
   const [decided, setDecided] = useState<Record<string, "allow" | "deny">>({});
@@ -287,6 +289,7 @@ export default function Session() {
 
   // Measured: a second process on one session keeps the file sound but forks
   // the conversation, so the agent open at the desk never learns of this one.
+  const addToTeam = () => { if (s) api(`/app/sessions/${encodeURIComponent(s.id)}/team`, { method: "POST", body: "{}" }).then(refresh).catch(() => {}); };
   const name_ = s?.agentName ?? agentName(s?.host);
   const who_ = titled(name_, s?.agentTitle);
   const atDesk = !!s && known.length === 0 && Date.now() - +new Date(s.lastAt) < 30 * 60_000;
@@ -305,30 +308,28 @@ export default function Session() {
 
   return (
     <div className="chat-page">
-      <aside className="chat-list" aria-label={`${agentName(s?.host)} chats`}>
-        <div className="chat-list-head">
-          {s && <AgentLogo host={s.host} size={28} />}
-          <h2>{agentName(s?.host)}</h2>
-        </div>
+      <aside className="chat-list" aria-label="Chats">
+        <div className="chat-list-head"><h2>Chats</h2></div>
         {siblings.map((x) => <SessionRow key={x.id} s={x} project={x.project} current={x.id === id} />)}
       </aside>
 
       <section className="chat-pane">
         <header className="chat-head">
-          <Link href={s ? `/app/sessions?agent=${s.host}` : "/app/sessions"} className="app-icon-btn chat-back" aria-label="Back to chats"><IconBack size={24} /></Link>
-          {s && <AgentLogo host={s.host} size={32} />}
-          <div style={{ display: "grid", gap: 2, minWidth: 0, flexGrow: 1 }}>
-            <h1>{s ? <button type="button" className="chat-who" onClick={() => setWho(true)}>{who_}</button> : error ? "Chat" : "Loading…"}</h1>
-            <span className="row-meta">{s ? [sessionName(s, agentName(s.host), s.project.name), s.project.name, cont?.machine.name].filter(Boolean).join(" · ") : ""}</span>
-          </div>
-          {running ? (
-            <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>
-          ) : s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
+          <Link href="/app/sessions" className="app-icon-btn chat-back" aria-label="Back to chats"><IconBack size={24} /></Link>
+          <button type="button" className="chat-who" onClick={() => (s?.agentId ? window.location.assign(`/app/agent?id=${encodeURIComponent(s.agentId)}`) : s && setWho(true))}>
+            {s && <AgentLogo host={s.host} size={38} />}
+            <span>
+              <strong className="chat-who-name"><span>{s ? who_ : error ? "Chat" : "Loading…"}</span>{s && <IconForward size={14} />}</strong>
+              {s && <small><b className={`state-${s.light}`}>{LIGHT_LABEL[s.light]}</b>{modelLabel(s.model) ? ` · ${modelLabel(s.model)}` : ""}{cont ? ` · ${cont.machine.name}` : ""}</small>}
+            </span>
+          </button>
+          {running && <button className="btn-plain chat-stop" disabled={stopping || !!running.stopRequestedAt} onClick={stop}><IconStop size={12} />{stopping || running.stopRequestedAt ? "Stopping…" : "Stop"}</button>}
+          {s && !s.agentId && <button type="button" className="add-team" onClick={addToTeam}>Add to team</button>}
           {s && <button type="button" className="app-icon-btn" aria-label="Chat options" onClick={() => setMenu(true)}><IconMore size={22} /></button>}
         </header>
         {who && s && <AgentSheet chat={s.id} host={s.host} name={name_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
         {menu && s && (
-          <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt, onTeam: !!s.agentId }}
+          <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt, onTeam: !!s.agentId, host: s.host, agent: name_, model: s.model }}
             onClose={() => setMenu(false)} onChanged={refresh} onAgent={() => setWho(true)}
             onDelete={() => window.location.assign(`/app/sessions?deleted=${encodeURIComponent(s.id)}`)}
             onCleared={() => { setEvents([]); setReplies([]); setMore(false); refresh(); }} />
@@ -372,8 +373,7 @@ export default function Session() {
                   {firstNew === t.key && <div ref={line} className="new-line">New messages</div>}
                   {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Computer"} · ${jobState(job)}` : undefined} />}
                   {job?.permission && <Finding tone="block" title="Action needed on Mac">{job.permission}</Finding>}
-                  <Activity lines={t.events.map(toLine)} live={last && working && !t.replies.length} />
-                  <HelperLine name={who_} helpers={[...new Set(t.events.flatMap((e) => (e.helper ? [e.helper] : [])))]} />
+                  <Activity lines={t.events.map(toLine)} live={last && working && !t.replies.length} helpers={[...new Set(t.events.flatMap((e) => (e.helper ? [e.helper] : [])))]} />
                   {stops.slice(0, 3).map((e) => {
                     const blocking = e.blocked || e.severity === "block";
                     // Only the latest turn's stops are still open to a decision,
@@ -395,11 +395,11 @@ export default function Session() {
                     );
                   })}
                   {/* A reply that is only the question is shown once, in the card below. */}
-                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} name={who_} model={r.model ?? s?.model} onName={() => setWho(true)} />)}
+                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} name={s?.agentTitle ?? name_} model={r.model ?? s?.model} onName={() => setWho(true)} />)}
                 </div>
               );
             })}
-            {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} name={who_} model={s?.model} onName={() => setWho(true)} />}
+            {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
             {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
             {held && (
               <>
@@ -410,6 +410,7 @@ export default function Session() {
                   </>} />
               </>
             )}
+            <WaitingCards list={handoffs.list.filter((h) => h.status === "asked" && !!cont && h.from.session === cont.session)} />
             {cont && !working && known.length > 0 && <ResumeHere agent={cont.agent} session={cont.session} />}
           </div>
         </div>
@@ -422,7 +423,7 @@ export default function Session() {
           {s?.position && <p className="sends-position">Sent with your position for {name_}: {positionText(s.position)}</p>}
           <Composer
             chat={id || undefined}
-            placeholder={`Reply to ${who_}…`}
+            placeholder={`Message ${s?.agentTitle ?? name_}`}
             blocked={blocked}
             note={working ? `${who_} is working. A message waits here until it finishes.` : atDesk ? "Open on your computer? Close it there first, or this won't be sent." : cont ? `${proof() === "Face ID" ? "Face ID" : "Your passkey"} · continues this chat on ${cont.machine.name}` : undefined}
             onSend={send}

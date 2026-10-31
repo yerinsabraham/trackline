@@ -668,3 +668,15 @@ a.host { color: inherit; display: block; }
   .otd-value { animation: otd-draw 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
   @keyframes otd-draw { from { stroke-dashoffset: var(--c); } }
 }
+
+.evidence-limits { margin-top: 72px; scroll-margin-top: 90px; }
+.evidence-limits h2 { margin: 0 0 8px; font-size: 32px; letter-spacing: -0.025em; }
+.evidence-limits > p { margin: 0 0 24px; color: var(--ink-2); }
+.evidence-limits dl { margin: 0; display: grid; }
+.evidence-limits dl > div { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.evidence-limits dt { font-weight: 600; }
+.evidence-limits dd { margin: 0; color: var(--ink-2); }
+.nav-signin { font-size: 14.5px; padding: 8px 4px; }
+.nav-start { min-height: 40px; padding: 0 18px; border-radius: 20px; background: var(--ink); color: #fff; display: inline-flex; align-items: center; font-size: 14.5px; font-weight: 500; }
+.nav-start:hover { background: #2c2c30; color: #fff; }
+.nav-cta { align-items: center; gap: 16px; }

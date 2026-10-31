@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
-import Link from "next/link";
 import { api, readAt } from "@/lib/account";
 import { sessionName, type SessionSummary, whileVisible } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import AgentSheet from "@/components/app/AgentSheet";
 import FirstRun from "@/components/app/FirstRun";
-import HandoffCards from "@/components/app/HandoffCards";
+import { HandoffNews, useHandoffs, WaitingCards } from "@/components/app/HandoffCards";
 import { IconMore } from "@/components/app/icons";
 import SessionMenu from "@/components/app/SessionMenu";
 import { SessionRow } from "@/components/app/SessionRow";
@@ -17,9 +16,8 @@ import { SessionRow } from "@/components/app/SessionRow";
 // Claude Code, Codex and Cursor each have their own list too, the way the
 // sidebar names them.
 
-const AGENTS: [string, string][] = [["", "All"], ["claude-code", "Claude Code"], ["codex", "Codex"], ["cursor", "Cursor"]];
+const AGENTS: [string, string][] = [["claude-code", "Claude Code"], ["codex", "Codex"], ["cursor", "Cursor"]];
 type Filter = "all" | "working" | "needs-you" | "done";
-const FILTERS: [Filter, string][] = [["all", "All"], ["working", "Working"], ["needs-you", "Needs your OK"], ["done", "Done"]];
 
 type Row = SessionSummary & { project: { name: string }; projectId?: string };
 const UNDO_MS = 6000;
@@ -71,17 +69,11 @@ function ListRow({ s, choosing, chosen, onToggle, onMenu, onDelete, onHold }: {
 
 export default function Sessions() {
   const { projects, remote, error } = useApp();
-  const [onTrack, setOnTrack] = useState<number | null | undefined>(undefined);
-  useEffect(() => {
-    // On its own slow clock: this reads a whole day of actions.
-    const load = () => { api<{ score: { percent: number | null } }>("/app/ontrack?days=1").then((r) => setOnTrack(r.score.percent)).catch(() => setOnTrack(null)); };
-    load();
-    return whileVisible(load, 60_000);
-  }, []);
+  const handoffs = useHandoffs();
   const [agent, setAgent] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
-  const [project, setProject] = useState("");
+  const project = "";
   const [archived, setArchived] = useState(false);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -156,12 +148,6 @@ export default function Sessions() {
       remove([gone]);
     }
   }, [remove]);
-  const pick = (a: string) => {
-    setAgent(a);
-    window.history.replaceState(null, "", a ? `/app/sessions?agent=${a}` : "/app/sessions");
-    window.dispatchEvent(new Event("app:agent"));
-  };
-
   const hidden = new Set(undo?.ids ?? []);
   // What the shell already holds: read at once while the list loads, so a tab
   // opens with no skeleton, and still worth reading with no signal.
@@ -191,37 +177,15 @@ export default function Sessions() {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 860 }}>
-      <header className="rise chats-head">
+    <div className="page">
+      <header>
         <h1 className="app-h1">Chats</h1>
-        {onTrack !== undefined && <Link href="/app/ontrack" className="on-track-link">{onTrack === null ? "Nothing checked today" : `${onTrack}% on track today`}</Link>}
       </header>
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
       {!!remote?.machines.length && remote.machines.every((m) => !m.online) && <p className="offline-bar" role="status">Computer offline. Messages wait until it is back.</p>}
-      <HandoffCards />
-      <div className="seg rise rise-1" role="group" aria-label="Agent">
-        {AGENTS.map(([a, label]) => (
-          <button key={a || "all"} aria-pressed={agent === a} onClick={() => pick(a)}>
-            {a && <AgentLogo host={a} size={20} />}
-            <span className="seg-label">{label}</span>
-          </button>
-        ))}
-      </div>
-      <input type="search" className="list-search rise rise-2" aria-label="Search chats" placeholder="Search agents, names and replies" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="chips rise rise-2" role="group" aria-label="Status">
-        {FILTERS.map(([f, label]) => (
-          <button key={f} className="pick" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-            {label}{f === "all" && rows ? ` ${total}` : ""}
-          </button>
-        ))}
-        <button className="pick" aria-pressed={archived} onClick={() => setArchived((a) => !a)}>Archived</button>
-        {(projects?.length ?? 0) > 1 && (
-          <select className="pick" aria-label="Project" value={project} onChange={(e) => setProject(e.target.value)}>
-            <option value="">All projects</option>
-            {projects!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        )}
-      </div>
+      <WaitingCards list={handoffs.list.filter((h) => h.status === "asked")} />
+      <HandoffNews list={handoffs.list} />
+      <input type="search" className="list-search" aria-label="Search chats" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
 
       {!rows && !all.length && [0, 1, 2, 3].map((i) => <div key={i} className="skel" style={{ height: 72 }} />)}
       {projects && !wired && (
@@ -233,13 +197,14 @@ export default function Sessions() {
       )}
       {rows && wired && shown.length === 0 && !failed && <div className="card empty">{q ? "Nothing matches that." : archived ? "Nothing archived." : "No chats here yet."}</div>}
       {shown.length > 0 && (
-        <div className="card rise">
+        <div className="chat-list-rows">
           {shown.map((s) => (
             <ListRow key={s.id} s={s} choosing={choosing} chosen={chosen.has(s.id)} onToggle={() => toggle(s.id)} onMenu={() => setMenu(s)} onDelete={() => remove([s.id])}
-              onHold={() => { setChoosing(true); toggle(s.id); }} />
+              onHold={() => setMenu(s)} />
           ))}
         </div>
       )}
+      <button type="button" className="quiet-link" aria-pressed={archived} onClick={() => setArchived((a) => !a)}>{archived ? "Back to chats" : "Archived chats"}</button>
       {more && <button type="button" className="btn-plain" onClick={() => { const next = page + 1; setPage(next); pages.current = next; read(next).catch(() => {}); }}>Show more</button>}
 
       {choosing && (
@@ -257,7 +222,7 @@ export default function Sessions() {
         </div>
       )}
       {menu && (
-        <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt, onTeam: !!menu.agentId }}
+        <SessionMenu session={{ id: menu.id, name: sessionName(menu, agentName(menu.host), menu.project.name), pinned: !!menu.pinnedAt, archived: !!menu.archivedAt, onTeam: !!menu.agentId, host: menu.host, agent: menu.agentName, model: menu.model }}
           onClose={() => setMenu(null)} onChanged={() => { setRows(null); read(0).catch(() => {}); }} onDelete={() => remove([menu.id])}
           onSelect={() => setChoosing(true)} onAgent={() => setWho(menu)} />
       )}

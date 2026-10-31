@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { experiments } from "@/lib/experiments";
+import { LIMITS } from "@/lib/limits";
 import { pageMeta } from "@/lib/seo";
 
 export const metadata = pageMeta({
@@ -35,6 +36,15 @@ export default function Evidence() {
           </article>
         ))}
       </div>
+      <section id="limits" className="evidence-limits">
+        <h2>What it cannot do yet.</h2>
+        <p>Named plainly, because a tool that looks complete stops getting better.</p>
+        <dl>
+          {LIMITS.map(([what, why]) => (
+            <div key={what}><dt>{what}</dt><dd>{why}</dd></div>
+          ))}
+        </dl>
+      </section>
     </div>
   );
 }

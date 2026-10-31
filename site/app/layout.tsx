@@ -11,25 +11,25 @@ const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 const DESCRIPTION =
-  "Know when your AI agent stops doing what you asked. trackline checks what coding and production agents actually do against the task, the rules and the evidence they were given.";
+  "Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.";
 
 // metadataBase makes every relative URL below absolute on trackline.dev,
 // including the canonical, so the old vercel.app address never competes with
 // the real one in search results.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: { default: "trackline: know when your agent goes off track", template: "%s · trackline" },
+  title: { default: "trackline: your AI agents, on track", template: "%s · trackline" },
   description: DESCRIPTION,
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     url: "/",
     siteName: "trackline",
-    title: "trackline: know when your agent goes off track",
+    title: "trackline: your AI agents, on track",
     description: DESCRIPTION,
     // A real .png file: the static build wrote the generated card with no
     // extension, and some link previews reject an image served without one.
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "trackline: know when your agent goes off track" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "trackline: your AI agents, on track" }],
   },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
   robots: { index: true, follow: true },
@@ -61,19 +61,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               trackline
             </Link>
             <nav className="nav-links" aria-label="Main">
-              <Link href="/agents" className="wide">Agents</Link>
-              <Link href="/docs">Docs</Link>
+              <Link href="/#product" className="wide">Product</Link>
               <Link href="/evidence" className="wide">Evidence</Link>
-              <Link href="/changelog" className="wide">Changelog</Link>
+              <Link href="/docs">Docs</Link>
+              <a href={GITHUB} className="wide">Open source</a>
               <Search />
             </nav>
             <div className="nav-cta">
-              <span className="frame">
-                <AccountButton />
-              </span>
-              <span className="frame cta-install">
-                <Link className="btn btn-signal" href="/#install"><span className="plus">+</span>Install</Link>
-              </span>
+              <AccountButton />
+              <Link className="nav-start cta-install" href="/#install">Get started</Link>
             </div>
           </div>
         </header>

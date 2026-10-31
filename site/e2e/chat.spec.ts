@@ -161,6 +161,17 @@ test("the page is set up for the iPhone's safe areas", async ({ page, context })
   expect(await page.locator('meta[name="viewport"]').getAttribute("content")).toContain("viewport-fit=cover");
 });
 
+/** A phone has no three dots on a row: holding it opens the same sheet. */
+const hold = (page: Page, row = 0) => page.locator(".swipe-row").nth(row).evaluate(async (el) => {
+  const e = new Event("touchstart", { bubbles: true });
+  Object.defineProperty(e, "touches", { value: [{ clientX: 100, clientY: 100 }] });
+  el.dispatchEvent(e);
+  await new Promise((r) => setTimeout(r, 560));
+  const up = new Event("touchend", { bubbles: true });
+  Object.defineProperty(up, "touches", { value: [] });
+  el.dispatchEvent(up);
+});
+
 const at = (mins: number) => new Date(Date.now() - mins * 60_000).toISOString();
 const job = (id: string, status: string, over = {}) => ({ id, kind: "prompt", status, code: null, reason: null, createdAt: at(1), stopRequestedAt: null, asked: null, permission: null, ...over });
 const remembered = (page: Page, id: string, text: string) => page.addInitScript((sent) => localStorage.setItem("trackline.sent", sent), JSON.stringify([[id, text]]));
@@ -270,7 +281,7 @@ test("a chat shows the session's name, and it can be renamed", async ({ page, co
   const fake = await fakeAccount(context);
   await openChat(page);
   await page.getByRole("button", { name: "Chat options" }).click();
-  await page.getByRole("button", { name: "Rename" }).click();
+  await page.getByRole("button", { name: "Rename chat" }).click();
   await page.fill("#session-name", "Login work");
   await page.getByRole("button", { name: "Save" }).click();
   await expect.poll(() => fake.calls.find((c) => c.method === "PATCH")?.body).toContain("Login work");
@@ -290,8 +301,9 @@ test("clearing a chat asks once, then empties it", async ({ page, context }) => 
 test("a deleted session can be undone, and nothing is sent", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Chat options" }).first().click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.locator(".swipe-row").first().waitFor();
+  await hold(page);
+  await page.getByRole("button", { name: "Delete chat" }).click();
   await expect(page.locator(".swipe")).toHaveCount(2);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(".swipe")).toHaveCount(3);
@@ -302,8 +314,9 @@ test("a deleted session can be undone, and nothing is sent", async ({ page, cont
 test("a deleted session is really deleted when the Undo runs out", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Chat options" }).first().click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.locator(".swipe-row").first().waitFor();
+  await hold(page);
+  await page.getByRole("button", { name: "Delete chat" }).click();
   await expect.poll(() => fake.calls.length, { timeout: 9000 }).toBe(1);
   expect(fake.calls[0].body).toContain('"delete"');
   await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
@@ -313,8 +326,9 @@ test("leaving the page does not lose a delete", async ({ page, context, browserN
   test.skip(browserName === "chromium", "Playwright does not see Chromium's keepalive request during unload");
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Chat options" }).first().click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.locator(".swipe-row").first().waitFor();
+  await hold(page);
+  await page.getByRole("button", { name: "Delete chat" }).click();
   await page.goto("/app");
   await expect.poll(() => fake.calls.length).toBe(1);
 });
@@ -322,7 +336,7 @@ test("leaving the page does not lose a delete", async ({ page, context, browserN
 test("several sessions can be chosen and deleted", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Chat options" }).first().click();
+  await hold(page);
   await page.getByRole("button", { name: "Select several" }).click();
   await page.getByRole("checkbox").nth(0).check();
   await page.getByRole("checkbox").nth(1).check();
@@ -365,7 +379,7 @@ test("a turn's work reads as one line, and opens to the steps", async ({ page, c
   await fakeAccount(context);
   await openChat(page);
   const work = page.locator(".aterm").last();
-  await expect(work.locator("summary")).toContainText("Edited 1 file");
+  await expect(work.locator("summary")).toContainText("Changed 1 file");
   await expect(work.locator(".term-line").first()).toBeHidden();
   await work.locator("summary").click();
   await expect(work.locator(".term-line").first()).toBeVisible();
@@ -376,32 +390,57 @@ test("moving between tabs keeps the frame and its data", async ({ page, context 
   // Tapped before this arrives, a static export falls back to a full page load.
   const ready = page.waitForResponse(/app\/team\/__next\.app\.team/);
   await page.goto("/app");
-  await page.locator(".swipe .row-link").first().waitFor();
+  await page.locator(".agent-row").first().waitFor();
   await ready;
   await page.evaluate(() => { (window as unknown as { same: boolean }).same = true; });
   await page.locator(".app-tab", { hasText: "Team" }).click();
   await page.waitForURL(/\/app\/team/);
-  await page.getByText("Reviewer · reviewer-3b").waitFor();
-  await page.locator(".app-tab", { hasText: "Chats" }).click();
-  await expect(page.locator(".swipe .row-link").first()).toBeVisible({ timeout: 500 });
+  await page.locator(".team-card").first().waitFor();
+  await page.locator(".app-tab", { hasText: "Home" }).click();
+  await expect(page.locator(".agent-row").first()).toBeVisible({ timeout: 500 });
   expect(await page.evaluate(() => (window as unknown as { same?: boolean }).same)).toBe(true);
 });
 
-test("a phone opens on its chats, with what needs you first", async ({ page, context }) => {
+test("the app opens on Home, and what needs you is first", async ({ page, context }) => {
+  await fakeAccount(context, { handoffs: [handoff()] });
+  await page.goto("/app");
+  await expect(page.locator(".page > header h1")).toContainText("Test");
+  await expect(page.locator(".ok-card").first()).toContainText("CTO asks Reviewer");
+  await expect(page.locator(".tiles3 a").first()).toContainText("90%");
+});
+
+test("a chat list opens with what needs you first", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app/sessions");
+  await expect(page.locator(".chat-row").first()).toContainText("Needs your OK");
+});
+
+test("the new chat button sits exactly in the middle of the bar", async ({ page, context }) => {
   await fakeAccount(context);
   await page.goto("/app");
-  await expect(page.locator(".swipe .row-link").first()).toContainText("Needs your OK");
+  const plus = (await page.locator(".app-tab-new").boundingBox())!;
+  const width = page.viewportSize()!.width;
+  expect(Math.abs(plus.x + plus.width / 2 - width / 2)).toBeLessThan(2);
+});
+
+test("every chat row shows its model", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  fake.list = [{ ...fake.list[0], model: "gpt-6-astra" }];
+  await page.goto("/app/sessions");
+  await expect(page.locator(".chat-row").first()).toContainText("GPT-6 Astra");
 });
 
 test("with no connection the app says so and shows the last list", async ({ page, context }) => {
   await fakeAccount(context);
   await page.goto("/app");
-  await page.locator(".swipe .row-link").first().waitFor();
+  await page.locator(".agent-row").first().waitFor();
   await context.unroute("https://api.creovine.com/**");
   await context.route("https://api.creovine.com/**", (r) => r.abort());
   await page.reload();
   await expect(page.locator(".offline-bar")).toBeVisible({ timeout: 12000 });
-  await expect(page.locator(".swipe .row-link").first()).toBeVisible();
+  await expect(page.locator(".agent-row").first()).toBeVisible();
+  await page.goto("/app/sessions");
+  await expect(page.locator(".chat-row").first()).toBeVisible({ timeout: 12000 });
 });
 
 test("dark mode leaves nothing dark on dark", async ({ page, context }) => {
@@ -446,10 +485,10 @@ test("a ping from the server updates a chat at once", async ({ page, context }) 
   await expect(page.locator(".bubble-agent", { hasText: "Arrived by ping." })).toBeVisible({ timeout: 1500 });
 });
 
-test("the tabs are Chats, Team and Settings", async ({ page, context }) => {
+test("the tabs are Home, Chats, Team and Settings, with new chat in the middle", async ({ page, context }) => {
   await fakeAccount(context);
   await page.goto("/app");
-  await expect(page.locator(".app-tab")).toHaveText(["Chats1", "Team", "Settings"].map((x) => new RegExp(x.replace("1", "\\d?"))));
+  await expect(page.locator(".app-tab")).toHaveText([/Home/, /Chats\d?/, /Team/, /Settings/]);
   await page.locator(".app-tab", { hasText: "Settings" }).click();
   await expect(page.getByRole("link", { name: "Computers" })).toBeVisible();
   await page.goto("/app/session?id=s1");
@@ -471,8 +510,8 @@ test("a helper is one quiet line", async ({ page, context }) => {
   const step = { id: "h", at: at(5), turn: "t1", request: "Look into it", action: "read-file", tool: "Read", paths: ["a.ts"], installs: [], pathsUnknown: false, commandUnderstood: null, blocked: false, severity: null, checked: true, findings: [], unmeasured: [], helper: "Explore" };
   await fakeAccount(context, { events: [step, { ...step, id: "h2" }], replies: [{ id: "a", at: at(4), turn: "t1", text: "Found it." }] });
   await page.goto("/app/session?id=s1");
-  await expect(page.locator(".helper-line")).toHaveCount(1);
-  await expect(page.locator(".helper-line")).toContainText("used a helper: Explore");
+  await expect(page.locator(".term-head")).toHaveCount(1);
+  await expect(page.locator(".term-head")).toContainText("used a helper: Explore");
 });
 
 test("a message refused because the chat is open says so and can go again", async ({ page, context }) => {
@@ -487,8 +526,8 @@ test("the team lists members, and a profile is their record", async ({ page, con
   await page.goto("/app/team");
   await page.getByRole("link", { name: /Reviewer/ }).click();
   await page.waitForURL(/\/app\/agent/);
-  await expect(page.locator(".agent-badge")).toHaveText("AI agent");
-  await expect(page.locator(".agent-record")).toContainText("100% aligned");
+  await expect(page.locator(".profile-name")).toContainText("AI agent");
+  await expect(page.locator(".record")).toContainText("100%");
   await page.getByRole("button", { name: "Rename" }).click();
   await page.getByRole("textbox", { name: "Name" }).fill("CTO");
   await page.getByRole("button", { name: "Continue" }).click();
@@ -510,14 +549,14 @@ test("an agent that is set up but silent is said out loud", async ({ page, conte
 
 test("a computer that has gone quiet is said plainly on the chats page", async ({ page, context }) => {
   await fakeAccount(context, { offline: true });
-  await page.goto("/app");
+  await page.goto("/app/sessions");
   await expect(page.getByText("Computer offline.")).toBeVisible();
 });
 
 test("a position is set in the person's words and says what it reaches", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/agent?id=a1");
-  await expect(page.locator(".agent-title")).toHaveText("Reviewer");
+  await expect(page.locator(".profile-head h1")).toHaveText("Reviewer");
   await page.getByRole("button", { name: "Set position" }).click();
   await expect(page.getByRole("dialog")).toContainText("never changes what the agent is allowed to do");
   await page.getByLabel("Title").fill("CTO");
@@ -529,7 +568,7 @@ test("a new chat with a member already knows who and where", async ({ page, cont
   await fakeAccount(context);
   await page.goto("/app/remote?with=a1");
   await expect(page.locator(".app-h1")).toHaveText("New chat with Reviewer · reviewer-3b");
-  await expect(page.getByLabel("What should reviewer-3b do?")).toBeVisible();
+  await expect(page.getByLabel("What should Reviewer do?")).toBeVisible();
 });
 
 const handoff = (over = {}) => ({
@@ -543,11 +582,12 @@ const handoff = (over = {}) => ({
 test("a handoff shows its whole task and asks plainly", async ({ page, context }) => {
   await fakeAccount(context, { handoffs: [handoff()] });
   await page.goto("/app");
-  const card = page.locator(".handoff");
-  await expect(card).toContainText("CTO · cto-1 asks Reviewer · reviewer-3b");
-  await expect(card.locator(".handoff-task")).toHaveText("Review the login change.\n\nLook at the tests too.");
-  await expect(card).toContainText("In trackline · a new chat");
-  await expect(card.getByRole("button", { name: "Approve" })).toBeVisible();
+  await page.locator(".ok-card").first().click();
+  await page.waitForURL(/\/app\/approve/);
+  await expect(page.locator(".approve-who")).toContainText("CTO asks Reviewer");
+  await expect(page.locator(".approve-who")).toContainText("trackline · a new chat");
+  await expect(page.locator(".approve-task")).toHaveText("Review the login change.\n\nLook at the tests too.");
+  await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
 });
 
 test("a position signed into a message is on screen beside it", async ({ page, context }) => {
@@ -558,28 +598,29 @@ test("a position signed into a message is on screen beside it", async ({ page, c
 
 test("a handoff can be declined", async ({ page, context }) => {
   const fake = await fakeAccount(context, { handoffs: [handoff()] });
-  await page.goto("/app");
+  await page.goto("/app/approve?id=hf_abcdefgh12");
   await page.getByRole("button", { name: "Decline" }).click();
   await expect.poll(() => fake.calls.some((c) => c.path.endsWith("/decline"))).toBe(true);
 });
 
 test("a handoff from an agent still working cannot be approved yet", async ({ page, context }) => {
   await fakeAccount(context, { handoffs: [handoff({ from: { name: "cto-1", title: "CTO", agent: "claude", session: null, working: true } })] });
-  await page.goto("/app");
-  await expect(page.locator(".handoff")).toContainText("still working");
+  await page.goto("/app/approve?id=hf_abcdefgh12");
+  await expect(page.locator(".approve")).toContainText("still working");
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
 });
 
 test("one nobody approved says so", async ({ page, context }) => {
   await fakeAccount(context, { handoffs: [handoff({ status: "expired" })] });
-  await page.goto("/app");
+  await page.goto("/app/sessions");
   await expect(page.getByText("Nobody approved this in time")).toBeVisible();
 });
 
 test("the three dots add to the team in one tap", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   await page.goto("/app/sessions");
-  await page.getByRole("button", { name: "Chat options" }).first().click();
+  await page.locator(".swipe-row").first().waitFor();
+  await hold(page);
   await page.getByRole("button", { name: "Add to team" }).click();
   await expect.poll(() => fake.calls.some((c) => c.path.endsWith("/team"))).toBe(true);
 });
@@ -589,6 +630,6 @@ test("the tags around pasted text never show", async ({ page, context }) => {
   const fake = await fakeAccount(context);
   fake.list = [{ ...fake.list[0], title }];
   await page.goto("/app/sessions");
-  await expect(page.locator(".row-title").first()).toHaveText("Do you know FIFA Street?");
+  await expect(page.locator(".chat-row-title").first()).toHaveText("Do you know FIFA Street?");
   await expect(page.getByText("pasted_content")).toHaveCount(0);
 });
