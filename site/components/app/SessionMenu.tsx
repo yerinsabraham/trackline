@@ -95,3 +95,21 @@ export function NameSheet({ label, value, onSave, onClose }: { label: string; va
     </div>
   );
 }
+
+/** An agent's job in the person's own words. It reaches the agent only with messages sent from here. */
+export function PositionSheet({ title, description, onSave, onClose }: { title: string | null; description: string | null; onSave: (p: { title: string; description: string }) => void; onClose: () => void }) {
+  const [t, setT] = useState(title ?? "");
+  const [d, setD] = useState(description ?? "");
+  return (
+    <div className="sheet-back" onClick={onClose}>
+      <form className="sheet" role="dialog" aria-label="Position" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); onSave({ title: t, description: d }); onClose(); }}>
+        <label htmlFor="position-title" className="sheet-label">Title</label>
+        <input id="position-title" className="sheet-input" autoFocus value={t} maxLength={80} placeholder="CTO" onChange={(e) => setT(e.target.value)} />
+        <label htmlFor="position-what" className="sheet-label">What it does</label>
+        <textarea id="position-what" className="sheet-input" rows={4} value={d} maxLength={1500} placeholder="Owns the architecture and reviews every change." onChange={(e) => setD(e.target.value)} />
+        <p className="sheet-note">Reaches the agent with messages you send from trackline. A chat you type in on your computer does not get it. It never changes what the agent is allowed to do.</p>
+        <button type="submit" className="btn-act sheet-wide">Save</button>
+      </form>
+    </div>
+  );
+}

@@ -151,10 +151,10 @@ function jobId(): string {
  * Builds and signs a prompt for one project on one laptop. With a session,
  * the agent continues that conversation instead of starting one.
  */
-export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = [], wait = false) {
+export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = [], wait = false, position?: string) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
-    v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}),
+    v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}), ...(position ? { position } : {}),
     // The hashes are signed; the bytes travel beside the job, and the laptop
     // takes only images that match.
     ...(images.length ? { images: images.map((i) => ({ type: i.type, size: i.size, sha256: i.sha256 })) } : {}),

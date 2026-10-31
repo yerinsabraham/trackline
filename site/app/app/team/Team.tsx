@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/account";
-import { LIGHT_LABEL, type Member, modelLabel, whileQuiet } from "@/lib/dashboard";
+import { LIGHT_LABEL, type Member, modelLabel, titled, whileQuiet } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 
 // The agents a person chose to keep, by project, working ones first. A chat is
@@ -29,7 +29,7 @@ export default function Team() {
               <AgentLogo host={m.host} size={34} />
               <span className="row-main">
                 <span className="row-top">
-                  <strong>{m.name}</strong>
+                  <strong>{titled(m.name, m.title)}</strong>
                   {m.chat && <span className={`pill ${m.chat.light}`}>{m.chat.light === "working" && <span className="dot working" />}{LIGHT_LABEL[m.chat.light]}</span>}
                 </span>
                 <span className="row-meta">{[agentName(m.host), modelLabel(m.model)].filter(Boolean).join(" · ")}</span>

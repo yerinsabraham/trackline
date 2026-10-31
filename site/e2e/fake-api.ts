@@ -22,7 +22,7 @@ export const REMOTE_ON = { machine: { id: "m1", name: "MacBook", online: true, s
 
 const listRow = (id: string, title: string, light = "done") => ({ ...summary(id, title, light), title, agentName: `trackline-${id}`, project: { name: "trackline" } });
 
-const member = { id: "a1", name: "Reviewer", host: "claude-code", createdAt: iso(900), project: { id: "p1", name: "trackline" }, model: "claude-opus-5-5", lastAt: iso(2), chat: listRow("s1", "Fix the login page") };
+const member = { id: "a1", name: "reviewer-3b", title: "Reviewer", description: "Checks every change.", host: "claude-code", createdAt: iso(900), project: { id: "p1", name: "trackline", clientId: "cp" }, model: "claude-opus-5-5", lastAt: iso(2), chat: listRow("s1", "Fix the login page") };
 
 export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; silent?: boolean; offline?: boolean; job: unknown; calls: { method: string; path: string; body: string | null }[]; list: Record<string, unknown>[] };
 

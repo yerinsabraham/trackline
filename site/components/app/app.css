@@ -700,3 +700,4 @@ a.metric:active { transform: scale(0.98); }
 .app-tabs.three { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .app-tab { position: relative; }
 .app-tab .badge { position: absolute; top: -2px; left: 56%; }
+.agent-title { margin: 2px 0; font-size: 14.5px; }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, markRead, readAt, readDraft, saveDraft } from "@/lib/account";
-import { LIGHT_LABEL, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
+import { LIGHT_LABEL, positionText, titled, type FeedEvent, type Reply, requestLabel, scoreLine, sessionName, type SessionJob, type SessionView, whileQuiet } from "@/lib/dashboard";
 import { active, type Attachment, proof, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
@@ -248,7 +248,7 @@ export default function Session() {
 
   const deliver = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images, !cont.machine.online);
+    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images, !cont.machine.online, positionText(view?.session.position));
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -287,7 +287,8 @@ export default function Session() {
 
   // Measured: a second process on one session keeps the file sound but forks
   // the conversation, so the agent open at the desk never learns of this one.
-  const who_ = s?.agentName ?? agentName(s?.host);
+  const name_ = s?.agentName ?? agentName(s?.host);
+  const who_ = titled(name_, s?.agentTitle);
   const atDesk = !!s && known.length === 0 && Date.now() - +new Date(s.lastAt) < 30 * 60_000;
   const lastTurn = list[list.length - 1]?.key;
   const jobFor = new Map(jobs.flatMap((j) => { const t = turnOf(list, textOf(j), j.createdAt); return t ? [[t.key, j] as const] : []; }));
@@ -325,7 +326,7 @@ export default function Session() {
           ) : s && <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>}
           {s && <button type="button" className="app-icon-btn" aria-label="Chat options" onClick={() => setMenu(true)}><IconMore size={22} /></button>}
         </header>
-        {who && s && <AgentSheet chat={s.id} host={s.host} name={who_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
+        {who && s && <AgentSheet chat={s.id} host={s.host} name={name_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
         {menu && s && (
           <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt }}
             onClose={() => setMenu(false)} onChanged={refresh}

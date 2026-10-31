@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { MouseEvent } from "react";
-import { ago, LIGHT_LABEL, type SessionSummary, sessionName } from "@/lib/dashboard";
+import { ago, LIGHT_LABEL, type SessionSummary, sessionName, titled } from "@/lib/dashboard";
 import { plain } from "@/components/ReplyText";
 import AgentLogo, { agentName } from "./AgentLogo";
 
@@ -15,7 +15,7 @@ export function SessionRow({ s, project, current, onClick, unread }: { s: Sessio
       <AgentLogo host={s.host} size={34} />
       <span className="row-main">
         <span className="row-top">
-          <strong>{s.pinnedAt && <span className="row-pin">Pinned · </span>}{s.agentName ?? name}</strong>
+          <strong>{s.pinnedAt && <span className="row-pin">Pinned · </span>}{s.agentName ? titled(s.agentName, s.agentTitle) : name}</strong>
           {unread && <span className="dot-unread" role="img" aria-label="New messages" />}
           <span className={`pill ${s.light}`}>{s.light === "working" && <span className="dot working" />}{LIGHT_LABEL[s.light]}</span>
         </span>

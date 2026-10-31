@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/account";
 import { modelLabel, type Profile, scoreLine, whileQuiet } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
-import { ConfirmSheet, NameSheet } from "@/components/app/SessionMenu";
+import { ConfirmSheet, NameSheet, PositionSheet } from "@/components/app/SessionMenu";
 import { SessionRow } from "@/components/app/SessionRow";
 
 // A record, not a biography: who it is, and what it has actually done.
@@ -14,7 +14,7 @@ export default function Agent() {
   const id = useSearchParams().get("id") ?? "";
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState("");
-  const [sheet, setSheet] = useState<"name" | "remove" | null>(null);
+  const [sheet, setSheet] = useState<"name" | "position" | "remove" | null>(null);
   const path = `/app/team/${encodeURIComponent(id)}`;
   const load = useCallback(() => { api<Profile>(path).then(setP).catch((e) => setError((e as Error).message)); }, [path]);
   useEffect(() => { load(); return whileQuiet(load, 8000, 30_000); }, [load]);
@@ -30,11 +30,15 @@ export default function Agent() {
         <div>
           <h1 className="app-h1">{p.agent.name}</h1>
           <span className="agent-badge">AI agent</span>
+          {p.agent.title && <p className="agent-title"><strong>{p.agent.title}</strong></p>}
+          {p.agent.description && <p className="row-meta">{p.agent.description}</p>}
           <p className="row-meta">{[agentName(p.agent.host), modelLabel(p.model), p.agent.project.name].filter(Boolean).join(" · ")}</p>
         </div>
       </header>
       <div className="agent-actions">
         {latest && <a className="btn-act" href={`/app/session?id=${encodeURIComponent(latest.id)}`}>Message</a>}
+        <a className="btn-plain" href={`/app/remote?with=${encodeURIComponent(p.agent.id)}`}>New chat</a>
+        {p.agent.host !== "cursor" && <button type="button" className="btn-plain" onClick={() => setSheet("position")}>Set position</button>}
         <button type="button" className="btn-plain" onClick={() => setSheet("name")}>Rename</button>
         <button type="button" className="btn-plain" onClick={() => setSheet("remove")}>Remove from team</button>
       </div>
@@ -53,6 +57,8 @@ export default function Agent() {
       {p.chats.length > 0 && <section className="card rise" aria-label="Chats">{p.chats.map((c) => <SessionRow key={c.id} s={c} project={c.project.name} />)}</section>}
       {sheet === "name" && <NameSheet label="Name" value={p.agent.name} onClose={() => setSheet(null)}
         onSave={(name) => act(api(path, { method: "PATCH", body: JSON.stringify({ name }) }), load)} />}
+      {sheet === "position" && <PositionSheet title={p.agent.title} description={p.agent.description} onClose={() => setSheet(null)}
+        onSave={(body) => act(api(path, { method: "PATCH", body: JSON.stringify(body) }), load)} />}
       {sheet === "remove" && <ConfirmSheet title={`Remove ${p.agent.name} from your team? Its chats stay.`} action="Remove from team" onClose={() => setSheet(null)}
         onConfirm={() => act(api(path, { method: "DELETE" }), () => window.location.assign("/app/team"))} />}
     </div>

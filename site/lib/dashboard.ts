@@ -6,7 +6,8 @@ export type Status = { light: Light; request: string | null; score: { request: S
 
 export type Reply = { id?: string; at: string; turn: string | null; text: string; request?: string | null; cut?: boolean; model?: string | null };
 /** Who a chat is with. agentId is set once the agent is on the team. */
-export type Who = { agentName?: string; agentId?: string | null; onTeam?: boolean; model?: string | null };
+export type Who = { agentName?: string; agentTitle?: string | null; agentId?: string | null; onTeam?: boolean; model?: string | null };
+export type Position = { title: string; description: string | null };
 export type SessionSummary = Status & Who & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
 export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
@@ -22,7 +23,7 @@ export type FeedEvent = {
 import type { Continuation } from "./remote";
 
 export type SessionView = {
-  session: Status & Who & { id: string; host: string; startedAt: string; lastAt: string; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null; project: { id: string; name: string } };
+  session: Status & Who & { position?: Position | null; id: string; host: string; startedAt: string; lastAt: string; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null; project: { id: string; name: string } };
   events: FeedEvent[];
   replies: (Reply & { id: string })[];
   /** Older messages exist above this page. */
@@ -53,13 +54,20 @@ export const LIGHT_LABEL: Record<Light, string> = {
   idle: "Ready",
 };
 
-export type Member = { id: string; name: string; host: string; createdAt: string; project: { id: string; name: string }; model: string | null; lastAt: string | null; chat: (SessionSummary & { project: { name: string } }) | null };
+export type Member = { id: string; name: string; title: string | null; description: string | null; host: string; createdAt: string; project: { id: string; name: string; clientId: string }; model: string | null; lastAt: string | null; chat: (SessionSummary & { project: { name: string } }) | null };
 export type Profile = {
   agent: Omit<Member, "model" | "lastAt" | "chat">;
   model: string | null;
   chats: (SessionSummary & { project: { name: string } })[];
   record: { days: number; chats: number; steps: number; replies: number; findings: number; blocked: number; score: Score; partial: boolean };
 };
+
+/** "CTO · monkey-post-3b", or the name alone with no position. */
+export const titled = (name: string, title?: string | null) => (title ? `${title} · ${name}` : name);
+
+/** A position as the agent is told it. */
+export const positionText = (p: { title: string | null; description: string | null } | null | undefined) =>
+  p?.title ? [p.title, p.description].filter(Boolean).join(": ") : undefined;
 
 /** claude-opus-5-5 as "Opus 5.5", gpt-6-astra as "GPT-6 Astra". Unknown ones stand as they are. */
 export function modelLabel(m: string | null | undefined): string | null {

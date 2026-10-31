@@ -378,7 +378,7 @@ test("moving between tabs keeps the frame and its data", async ({ page, context 
   await page.evaluate(() => { (window as unknown as { same: boolean }).same = true; });
   await page.locator(".app-tab", { hasText: "Team" }).click();
   await page.waitForURL(/\/app\/team/);
-  await page.getByText("Reviewer").waitFor();
+  await page.getByText("Reviewer · reviewer-3b").waitFor();
   await page.locator(".app-tab", { hasText: "Chats" }).click();
   await expect(page.locator(".swipe .row-link").first()).toBeVisible({ timeout: 500 });
   expect(await page.evaluate(() => (window as unknown as { same?: boolean }).same)).toBe(true);
@@ -509,4 +509,22 @@ test("a computer that has gone quiet is said plainly on the chats page", async (
   await fakeAccount(context, { offline: true });
   await page.goto("/app");
   await expect(page.getByText("Computer offline.")).toBeVisible();
+});
+
+test("a position is set in the person's words and says what it reaches", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await page.goto("/app/agent?id=a1");
+  await expect(page.locator(".agent-title")).toHaveText("Reviewer");
+  await page.getByRole("button", { name: "Set position" }).click();
+  await expect(page.getByRole("dialog")).toContainText("never changes what the agent is allowed to do");
+  await page.getByLabel("Title").fill("CTO");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => fake.calls.find((c) => c.method === "PATCH")?.body).toContain("CTO");
+});
+
+test("a new chat with a member already knows who and where", async ({ page, context }) => {
+  await fakeAccount(context);
+  await page.goto("/app/remote?with=a1");
+  await expect(page.locator(".app-h1")).toHaveText("New chat with Reviewer · reviewer-3b");
+  await expect(page.getByLabel("What should reviewer-3b do?")).toBeVisible();
 });

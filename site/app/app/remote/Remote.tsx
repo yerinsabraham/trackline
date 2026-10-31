@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
-import { whileVisible } from "@/lib/dashboard";
+import { type Member, positionText, titled, whileVisible } from "@/lib/dashboard";
 import {
   active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment,
 } from "@/lib/remote";
@@ -32,6 +32,8 @@ export default function Remote() {
     : <NewTask open={open} />;
 }
 
+const JOB_AGENT: Record<string, string> = { "claude-code": "claude", codex: "codex", cursor: "cursor" };
+
 function NewTask({ open }: { open: (id: string) => void }) {
   const { remote } = useApp();
   const [keys, setKeys] = useState<Passkey[] | null>(null);
@@ -42,11 +44,18 @@ function NewTask({ open }: { open: (id: string) => void }) {
   const attach = useAttachments();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // A new chat with a team member: its project, tool and position are settled.
+  const [member, setMember] = useState<Member | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("with");
+    if (id) api<{ agent: Member }>(`/app/team/${encodeURIComponent(id)}`).then((r) => { setMember(r.agent); setProjectId(r.agent.project.clientId); setAgent(JOB_AGENT[r.agent.host] ?? ""); }).catch((e) => setError((e as Error).message));
+  }, []);
 
   useEffect(() => { api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys)).catch(() => setKeys([])); }, []);
 
   const machines = remote?.machines ?? [];
-  const machine: Machine | undefined = machines.find((m) => m.id === machineId) ?? machines.find((m) => m.online) ?? machines[0];
+  const holds = (m: Machine) => !member || m.projects.some((p) => p.id === member.project.clientId);
+  const machine: Machine | undefined = machines.find((m) => m.id === machineId) ?? machines.find((m) => m.online && holds(m)) ?? machines.find(holds) ?? machines[0];
   const project = machine?.projects.find((p) => p.id === projectId) ?? machine?.projects[0];
   const agents = project?.agents ?? [];
   const chosen = agents.includes(agent) ? agent : agents[0] ?? "";
@@ -57,8 +66,8 @@ function NewTask({ open }: { open: (id: string) => void }) {
     if (!machine || !project || !chosen || !keys?.length || !said) return;
     setBusy(true); setError("");
     try {
-      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items, !machine.online);
-      const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
+      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items, !machine.online, positionText(member));
+      const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(member ? { ...body, teamAgent: member.id } : body) });
       remember(r.id, said);
       rememberImages(r.id, attach.items);
       open(r.id);
@@ -72,7 +81,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
   return (
     <div className="new-task">
       <header className="rise">
-        <h1 className="app-h1">New chat</h1>
+        <h1 className="app-h1">{member ? `New chat with ${titled(member.name, member.title)}` : "New chat"}</h1>
         <p className="app-sub">It runs on your computer, with your own agent, watched by trackline.</p>
       </header>
 
@@ -100,11 +109,11 @@ function NewTask({ open }: { open: (id: string) => void }) {
               <strong style={{ fontSize: 14.5 }}>{machine.name}</strong>
               <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, color: machine.stopped ? "var(--red-ink)" : machine.online ? "var(--ok-ink)" : "var(--muted)" }}>
                 <span className={`dot ${machine.online && !machine.stopped ? "working" : ""}`} />
-                {machine.stopped ? "Stopped. Turn it on again on the laptop." : machine.online ? "Online" : "Asleep or offline. A task waits up to 12 hours."}
+                {machine.stopped ? "Stopped. Turn it on again on the computer." : machine.online ? "Online" : "Computer offline. A message waits up to 12 hours."}
               </span>
             </div>
             {machines.length > 1 && (
-              <select aria-label="Laptop" className="pick" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); }}>
+              <select aria-label="Computer" className="pick" value={machine.id} onChange={(e) => { setMachineId(e.target.value); setProjectId(""); }}>
                 {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             )}
@@ -138,7 +147,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
                 )}
               </fieldset>
               <div className="nt-field">
-                <label htmlFor="task">What should {agentName(chosen)} do?</label>
+                <label htmlFor="task">What should {member?.name ?? agentName(chosen)} do?</label>
                 <textarea id="task" className="nt-text" value={text} onChange={(e) => setText(e.target.value)}
                   placeholder="Make the contact form's email required and show the error under the field." />
                 {attach.strip}
