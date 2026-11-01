@@ -108,10 +108,15 @@ func Install(host Host, root, binary string) (Result, error) {
 // key; Claude Code puts "hooks" at the top level. Getting this wrong is silent,
 // which is why Verify exists.
 //
-// Two events: PreToolUse checks each action, and Stop hands over the agent's
-// final message for the turn, which is what the dashboard shows as its reply.
-// Each is added only if missing, so a project set up before Stop existed gains
-// it on the next init without a duplicate PreToolUse.
+// PreToolUse checks each action, and Stop hands over the agent's final message
+// for the turn, which is what the dashboard shows as its reply. The rest keep a
+// chat live: UserPromptSubmit shows a message when it is sent, and a permission
+// prompt says the agent is waiting, until PostToolUse says it has gone on.
+// Claude Code's Notification comes after six seconds, so a prompt answered at
+// once tells nobody; Codex has only PermissionRequest.
+//
+// Each is added only if missing, so a project set up earlier gains what it lacks
+// on the next init without a duplicate.
 func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 	if host == Cursor {
 		return addCursorHook(doc, binary)
@@ -122,8 +127,12 @@ func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 		doc["hooks"] = container
 	}
 
+	events := []string{"PreToolUse", "Stop", "UserPromptSubmit", "PostToolUse", "PermissionRequest"}
+	if host == Claude {
+		events[4] = "Notification"
+	}
 	changed := false
-	for _, ev := range []string{"PreToolUse", "Stop"} {
+	for _, ev := range events {
 		entries, _ := container[ev].([]any)
 		entries, held, moved := keepOneOurs(entries, binary, true)
 		if moved {
@@ -142,13 +151,61 @@ func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 		}
 		// Claude Code matches on tool name; Codex applies to all tools when
 		// no matcher is given. Stop has no tool to match.
-		if host == Claude && ev == "PreToolUse" {
+		if host == Claude && (ev == "PreToolUse" || ev == "PostToolUse") {
 			entry["matcher"] = "Write|Edit|MultiEdit|NotebookEdit|Bash"
+		}
+		if host == Claude && ev == "Notification" {
+			entry["matcher"] = "permission_prompt"
 		}
 		container[ev] = append(entries, entry)
 		changed = true
 	}
+	if host == Claude && addWaiter(container, binary) {
+		changed = true
+	}
 	return changed, nil
+}
+
+// waitFlag makes the hook wait for a phone message, not act on an event.
+const waitFlag = "--wait"
+
+// waitLimit is a phone message's life, in the seconds a hook's timeout takes.
+const waitLimit = 12 * 60 * 60
+
+// addWaiter puts the background hook that can wake an idle chat on Stop, beside
+// the one that takes the reply. Only Claude Code has this: asyncRewake is how a
+// message gets into an open chat from outside it.
+func addWaiter(container map[string]any, binary string) bool {
+	want := binary + " " + waitFlag
+	entries, _ := container["Stop"].([]any)
+	for _, e := range entries {
+		m, _ := e.(map[string]any)
+		hooks, _ := m["hooks"].([]any)
+		for _, h := range hooks {
+			hm, _ := h.(map[string]any)
+			if cmd, _ := hm["command"].(string); waiter(cmd) {
+				if cmd == want {
+					return false
+				}
+				hm["command"] = want
+				return true
+			}
+		}
+	}
+	container["Stop"] = append(entries, map[string]any{
+		"hooks": []any{map[string]any{
+			"type":        "command",
+			"command":     want,
+			"asyncRewake": true,
+			"timeout":     waitLimit,
+		}},
+	})
+	return true
+}
+
+func waiter(cmd string) bool {
+	f := strings.Fields(cmd)
+	return len(f) > 1 && f[len(f)-1] == waitFlag && strings.TrimSuffix(filepath.Base(f[0]), ".exe") == "trackline-hook"
 }
 
 // ours recognises trackline's hook by its file name, wherever it lives. A
@@ -157,7 +214,7 @@ func addHook(host Host, doc map[string]any, binary string) (bool, error) {
 // twice (found in real use, 2026-09-25).
 func ours(cmd string) bool {
 	f := strings.Fields(cmd)
-	return len(f) > 0 && strings.TrimSuffix(filepath.Base(f[0]), ".exe") == "trackline-hook"
+	return len(f) > 0 && strings.TrimSuffix(filepath.Base(f[0]), ".exe") == "trackline-hook" && !waiter(cmd)
 }
 
 // keepOneOurs leaves exactly one trackline hook in an event's list, pointing

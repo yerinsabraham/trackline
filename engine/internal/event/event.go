@@ -82,6 +82,10 @@ type Action struct {
 	// Command is set for ActionRunCommand.
 	Command string `json:"command,omitempty"`
 
+	// Detail is the host's own one-line description of a command, where it
+	// writes one.
+	Detail string `json:"detail,omitempty"`
+
 	// Installs are packages a command appears to add, for the commands that
 	// install rather than write. `npm install lodash` changes a manifest
 	// without any file write a hook can see, and without this it is invisible.

@@ -35,6 +35,7 @@ type toolInput struct {
 	Path         string `json:"path"`
 	Command      string `json:"command"`
 	NotebookPath string `json:"notebook_path"`
+	Description  string `json:"description"`
 
 	// What is being written, under the name each tool uses for it.
 	Content   string `json:"content"`
@@ -126,6 +127,7 @@ func action(p payload) event.Action {
 
 	if t == event.ActionRunCommand {
 		a.Command = in.Command
+		a.Detail = in.Description
 		// A shell command is how most of a session actually happens, and
 		// treating it all as unknowable made whole sessions unexaminable.
 		// Recognised forms give real paths; anything unrecognised still

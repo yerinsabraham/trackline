@@ -12,6 +12,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -80,6 +81,8 @@ func main() {
 		err = cmdAccount(os.Args[2:])
 	case "sync":
 		err = cmdSync(os.Args[2:])
+	case "share":
+		err = cmdShare(os.Args[2:])
 	case "remote":
 		err = cmdRemote(os.Args[2:])
 	case "mcp":
@@ -122,6 +125,7 @@ func usage() {
   account  who this machine is connected as
   disconnect  unlink this machine
   sync     send what is waiting to the account (the hook runs this for you)
+  share    choose whether full commands are sent from this project
   remote   let prompts from your phone run in this project (off unless enabled)
   mcp      serve check_action and get_rules to any MCP client (the agent
            must choose to ask; a hook does not give it the choice)
@@ -227,6 +231,13 @@ paired here, at a terminal, with one code. --no-remote leaves that alone.
 
 Who this machine is connected as, and which projects upload.
 `,
+	"share": `trackline share commands on|off [--root DIR]
+
+Sends the full text of each command the agent runs to your chat on the site, for
+this project. Off unless you turn it on. A command can hold a password or a key,
+and known key shapes are removed but others cannot be recognised, so this can
+only be changed here, on this computer. Without it a chat shows the agent's own
+line about each command.`,
 	"sync": `trackline sync [--quiet]
 
 Send what connected projects noticed and have not sent yet. The hook starts
@@ -665,4 +676,25 @@ func offerConnect(root string) error {
 		return nil
 	}
 	return connect(root, connectOptions{asked: true})
+}
+
+func cmdShare(args []string) error {
+	if len(args) < 2 || args[0] != "commands" || (args[1] != "on" && args[1] != "off") {
+		return errors.New("usage: trackline share commands on|off [--root DIR]")
+	}
+	f := parse(args[2:])
+	root := f.root
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+	project, err := account.SetShareCommands(root, args[1] == "on")
+	if err != nil {
+		return err
+	}
+	if args[1] == "on" {
+		fmt.Printf("Full commands from %s now go to your chats. Known key shapes are removed, but a password in a command may not be.\n", filepath.Base(project))
+		return nil
+	}
+	fmt.Printf("Full commands from %s stay on this computer.\n", filepath.Base(project))
+	return nil
 }

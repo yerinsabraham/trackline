@@ -18,7 +18,7 @@ export function SessionRow({ s, project, current, onClick, unread }: { s: Sessio
           <time>{ago(s.lastAt)}</time>
         </span>
         {s.agentName && <span className="chat-row-title">{s.pinnedAt && <span className="row-pin">Pinned · </span>}{title}</span>}
-        <span className="chat-row-state"><b className={`state-${s.light}`}>{LIGHT_LABEL[s.light]}</b>{modelLabel(s.model) ? ` · ${modelLabel(s.model)}` : ""}</span>
+        <span className="chat-row-state"><b className={`state-${s.light}`}>{s.waiting ? "Waiting for you" : LIGHT_LABEL[s.light]}</b>{modelLabel(s.model) ? ` · ${modelLabel(s.model)}` : ""}</span>
       </span>
     </Link>
   );

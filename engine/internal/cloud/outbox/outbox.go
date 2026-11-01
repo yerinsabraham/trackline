@@ -93,7 +93,28 @@ func (b Box) PutReply(r payload.Reply) error {
 	return os.Rename(tmp, filepath.Join(dir, name))
 }
 
-const replySuffix = ".reply.json"
+const (
+	replySuffix = ".reply.json"
+	liveSuffix  = ".live.json"
+)
+
+// PutLive queues what is happening in a turn, in order with everything else.
+func (b Box) PutLive(l payload.Live) error {
+	body, err := json.Marshal(l)
+	if err != nil {
+		return err
+	}
+	dir := b.pending()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	name := fmt.Sprintf("%020d-%s%s", time.Now().UnixNano(), l.ID, liveSuffix)
+	tmp := filepath.Join(dir, "."+name+".tmp")
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, name))
+}
 
 // Pending lists queued files, oldest first.
 func (b Box) Pending() ([]string, error) {
@@ -279,7 +300,7 @@ func (b Box) read(names []string) (payload.Batch, []string) {
 	var used []string
 	size := 0
 	for _, n := range names {
-		if len(batch.Events) == 100 || len(batch.Replies) == 100 {
+		if len(batch.Events) == 100 || len(batch.Replies) == 100 || len(batch.Live) == 100 {
 			break
 		}
 		path := filepath.Join(b.pending(), n)
@@ -290,7 +311,14 @@ func (b Box) read(names []string) (payload.Batch, []string) {
 		if size+len(raw) > maxBatchBytes && len(used) > 0 {
 			break
 		}
-		if strings.HasSuffix(n, replySuffix) {
+		if strings.HasSuffix(n, liveSuffix) {
+			var l payload.Live
+			if json.Unmarshal(raw, &l) != nil {
+				os.Remove(path)
+				continue
+			}
+			batch.Live = append(batch.Live, l)
+		} else if strings.HasSuffix(n, replySuffix) {
 			var r payload.Reply
 			if json.Unmarshal(raw, &r) != nil {
 				os.Remove(path)

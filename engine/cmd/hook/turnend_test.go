@@ -66,13 +66,13 @@ func TestLastRequestIsReadFromTheTranscript(t *testing.T) {
 	if err := os.WriteFile(path, []byte(lines), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := lastRequest(path); got != "what does this do?" {
+	if got := lastRequest(path, ""); got != "what does this do?" {
 		t.Fatalf("got %q", got)
 	}
-	if got := lastRequest(""); got != "" {
+	if got := lastRequest("", ""); got != "" {
 		t.Fatalf("no transcript gave %q", got)
 	}
-	if got := lastRequest(path + ".missing"); got != "" {
+	if got := lastRequest(path+".missing", ""); got != "" {
 		t.Fatalf("a missing transcript gave %q", got)
 	}
 }
@@ -146,7 +146,7 @@ func TestALongTranscriptCostsNoMoreThanAShortOne(t *testing.T) {
 	f.Close()
 
 	start := time.Now()
-	req, title := lastRequest(path), agentTitle(turnEnd{host: event.HostClaudeCode, transcript: path})
+	req, title := lastRequest(path, ""), agentTitle(turnEnd{host: event.HostClaudeCode, transcript: path})
 	if took := time.Since(start); took > time.Second {
 		t.Fatalf("took %s", took)
 	}

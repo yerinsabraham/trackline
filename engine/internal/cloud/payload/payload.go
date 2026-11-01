@@ -34,6 +34,7 @@ type Batch struct {
 	V        int     `json:"v"`
 	Events   []Event `json:"events"`
 	Replies  []Reply `json:"replies,omitempty"`
+	Live     []Live  `json:"live,omitempty"`
 	Projects []Setup `json:"projects,omitempty"`
 }
 
@@ -63,6 +64,29 @@ type Reply struct {
 	Name  string `json:"name,omitempty"`
 	Model string `json:"model,omitempty"`
 }
+
+// Live is what is happening in a turn before it ends: a message just sent, what
+// the agent is saying as it works, or that it is waiting at the computer. A
+// session keeps only the latest of each, so this is a view and not a record.
+type Live struct {
+	ID      string  `json:"id"`
+	At      string  `json:"at"`
+	Project Project `json:"project"`
+	Host    string  `json:"host"`
+	Session string  `json:"session"`
+	Turn    string  `json:"turn,omitempty"`
+	Kind    string  `json:"kind"`
+	// Text goes only with the same consent as a request or a reply.
+	Text string `json:"text,omitempty"`
+}
+
+// The kinds of Live.
+const (
+	LivePrompt  = "prompt"
+	LiveSay     = "say"
+	LiveWaiting = "waiting"
+	LiveResumed = "resumed"
+)
 
 // Setup says which agents are wired into a project, so an agent that is set
 // up but has never reported can be shown as such instead of as nothing.
@@ -94,7 +118,8 @@ type Project struct {
 	Name string `json:"name"`
 }
 
-// Action is what kind of thing was done, and to which files. Never its content.
+// Action is what kind of thing was done, and to which files. Never a file's
+// content.
 type Action struct {
 	Type              string   `json:"type"`
 	Tool              string   `json:"tool,omitempty"`
@@ -102,6 +127,11 @@ type Action struct {
 	PathsUnknown      bool     `json:"pathsUnknown,omitempty"`
 	Installs          []string `json:"installs,omitempty"`
 	CommandUnderstood *bool    `json:"commandUnderstood,omitempty"`
+	// Detail is the agent's own line about a command, under the request's
+	// consent. Command is the command itself, only where the person turned
+	// that on at this computer: a command can hold a secret no filter knows.
+	Detail  string `json:"detail,omitempty"`
+	Command string `json:"command,omitempty"`
 }
 
 // Result is one check's conclusion. Evidence values are not carried: they
@@ -129,6 +159,7 @@ const (
 	maxResults, maxFindings, maxText, maxEvents = 12, 10, 300, 100
 	maxReply, maxReplyRequest, maxTitle         = 32000, 8000, 200
 	maxName, maxModel, maxHelper                = 64, 64, 64
+	maxDetail, maxCommand, maxLive              = 200, 2000, 8000
 )
 
 // Options are what Build needs beyond the event itself.
@@ -140,6 +171,8 @@ type Options struct {
 	ProjectID string
 	// ShareRequest is the user's answer at connect time.
 	ShareRequest bool
+	// ShareCommand is `trackline share commands on`, off unless asked for.
+	ShareCommand bool
 	// Request is what the person said, for a reply. An event has its own.
 	Request string
 	// Title is the name the agent gave the session, for a reply.
@@ -205,6 +238,10 @@ func Build(ev event.Event, results []verdict.Result, o Options) (Event, error) {
 	}
 	if o.ShareRequest {
 		out.Request = cut(redact(c.text(ev.Request)), maxRequest)
+		out.Action.Detail = cut(redact(c.text(ev.Action.Detail)), maxDetail)
+		if o.ShareCommand {
+			out.Action.Command = cut(redact(c.text(ev.Action.Command)), maxCommand)
+		}
 	}
 	for _, p := range ev.Action.Paths {
 		if rel, inside := c.rel(p); inside && len(out.Action.Paths) < maxPaths {
@@ -281,6 +318,34 @@ func BuildReply(host event.Host, session, turn, text string, at time.Time, o Opt
 		r.Title = cut(redact(c.text(o.Title)), maxTitle)
 	}
 	return r, nil
+}
+
+// BuildLive is one thing happening in a turn, cleaned like every other text.
+func BuildLive(host event.Host, session, turn, kind, text string, at time.Time, o Options) (Live, error) {
+	h, ok := hosts[host]
+	if !ok {
+		return Live{}, errors.New("this host does not upload: " + string(host))
+	}
+	if o.Root == "" || o.ProjectID == "" || o.ID == "" || session == "" {
+		return Live{}, errors.New("root, project id, id and session are required")
+	}
+	if o.Home == "" {
+		o.Home, _ = os.UserHomeDir()
+	}
+	c := cleaner{root: filepath.Clean(o.Root), home: o.Home}
+	l := Live{
+		ID:      cut(o.ID, maxID),
+		At:      cut(at.UTC().Format(time.RFC3339Nano), maxAt),
+		Project: Project{ID: cut(o.ProjectID, maxProjectID), Name: cut(filepath.Base(c.root), maxProjectName)},
+		Host:    h,
+		Session: cut(session, maxSession),
+		Turn:    cut(turn, maxSession),
+		Kind:    kind,
+	}
+	if o.ShareRequest {
+		l.Text = cut(redact(c.text(text)), maxLive)
+	}
+	return l, nil
 }
 
 // HostName is how the contract names a host, or "" for one that does not

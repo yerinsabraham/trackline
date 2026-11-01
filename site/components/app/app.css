@@ -792,6 +792,8 @@ a.metric:active { transform: scale(0.98); }
 .aterm:not([open]) .term-head { padding-bottom: 2px; }
 .aterm .term-head::-webkit-details-marker { display: none; }
 .aterm .term-line { font-size: 12px; color: var(--ink-2); }
+.aterm .term-line .x { white-space: normal; overflow-wrap: anywhere; }
+.term-code { display: block; margin-top: 2px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .aterm .term-line .t, .aterm .term-line .why { color: var(--muted); }
 .aterm .term-line .v { color: var(--ok-ink); }
 .aterm .term-line .v.warn { color: var(--amber-ink); }

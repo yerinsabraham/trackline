@@ -169,6 +169,24 @@ func OpenClaudeChats(list []byte) (map[string]bool, error) {
 	return open, nil
 }
 
+// ClaudeChatBusy reads the same list and says whether a chat is in a turn, which
+// is the only time a message left for it will arrive without a waiting hook.
+func ClaudeChatBusy(list []byte, session string) bool {
+	var sessions []struct {
+		SessionID string `json:"sessionId"`
+		Status    string `json:"status"`
+	}
+	if json.Unmarshal(list, &sessions) != nil {
+		return false
+	}
+	for _, s := range sessions {
+		if s.SessionID == session {
+			return s.Status == "busy"
+		}
+	}
+	return false
+}
+
 // Locked is whether a failed Codex run failed because another process holds
 // the conversation. Measured on 0.166: the lock refuses a second writer even
 // while the first sits idle.

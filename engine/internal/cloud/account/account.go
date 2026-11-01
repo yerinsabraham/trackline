@@ -52,6 +52,10 @@ type Project struct {
 	// messages and your agent's replies". Projects connected before replies
 	// existed have it off until connected again.
 	ShareReplies bool `json:"shareReplies,omitempty"`
+	// ShareCommands sends a command's full text. Off unless asked for, and only
+	// from this computer: a command can hold a secret no filter recognises, so
+	// the phone cannot be the place that lets it out.
+	ShareCommands bool `json:"shareCommands,omitempty"`
 	// Agents is the setup last sent to the account, so it is sent again only
 	// when it changes.
 	Agents []string `json:"agents,omitempty"`
@@ -158,6 +162,26 @@ func ConnectProject(root string, shareRequests bool) (Project, error) {
 	ps[root] = p
 	d, _ := Dir()
 	return p, write(filepath.Join(d, "projects.json"), ps)
+}
+
+// SetShareCommands records the choice for the project holding root, and returns
+// that project's folder.
+func SetShareCommands(root string, on bool) (string, error) {
+	found, p, ok := ProjectFor(root)
+	if !ok {
+		return "", errors.New(root + " is not connected. Run trackline connect there first")
+	}
+	ps, err := Projects()
+	if err != nil {
+		return "", err
+	}
+	p.ShareCommands = on
+	ps[found] = p
+	d, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return found, write(filepath.Join(d, "projects.json"), ps)
 }
 
 // PreviousShare is the sharing choice the person already made for their

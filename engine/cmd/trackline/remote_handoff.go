@@ -181,7 +181,8 @@ func chatOpen(name, binary, path, session string) (bool, error) {
 	if name != "claude" {
 		return false, nil
 	}
-	return claudeChatOpen(binary, path, session)
+	open, _, err := claudeChatOpen(binary, path, session)
+	return open, err
 }
 
 // settle reports once. An account that has no such job has settled it another

@@ -140,6 +140,7 @@ internal/config/        .trackline.json and the project's rules files
 internal/override/      approvals: once, or project-wide
 internal/judge/         the model check, off by default, never in the hook
 internal/hosts/         what each host can and cannot do, with evidence
+internal/relay/held/    a phone message waiting for a chat open on this computer
 internal/mcp/           the MCP server (advisory)
 internal/install/       wiring the hook into each host, and proving it fires
 internal/otlp/          OTLP trace exports, protobuf and JSON, decoded by hand

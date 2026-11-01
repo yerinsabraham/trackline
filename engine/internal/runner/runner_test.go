@@ -2,6 +2,7 @@ package runner_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"os"
 	"path/filepath"
@@ -386,5 +387,30 @@ func TestARemoteWriteOutsideTheProjectIsBlocked(t *testing.T) {
 	}
 	if d, _ := runner.Run(payload(root, "src/app.ts"), runner.Options{Root: root, Now: time.Now()}); d.Block {
 		t.Fatal("a write inside the project was blocked")
+	}
+}
+
+// A very long turn can push the request out of the part read for speed. Its
+// loss must cost time, never the request.
+func TestARequestFarBackIsStillFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintln(f, `{"type":"user","turnOrigin":"human","promptId":"p1","message":{"content":"rewrite the login page"}}`)
+	long := strings.Repeat("x", 1<<20)
+	for i := 0; i < 10; i++ {
+		fmt.Fprintf(f, `{"type":"assistant","message":{"content":%q}}`+"\n", long)
+	}
+	f.Close()
+	raw := fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","prompt_id":"p1","tool_name":"Bash","cwd":%q,"transcript_path":%q,"tool_input":{"command":"ls"}}`, dir, path)
+	d, err := runner.Run([]byte(raw), runner.Options{Host: runner.HostClaude, Root: dir, Now: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Report.Event.Request != "rewrite the login page" {
+		t.Fatalf("request lost: %q", d.Report.Event.Request)
 	}
 }

@@ -71,6 +71,7 @@ func main() {
 	host := flag.String("host", runner.HostAuto, "claude, codex, cursor, or auto to detect")
 	root := flag.String("root", "", "project root (defaults to the event's cwd)")
 	logPath := flag.String("log", "", "findings log (defaults to <root>/.trackline/findings.jsonl)")
+	wait := flag.Bool("wait", false, "wait in the background for a message from the phone")
 	flag.Parse()
 	resolved = *host
 
@@ -81,6 +82,17 @@ func main() {
 	}
 	if resolved == runner.HostAuto {
 		resolved = runner.Detect(raw)
+	}
+
+	if *wait {
+		waitForMessage(raw)
+		os.Exit(exitAllow)
+	}
+	// Not actions, so nothing to judge. Handled for every host because Cursor
+	// also runs Claude-format hooks.
+	if l, ok := parseLive(raw); ok {
+		queueLive(*root, resolved, l)
+		allow(resolved)
 	}
 
 	// The end of a turn: nothing to judge, only the agent's reply to keep.
@@ -220,6 +232,7 @@ func queue(root string, d runner.Decision) {
 		Root:         projectRoot,
 		ProjectID:    p.ID,
 		ShareRequest: p.ShareRequests,
+		ShareCommand: p.ShareCommands,
 		Mode:         string(d.Mode),
 		Blocked:      d.Block,
 		ID:           outbox.NewID(),
@@ -228,10 +241,14 @@ func queue(root string, d runner.Decision) {
 		return
 	}
 	box := outbox.Box{Dir: dir}
-	if box.Put(ev) != nil || !box.NeedsSender(time.Now()) {
+	if box.Put(ev) != nil {
 		return
 	}
-	startSync()
+	e := d.Report.Event
+	queueSaid(box, dir, projectRoot, p, e.Host, e.SessionID, e.TurnID, e.TranscriptPath, e.Helper)
+	if box.NeedsSender(time.Now()) {
+		startSync()
+	}
 }
 
 // turnEnd is what the hosts send when the agent has finished answering.
@@ -325,7 +342,7 @@ func queueReply(root string, t turnEnd) {
 	o.Model = lastModel(readTail(t.transcript))
 	o.Name = agentName(t, dir)
 	if p.ShareRequests {
-		o.Request = lastRequest(t.transcript)
+		o.Request = lastRequest(t.transcript, t.turn)
 		o.Title = agentTitle(t)
 	}
 	r, err := payload.BuildReply(t.host, t.session, t.turn, t.text, time.Now(), o)
@@ -405,7 +422,7 @@ func agentName(t turnEnd, dir string) string {
 // reply. A turn long enough to push its request out of this has actions, and
 // they carry the request themselves. A line the reader cannot finish does not
 // matter either: whatever came before it still counts.
-func lastRequest(path string) string {
+func lastRequest(path, turn string) string {
 	if path == "" {
 		return ""
 	}
@@ -414,6 +431,11 @@ func lastRequest(path string) string {
 	r := intent.Reader{Path: path, Tail: tailBytes, Peers: intent.LoadPeers(dir)}
 	_ = r.Read(&in)
 	t, _ := in.Latest()
+	// A turn nobody asked for, like one started by a phone message reaching an
+	// open chat, would otherwise repeat the last thing the person typed.
+	if t.ID != "" && turn != "" && t.ID != turn {
+		return ""
+	}
 	return t.Text
 }
 

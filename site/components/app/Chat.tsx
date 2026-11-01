@@ -119,7 +119,7 @@ export function ResumeHere({ agent, session }: { agent: string | null; session: 
   );
 }
 
-export type Line = { key: string; time?: string; verb: string; text: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
+export type Line = { key: string; time?: string; verb: string; text: string; code?: string; tone?: "ok" | "warn" | "block" | "dim"; why?: string };
 
 export function MyMessage({ text, note, images, actions }: { text: string; note?: string; images?: string[]; actions?: ReactNode }) {
   return (
@@ -167,7 +167,7 @@ export function Activity({ lines, live, helpers = [] }: { lines: Line[]; live?: 
         <div key={l.key} className="term-line">
           {l.time && <span className="t">{l.time}</span>}
           <span className={`v ${l.tone ?? ""}`}>{l.verb}</span>
-          <span className="x">{l.text}{l.why && <span className="why"> · {l.why}</span>}</span>
+          <span className="x">{l.text}{l.why && <span className="why"> · {l.why}</span>}{l.code && <code className="term-code">{l.code}</code>}</span>
         </div>
       ))}
       {live && (

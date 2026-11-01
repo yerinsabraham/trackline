@@ -44,6 +44,7 @@ var all = map[string]Capabilities{
 		Evidence:           "live sessions; the agent corrected itself 11 times out of 11 when blocked",
 		Limits: []string{
 			"ask mode cannot prompt you directly: the agent is stopped and told to ask you",
+			"a phone message reaches an open chat only after that chat has finished a turn with trackline installed",
 		},
 	},
 	"codex": {

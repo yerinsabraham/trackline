@@ -26,20 +26,20 @@ const VERB: Record<string, string> = {
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 function toLine(e: FeedEvent): Line {
-  const target = e.installs.length ? `install ${e.installs.join(", ")}` : e.paths.length ? e.paths.slice(0, 3).join(", ") + (e.paths.length > 3 ? ` +${e.paths.length - 3}` : "") : e.tool ?? "";
+  const target = e.detail || (e.installs.length ? `install ${e.installs.join(", ")}` : e.paths.length ? e.paths.slice(0, 3).join(", ") + (e.paths.length > 3 ? ` +${e.paths.length - 3}` : "") : e.action === "run-command" ? "a command" : e.tool ?? "");
   const tone = e.blocked || e.severity === "block" ? "block" : e.severity === "warn" ? "warn" : undefined;
   return {
-    key: e.id, time: time(e.at), text: target,
+    key: e.id, time: time(e.at), text: target, code: e.command ?? undefined,
     verb: tone === "block" ? "Blocked" : e.action === "call-tool" && e.tool ? e.tool : VERB[e.action] ?? "Act",
     tone, why: tone ? e.findings[0]?.summary : undefined,
   };
 }
 
-type Turn = { key: string; request: string | null; events: FeedEvent[]; replies: Reply[] };
+type Turn = { key: string; request: string | null; events: FeedEvent[]; replies: Reply[]; at?: string };
 
 // A reply carries more of the request than an action can.
 const fuller = (a: string | null, b?: string | null) => ((b?.length ?? 0) > (a?.length ?? 0) ? b ?? null : a);
-const startOf = (t: Turn) => +new Date(t.events[0]?.at ?? t.replies[0].at);
+const startOf = (t: Turn) => +new Date(t.events[0]?.at ?? t.replies[0]?.at ?? t.at!);
 
 /** Exported for its test: this is the rule that keeps a conversation whole. */
 export function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
@@ -66,6 +66,19 @@ export function turns(events: FeedEvent[], replies: Reply[]): Turn[] {
   return out.sort((a, b) => startOf(a) - startOf(b));
 }
 
+/**
+ * The message just sent. It joins its turn, or starts one when no step has
+ * carried it yet. One older than everything shown belongs to a page not loaded.
+ */
+export function withLive(list: Turn[], live: SessionView["live"]): Turn[] {
+  if (!live?.request || !live.at) return list;
+  const own = live.turn ? list.find((t) => t.key === live.turn) : undefined;
+  if (own) return list.map((t) => (t === own ? { ...t, request: fuller(t.request, live.request) } : t));
+  const last = list[list.length - 1];
+  if (last && +new Date(live.at) <= Math.max(startOf(last), ...last.replies.map((r) => +new Date(r.at)))) return list;
+  return [...list, { key: live.turn ?? `live-${live.at}`, request: live.request, events: [], replies: [], at: live.at }];
+}
+
 type Sent = { job: string; text: string; createdAt: string };
 
 function dayOf(at: number): string {
@@ -84,6 +97,35 @@ function turnOf(list: Turn[], text: string | null, createdAt: string) {
   if (!text) return undefined;
   const from = +new Date(createdAt) - SKEW_MS;
   return list.find((t) => startOf(t) >= from && (t.request === text || !!t.request?.startsWith(`${text}\n`)));
+}
+
+/**
+ * Tells the server this chat is in front of you, so it does not buzz as well.
+ * Only while the page is in use: a laptop left on this chat should not silence
+ * the phone in your pocket.
+ */
+const ACTIVE_MS = 2 * 60_000;
+function useViewing(id: string | null) {
+  useEffect(() => {
+    if (!id) return;
+    const say = (on: boolean) => { api(`/app/sessions/${encodeURIComponent(id)}/viewing`, { method: "POST", body: JSON.stringify({ on }) }).catch(() => {}); };
+    let touched = Date.now();
+    const touch = () => { touched = Date.now(); };
+    const inUse = () => !document.hidden && document.hasFocus() && Date.now() - touched < ACTIVE_MS;
+    const tick = () => { if (inUse()) say(true); };
+    const change = () => { if (document.hidden) say(false); else { touch(); tick(); } };
+    const seen = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+    seen.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    document.addEventListener("visibilitychange", change);
+    tick();
+    const timer = setInterval(tick, 15_000);
+    return () => {
+      clearInterval(timer);
+      seen.forEach((e) => window.removeEventListener(e, touch));
+      document.removeEventListener("visibilitychange", change);
+      say(false);
+    };
+  }, [id]);
 }
 
 export default function Session() {
@@ -138,7 +180,7 @@ export default function Session() {
           const first = r.replies.map((x) => +new Date(x.at)).filter((t) => seen !== null && t > seen).sort((a, b) => a - b)[0];
           if (first) setUnreadAt(first);
         } else {
-          setView((v) => (v ? { ...v, session: r.session, jobs: r.jobs ?? v.jobs, continueWith: r.continueWith === undefined ? v.continueWith : r.continueWith } : r));
+          setView((v) => (v ? { ...v, session: r.session, live: r.live ?? v.live, jobs: r.jobs ?? v.jobs, continueWith: r.continueWith === undefined ? v.continueWith : r.continueWith } : r));
         }
         cursor.current = r.cursor;
         if (r.events.length) setEvents((old) => [...new Map([...old, ...r.events].map((e) => [e.id, e])).values()]);
@@ -211,7 +253,7 @@ export default function Session() {
   const cont = view?.continueWith ?? null;
   const siblings = (projects ?? []).flatMap((p) => p.sessions.map((x) => ({ ...x, project: p.name })))
     .filter((x) => !s || x.host === s.host).sort((a, b) => +new Date(b.lastAt) - +new Date(a.lastAt));
-  const list = turns(events, replies);
+  const list = withLive(turns(events, replies), view?.live);
   // From the server, so every device agrees. A message sent here counts as
   // queued until the next poll has it.
   const known = view?.jobs ?? [];
@@ -292,6 +334,7 @@ export default function Session() {
   const addToTeam = () => { if (s) api(`/app/sessions/${encodeURIComponent(s.id)}/team`, { method: "POST", body: "{}" }).then(refresh).catch(() => {}); };
   const name_ = s?.agentName ?? agentName(s?.host);
   const who_ = titled(name_, s?.agentTitle);
+  useViewing(id);
   const atDesk = !!s && known.length === 0 && Date.now() - +new Date(s.lastAt) < 30 * 60_000;
   const lastTurn = list[list.length - 1]?.key;
   const jobFor = new Map(jobs.flatMap((j) => { const t = turnOf(list, textOf(j), j.createdAt); return t ? [[t.key, j] as const] : []; }));
@@ -353,11 +396,11 @@ export default function Session() {
                 return (
                   <div key={j.id} style={{ display: "contents" }}>
                     {divider}
-                    <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" ? undefined : `${cont?.machine.name ?? "Computer"} · ${jobState(j)}`} />
+                    <MyMessage text={text ?? "A message you sent"} images={previewsFor(j.id)} note={j.status === "done" || (again && j.code === "in-use") ? undefined : `${cont?.machine.name ?? "Computer"} · ${jobState(j)}`} />
                     {j.permission && <Finding tone="block" title="Action needed on Mac">{j.permission}</Finding>}
                     {again && (
                       <Finding tone="warn" title="Not delivered" actions={<SendAgain onSend={() => deliver(text, imagesFor(j.id))} />}>
-                        {j.status === "expired" ? `${cont?.machine.name ?? "Your computer"} was offline, so this never reached it. Wake it, then send this again.` : j.code === "in-use" ? "This chat is open on your computer, so this was not sent. Close it there and send this again, or start a new chat." : "An agent was already working in this project, so this never started."}
+                        {j.status === "expired" ? `${cont?.machine.name ?? "Your computer"} was offline, so this never reached it. Wake it, then send this again.` : j.code === "in-use" ? `${(j.reason ?? "this chat is open on your computer. Close it there and send again, or start a new task").replace(/^./, (c) => c.toUpperCase())}.` : "An agent was already working in this project, so this never started."}
                       </Finding>
                     )}
                   </div>
@@ -371,7 +414,7 @@ export default function Session() {
                 <div key={t.key} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {divider}
                   {firstNew === t.key && <div ref={line} className="new-line">New messages</div>}
-                  {t.request && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Computer"} · ${jobState(job)}` : undefined} />}
+                  {requestLabel(t.request) && <MyMessage text={requestLabel(t.request)!} images={job ? previewsFor(job.id) : undefined} note={job && active(job.status) ? `${cont?.machine.name ?? "Computer"} · ${jobState(job)}` : undefined} />}
                   {job?.permission && <Finding tone="block" title="Action needed on Mac">{job.permission}</Finding>}
                   <Activity lines={t.events.map(toLine)} live={last && working && !t.replies.length} helpers={[...new Set(t.events.flatMap((e) => (e.helper ? [e.helper] : [])))]} />
                   {stops.slice(0, 3).map((e) => {
@@ -399,6 +442,8 @@ export default function Session() {
                 </div>
               );
             })}
+            {view?.live?.saying && !running && <AgentReply host={s?.host ?? null} text={view.live.saying} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
+            {view?.live?.waiting && <Finding tone="warn" title="Waiting for you at your computer">{view.live.waiting.what ?? `${who_} needs your permission to go on.`}</Finding>}
             {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
             {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
             {held && (

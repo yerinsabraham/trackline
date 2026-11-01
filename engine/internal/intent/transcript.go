@@ -2,6 +2,7 @@ package intent
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -33,9 +34,14 @@ type Reader struct {
 	// Tail, when set, reads only about this many bytes from the end. The first
 	// read then costs the same however long the session has grown.
 	Tail int64
+	// Quick skips every line that cannot hold a request, without parsing it. The
+	// counts behind Unrecognised and ReadAnything then mean nothing, so a caller
+	// that finds no request reads again without it.
+	Quick bool
 
 	offset int64
 	size   int64
+	cut    bool
 
 	sawEntries   int
 	sawAssistant int
@@ -88,6 +94,26 @@ func LoadPeers(dir string) map[string]bool {
 	return peers
 }
 
+// requestMarks are what every line holding a request has, on each host. A real
+// session spends nearly all of its bytes on tool results, and parsing those is
+// what made reading a transcript slow.
+var requestMarks = [][]byte{
+	[]byte(`"turnOrigin":"human"`), []byte(`"turnOrigin":"sdk"`), []byte(`"kind":"human"`),
+	[]byte(`"user_message"`), []byte(`"UserMessage"`), []byte(`"task_started"`), []byte(`<user_query>`),
+}
+
+func mayHoldRequest(line []byte) bool {
+	for _, m := range requestMarks {
+		if bytes.Contains(line, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// Cut reports that a Tail left the start of the transcript unread.
+func (r *Reader) Cut() bool { return r.cut }
+
 // Unrecognised reports a transcript with lines in it, none of which were in a
 // shape this reader knows.
 //
@@ -127,8 +153,13 @@ type claudeEntry struct {
 	Origin     struct {
 		Kind string `json:"kind"`
 	} `json:"origin"`
-	PromptID  string `json:"promptId"`
-	Timestamp string `json:"timestamp"`
+	// IsCompactSummary marks the summary Claude Code writes for itself when
+	// its context fills. It is saved as a human turn in the same prompt as the
+	// person's real message, and after it, so without this it replaced what
+	// they asked for (seen in a real session, 2026-11-01).
+	IsCompactSummary bool   `json:"isCompactSummary"`
+	PromptID         string `json:"promptId"`
+	Timestamp        string `json:"timestamp"`
 	// Payload is Codex's. Its lines are {timestamp, type, payload}.
 	Payload json.RawMessage `json:"payload"`
 	Message struct {
@@ -148,7 +179,7 @@ type claudeEntry struct {
 var humanOrigins = map[string]bool{"human": true, "sdk": true}
 
 func (e claudeEntry) isHumanTurn() bool {
-	if e.Type != "user" {
+	if e.Type != "user" || e.IsCompactSummary {
 		return false
 	}
 	return humanOrigins[e.TurnOrigin] || e.Origin.Kind == "human"
@@ -169,6 +200,11 @@ type codexLine struct {
 	TurnID  string `json:"turn_id"`
 	Message string `json:"message"`
 	Role    string `json:"role"`
+	// Content is an assistant message's words, on a response_item.
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
 	// Item is the newer shape. codex-cli 0.155 in exec mode writes no
 	// user_message event at all; the request arrives as an item_completed
 	// whose item is a UserMessage. Only the interactive sessions captured in
@@ -266,6 +302,48 @@ func (e claudeEntry) text() string {
 	return out
 }
 
+// LastSaid is what the agent last said since the person's latest message, or
+// "" if it has said nothing yet. It reads backwards from the end of a transcript
+// so a chat can show the agent's words while it is still working.
+func LastSaid(tail []byte) string {
+	lines := bytes.Split(tail, []byte{'\n'})
+	for i := len(lines) - 1; i >= 0; i-- {
+		var e claudeEntry
+		if len(lines[i]) == 0 || json.Unmarshal(lines[i], &e) != nil {
+			continue
+		}
+		if c, ok := e.codex(); ok {
+			if _, asked := c.request(); asked && e.Type == "event_msg" {
+				return ""
+			}
+			if e.Type == "response_item" && c.Type == "message" && c.Role == "assistant" {
+				var said []string
+				for _, p := range c.Content {
+					if p.Type == "output_text" && strings.TrimSpace(p.Text) != "" {
+						said = append(said, strings.TrimSpace(p.Text))
+					}
+				}
+				if len(said) > 0 {
+					return strings.Join(said, "\n")
+				}
+			}
+			continue
+		}
+		if e.isHumanTurn() {
+			return ""
+		}
+		if _, ok := e.cursorRequest(); ok {
+			return ""
+		}
+		if e.isAssistant() {
+			if t := strings.TrimSpace(e.text()); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
 // Read consumes everything appended since the last call and adds any human
 // turns to in.
 //
@@ -293,6 +371,7 @@ func (r *Reader) Read(in *Intent) error {
 
 	if r.Tail > 0 && r.offset == 0 && st.Size() > r.Tail {
 		r.offset = st.Size() - r.Tail
+		r.cut = true
 	}
 	if r.offset > 0 {
 		if _, err := f.Seek(r.offset, io.SeekStart); err != nil {
@@ -316,6 +395,9 @@ func (r *Reader) Read(in *Intent) error {
 	for sc.Scan() {
 		line := sc.Bytes()
 		consumed += int64(len(line)) + 1 // +1 for the newline the scanner strips
+		if r.Quick && !mayHoldRequest(line) {
+			continue
+		}
 
 		var e claudeEntry
 		if json.Unmarshal(line, &e) != nil {

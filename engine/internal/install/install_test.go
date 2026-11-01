@@ -122,7 +122,7 @@ func TestAnOlderInstallIsMovedNotDuplicated(t *testing.T) {
 	}
 	b, _ := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	s := string(b)
-	if n := strings.Count(s, "trackline-hook"); n != 2 { // one PreToolUse, one Stop
+	if n := strings.Count(s, "trackline-hook"); n != 6 { // one per event, and the waiter
 		t.Errorf("%d trackline hooks, want one per event:\n%s", n, s)
 	}
 	if strings.Contains(s, "/usr/local/bin/trackline-hook") || strings.Contains(s, "/opt/old") {
@@ -134,5 +134,46 @@ func TestAnOlderInstallIsMovedNotDuplicated(t *testing.T) {
 	res, _ := install.Install(install.Claude, root, "/new/trackline-hook")
 	if !res.AlreadyPresent {
 		t.Error("a second install changed something")
+	}
+}
+
+// A second init must change nothing, and the hook that can wake a chat must
+// not be mistaken for a duplicate of the one that takes the reply.
+func TestTheWaiterIsKeptAndNeverDoubled(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 2; i++ {
+		res, err := install.Install(install.Claude, root, "/bin/trackline-hook")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 && !res.AlreadyPresent {
+			t.Error("a second install changed the file")
+		}
+	}
+	if _, err := install.Install(install.Claude, root, "/new/trackline-hook"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
+	s := string(b)
+	if n := strings.Count(s, "/new/trackline-hook --wait"); n != 1 {
+		t.Errorf("%d waiters, want one:\n%s", n, s)
+	}
+	if strings.Contains(s, "/bin/trackline-hook") {
+		t.Errorf("an old path survived:\n%s", s)
+	}
+	if n := strings.Count(s, "asyncRewake"); n != 1 {
+		t.Errorf("only the waiter runs in the background:\n%s", s)
+	}
+}
+
+func TestOnlyClaudeCodeGetsTheWaiter(t *testing.T) {
+	root := t.TempDir()
+	if _, err := install.Install(install.Codex, root, "/bin/trackline-hook"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, ".codex", "hooks.json"))
+	s := string(b)
+	if strings.Contains(s, "--wait") || !strings.Contains(s, "PermissionRequest") || strings.Contains(s, "Notification") {
+		t.Errorf("wrong events for Codex:\n%s", s)
 	}
 }

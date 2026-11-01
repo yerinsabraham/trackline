@@ -516,7 +516,7 @@ test("a helper is one quiet line", async ({ page, context }) => {
 
 test("a message refused because the chat is open says so and can go again", async ({ page, context }) => {
   await remembered(page, "j1", "carry on");
-  await fakeAccount(context, { jobs: [job("j1", "refused", { code: "in-use", reason: "open" })] });
+  await fakeAccount(context, { jobs: [job("j1", "refused", { code: "in-use", reason: "this chat is open on your computer. Close it there and send again, or start a new task" })] });
   await page.goto("/app/session?id=s1");
   await expect(page.getByText("This chat is open on your computer")).toBeVisible();
 });
@@ -632,4 +632,50 @@ test("the tags around pasted text never show", async ({ page, context }) => {
   await page.goto("/app/sessions");
   await expect(page.locator(".chat-row-title").first()).toHaveText("Do you know FIFA Street?");
   await expect(page.getByText("pasted_content")).toHaveCount(0);
+});
+
+test("a message from the computer shows at once, with what the agent is saying", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  fake.live = { turn: "just-sent", request: "Make sure everything aligns before you push", at: new Date().toISOString(), saying: "Checking the phone menu first.", sayingAt: new Date().toISOString(), waiting: null };
+  await openChat(page);
+  await expect(page.getByText("Make sure everything aligns before you push")).toBeInViewport();
+  await expect(page.getByText("Checking the phone menu first.")).toBeInViewport();
+});
+
+test("a chat says when the agent is waiting at the computer", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  fake.live = { turn: null, request: null, at: null, saying: null, sayingAt: null, waiting: { what: "Claude needs your permission to use Bash", at: new Date().toISOString() } };
+  await openChat(page);
+  await expect(page.getByText("Waiting for you at your computer")).toBeInViewport();
+  await expect(page.getByText("Claude needs your permission to use Bash")).toBeVisible();
+});
+
+test("a memory summary stored as your message is not shown", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  fake.replies = [{ id: "r", at: new Date().toISOString(), turn: "t", text: "Done.", request: "This session is being continued from a previous conversation that ran out of context." }];
+  fake.events = [];
+  await openChat(page);
+  await expect(page.getByText("Done.")).toBeVisible();
+  await expect(page.getByText("being continued from a previous")).toHaveCount(0);
+});
+
+test("a step shows the agent's own line, and the command where that is on", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  const at = new Date().toISOString();
+  const step = { id: "e", at, turn: "t", request: "Check it", action: "run-command", tool: "Bash", paths: [], installs: [], pathsUnknown: false, commandUnderstood: true, blocked: false, severity: null, checked: true, findings: [], unmeasured: [], detail: "Find the minimap", command: "grep -rn minimap tools" };
+  fake.events = [step, { ...step, id: "e2", detail: null, command: null }];
+  fake.replies = [];
+  await page.goto("/app/session?id=s1");
+  await page.locator(".aterm").first().waitFor();
+  await page.locator(".term-head").first().click();
+  await expect(page.getByText("Find the minimap")).toBeVisible();
+  await expect(page.getByText("grep -rn minimap tools")).toBeVisible();
+  await expect(page.getByText("a command", { exact: true })).toBeVisible();
+  await expect(page.locator(".aterm")).not.toContainText("Bash");
+});
+
+test("an open chat tells the server it is in front of you", async ({ page, context }) => {
+  const fake = await fakeAccount(context);
+  await openChat(page);
+  await expect.poll(() => fake.viewing.includes(true)).toBe(true);
 });

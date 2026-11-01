@@ -8,13 +8,15 @@ export type Reply = { id?: string; at: string; turn: string | null; text: string
 /** Who a chat is with. agentId is set once the agent is on the team. */
 export type Who = { agentName?: string; agentTitle?: string | null; agentId?: string | null; onTeam?: boolean; model?: string | null };
 export type Position = { title: string; description: string | null };
-export type SessionSummary = Status & Who & { id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
+export type SessionSummary = Status & Who & { waiting?: boolean; id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
 export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
 
 export type Finding = { check: string; severity: string; summary: string; target?: string; suggestion?: string };
 export type FeedEvent = {
   id: string; at: string; turn: string | null; request: string | null; helper?: string | null;
+  /** The agent's own line about a command, and the command where that is on. */
+  detail?: string | null; command?: string | null;
   action: string; tool: string | null; paths: string[]; installs: string[];
   pathsUnknown: boolean; commandUnderstood: boolean | null; blocked: boolean;
   severity: "block" | "warn" | null; checked: boolean;
@@ -33,6 +35,8 @@ export type SessionView = {
   continueWith?: Continuation | null;
   /** Messages sent to this conversation from any device, oldest first. */
   jobs?: SessionJob[];
+  /** What has happened in this turn so far, which nothing else has carried yet. */
+  live?: { turn: string | null; request: string | null; at: string | null; saying: string | null; sayingAt: string | null; waiting: { what: string | null; at: string } | null };
 };
 
 export type SessionJob = {
@@ -149,14 +153,18 @@ export const WAKE: Record<string, { text: string; copy?: string }> = {
 /** Claude Code wraps pasted text in tags of its own, which are not the person's words. */
 export const withoutPasteTags = (text: string) => text.replace(/<\\?\/?\\?pasted_content\b[^>]*>/g, "").trim();
 
+/** The summary Claude Code writes for itself. Older chats stored it as your message. */
+const isSummary = (text: string) => text.startsWith("This session is being continued from a previous conversation");
+
 /** A session's name: what is known of it, or where and when it ran. */
 export function sessionName(s: { title?: string | null; host: string; startedAt: string }, agent: string, project?: string): string {
-  return (s.title && withoutPasteTags(s.title)) || [agent, project, new Date(s.startedAt).toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
+  return (s.title && !isSummary(s.title) && withoutPasteTags(s.title)) || [agent, project, new Date(s.startedAt).toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · ");
 }
 
 export function requestLabel(text: string | null): string | null {
   if (!text) return text;
   text = withoutPasteTags(text);
+  if (isSummary(text)) return null;
   const allow = text.match(/^You were stopped by trackline \([^:]+: (.+?)\)\. The person you are working with has now approved/);
   if (allow) return `Allowed once from your phone: ${allow[1]}`;
   const deny = text.match(/^The person you are working with has decided, from their phone, to keep this blocked \([^:]+: (.+?)\)\./);

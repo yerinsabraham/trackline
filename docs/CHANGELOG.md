@@ -3,6 +3,32 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.14.0 · 2026-11-01
+
+Run `trackline init` in each project to pick up the new hooks, then
+`trackline remote enable` there. Codex asks you to trust its hooks again.
+
+- **Your message stays yours.** When an agent's memory filled up, the summary it
+  writes for itself replaced your last message in the chat, and the checks read
+  it as your request. They now ignore it, and old chats hide it.
+- **A chat keeps up with the computer.** A message you send in Claude Code or
+  Codex shows as soon as you send it, and you can read what the agent is saying
+  while it works, not only when it finishes.
+- **Steps say what they do.** A command now shows the agent's own line about it
+  where Claude Code writes one, instead of "Bash". The full command stays on your
+  computer unless you run `trackline share commands on` in a project.
+- **Waiting for you.** When an agent stops on a permission prompt, the chat says
+  so and your phone tells you.
+- **Quiet while you are looking.** A chat you have open does not also send a
+  notification.
+- **A phone message can reach a Claude Code chat that is open.** Run
+  `trackline remote enable --open-chats`. The message waits for the agent's turn
+  to end, or wakes the chat if it is idle, and runs with that chat's own
+  permissions. It cannot reach a chat that has not finished a turn since this
+  was installed.
+- **Long sessions stopped slowing every step.** The hook read the whole session
+  log before each action, about a second on a 178 MB log. It now reads the end.
+
 ## 0.13.0 · 2026-10-31
 
 - **Agents are individuals.** Every reply and chat shows its agent's name in

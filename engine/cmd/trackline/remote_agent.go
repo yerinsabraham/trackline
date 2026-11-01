@@ -21,12 +21,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/remote"
 	"github.com/yerinsabraham/trackline/engine/internal/config"
 	"github.com/yerinsabraham/trackline/engine/internal/install"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
 	"github.com/yerinsabraham/trackline/engine/internal/relay"
 	"github.com/yerinsabraham/trackline/engine/internal/relay/agent"
+	"github.com/yerinsabraham/trackline/engine/internal/relay/held"
 )
 
 // Running a prompt: start the agent in the project, send what it does to
@@ -209,12 +211,17 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 	if j.Session != "" && j.Agent == "claude" {
 		// Measured: a second process on an open chat reaches its file but never
 		// its screen, and the two go on to fork. Not knowing counts as open.
-		switch open, err := claudeChatOpen(binary, s.Path, j.Session); {
+		switch open, busy, err := claudeChatOpen(binary, s.Path, j.Session); {
 		case err != nil:
 			refuse("in-use", "the laptop could not tell whether this chat is open. Update Claude Code, or close the chat and send again")
 			return
 		case open:
-			refuse("in-use", "this chat is open on your computer. Close it there and send again, or start a new task")
+			if reason := holdForOpenChat(j, busy, s.OpenChats); reason != "" {
+				refuse("in-use", reason)
+				return
+			}
+			logf("job %s left for the open chat %s", d.ID, j.Session)
+			client.JobResult(d.ID, remote.Result{Status: "done", Code: "queued", Output: "Sent to your open chat.", Session: j.Session})
 			return
 		}
 	}
@@ -302,17 +309,49 @@ func startPrompt(client remote.Client, d remote.Delivery, got relay.Accepted, r 
 }
 
 // claudeChatOpen asks Claude Code whether a session is open somewhere.
-func claudeChatOpen(binary, path, session string) (bool, error) {
+func claudeChatOpen(binary, path, session string) (open, busy bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, "agents", "--json")
 	cmd.Env = agentEnv(os.Environ(), path, "", "", "")
 	list, err := cmd.Output()
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	open, err := agent.OpenClaudeChats(list)
-	return open[session], err
+	chats, err := agent.OpenClaudeChats(list)
+	return chats[session], agent.ClaudeChatBusy(list, session), err
+}
+
+// holdForOpenChat leaves a message for a chat open on this laptop, and says why
+// when it cannot. It needs the same yes as joining a Codex chat, since the chat
+// keeps its own permissions. An idle chat with no hook waiting, like one open
+// since before this was installed, would hold the message with nothing to take
+// it, so it is refused while the person can still do something about it.
+func holdForOpenChat(j relay.Job, busy, allowed bool) string {
+	const open = "this chat is open on your computer. Close it there and send again, or start a new task"
+	if !allowed {
+		return open
+	}
+	if j.Kind != "prompt" || len(j.Images) > 0 {
+		return "this chat is open on your computer, and only a plain message can join it. Close it there and send again"
+	}
+	dir, err := account.Dir()
+	if err != nil {
+		return open
+	}
+	if !busy && !held.Waiting(dir, j.Session, time.Now()) {
+		return "this chat is open on your computer and cannot be reached yet. Send it one message there, or close it, then send again"
+	}
+	if err := held.Put(dir, j.Session, phoneText(j.Text)); err != nil {
+		return "the laptop could not keep the message: " + err.Error()
+	}
+	return ""
+}
+
+// phoneText says where the words came from. They arrive through a hook, and
+// the agent should read them as the person's and not as a failing check.
+func phoneText(text string) string {
+	return "The person you are working with sent this from their phone. Treat it as their next message:\n\n" + text
 }
 
 // joinOpenChat hands a message to the Codex process holding its chat. Only a

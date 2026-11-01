@@ -20,7 +20,7 @@ export default function Privacy() {
         <ul>
           <li>The trackline command-line tool runs on your machine and sends nothing anywhere unless you connect it to an account.</li>
           <li>This website sets no tracking cookies and runs no analytics.</li>
-          <li>If you connect an account, trackline sends what it <em>noticed</em> about your agent&apos;s actions. Never your code, never your file contents, never the text of your commands.</li>
+          <li>If you connect an account, trackline sends what it <em>noticed</em> about your agent&apos;s actions. Never your code or your file contents, and the text of your commands only if you turn that on at your computer.</li>
         </ul>
 
         <h2>Using trackline without an account</h2>
@@ -44,12 +44,12 @@ export default function Privacy() {
           <thead><tr><th>Sent</th><th>Never sent</th></tr></thead>
           <tbody>
             <tr><td>the project&apos;s folder name, and a random id for it</td><td>file contents, diffs or patches</td></tr>
-            <tr><td>which agent, and a session id</td><td>the text of shell commands</td></tr>
+            <tr><td>which agent, and a session id</td><td>the text of shell commands, unless you turn it on</td></tr>
             <tr><td>the kind of each action: edit, write, delete, read, command, tool call</td><td>tool arguments</td></tr>
             <tr><td>file paths, relative to the project</td><td>anything outside the project</td></tr>
             <tr><td>names of packages installed</td><td>environment variables</td></tr>
             <tr><td>what each check concluded, and why</td><td></td></tr>
-            <tr><td>what you asked your agent, if you agree when connecting</td><td></td></tr>
+            <tr><td>what you asked your agent, its replies, what it says as it works and its one-line note on each command, if you agree when connecting</td><td></td></tr>
           </tbody>
         </table>
         <p>
@@ -59,6 +59,11 @@ export default function Privacy() {
         <p>
           <strong>What you ask your agent</strong> is sent only if you say yes when connecting, and you can turn it off at any time
           with <code>trackline connect --no-requests</code>.
+        </p>
+        <p>
+          <strong>The text of your commands</strong> stays on your computer unless you run <code>trackline share commands on</code>
+          there, for one project at a time. Known key formats are removed first, but a password typed into a command may not be
+          recognised, so it cannot be turned on from the website or your phone.
         </p>
 
         <h2>Production traces</h2>

@@ -419,3 +419,41 @@ func TestAReplyPastTheLimitSaysItWasCut(t *testing.T) {
 		t.Fatalf("short cut=%v, long cut=%v at %d bytes", short.Cut, long.Cut, len(long.Text))
 	}
 }
+
+func TestACommandLeavesOnlyWhenTurnedOn(t *testing.T) {
+	ev := event.Event{Host: event.HostClaudeCode, SessionID: "s", At: time.Now(), Request: "go",
+		Action: event.Action{Type: event.ActionRunCommand, Command: "curl -H 'x: ghp_abcdefghijklmnopqrstuvwxyz1234' /Users/me/proj/a", Detail: "Check the API"}}
+	o := payload.Options{Root: "/Users/me/proj", ProjectID: "p", ID: "e", Mode: "warn", Home: "/Users/me"}
+
+	got, err := payload.Build(ev, nil, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action.Detail != "" || got.Action.Command != "" {
+		t.Fatalf("nothing was agreed, so nothing leaves: %+v", got.Action)
+	}
+
+	o.ShareRequest = true
+	got, _ = payload.Build(ev, nil, o)
+	if got.Action.Detail != "Check the API" || got.Action.Command != "" {
+		t.Fatalf("sharing the conversation shares the agent's line and not the command: %+v", got.Action)
+	}
+
+	o.ShareCommand = true
+	got, _ = payload.Build(ev, nil, o)
+	if strings.Contains(got.Action.Command, "ghp_") || strings.Contains(got.Action.Command, "/Users/me") || !strings.Contains(got.Action.Command, "curl") {
+		t.Fatalf("a command is cleaned like everything else: %q", got.Action.Command)
+	}
+}
+
+func TestLiveTextNeedsConsent(t *testing.T) {
+	o := payload.Options{Root: "/p", ProjectID: "p", ID: "l", Home: "/h"}
+	l, err := payload.BuildLive(event.HostClaudeCode, "s", "t", payload.LivePrompt, "my words", time.Now(), o)
+	if err != nil || l.Text != "" {
+		t.Fatalf("%+v %v", l, err)
+	}
+	o.ShareRequest = true
+	if l, _ = payload.BuildLive(event.HostClaudeCode, "s", "t", payload.LivePrompt, "key sk-ant-abcdefghijklmnopqrstuvwx", time.Now(), o); strings.Contains(l.Text, "sk-ant") {
+		t.Fatalf("not redacted: %q", l.Text)
+	}
+}

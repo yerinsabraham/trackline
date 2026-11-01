@@ -102,6 +102,11 @@ func Detect(raw []byte) string {
 	}
 }
 
+// transcriptTail is how much of a transcript each action reads. Reading all of
+// it was costing 1.1 seconds on every tool call in a real 178 MB session, in
+// which one long turn had already written 4.5 MB (measured 2026-11-01).
+const transcriptTail = 8 << 20
+
 // Options configure one pass.
 type Options struct {
 	Host string
@@ -133,8 +138,16 @@ func Run(raw []byte, opts Options) (Decision, error) {
 	var in intent.Intent
 	var intentUnavailable string
 	if ev.TranscriptPath != "" {
-		reader := &intent.Reader{Path: ev.TranscriptPath, Peers: peers()}
-		if err := reader.Read(&in); err != nil {
+		reader := &intent.Reader{Path: ev.TranscriptPath, Peers: peers(), Tail: transcriptTail, Quick: true}
+		err := reader.Read(&in)
+		// The latest real request is nearly always in the tail. A very long
+		// turn can push it out, and only then does the whole file get read.
+		if _, found := in.Anchor(); err == nil && !found {
+			in = intent.Intent{}
+			reader = &intent.Reader{Path: ev.TranscriptPath, Peers: reader.Peers}
+			err = reader.Read(&in)
+		}
+		if err != nil {
 			intentUnavailable = fmt.Sprintf("the session transcript could not be read: %v", err)
 		} else if len(in.Turns) == 0 {
 			// A conversation we read but recognised nothing in is not a
