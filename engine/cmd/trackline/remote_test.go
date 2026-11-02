@@ -1011,3 +1011,37 @@ func firstOnPath(t *testing.T, name string) string {
 	}
 	return p
 }
+
+func TestSelfWatchWaitsForAStableReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "trackline")
+	write := func(s string) {
+		tmp := path + ".new"
+		if err := os.WriteFile(tmp, []byte(s), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("old")
+	fi, _ := os.Stat(path)
+	w := &selfWatch{path: path, was: fi}
+	if w.replaced() {
+		t.Fatal("unchanged, yet replaced")
+	}
+	write("new release")
+	if w.replaced() {
+		t.Fatal("replaced on the first sight of a new file, which may be half written")
+	}
+	if !w.replaced() {
+		t.Fatal("the same new file twice, yet not replaced")
+	}
+	os.Remove(path)
+	if w.replaced() {
+		t.Fatal("gone mid-install, yet replaced")
+	}
+	var none *selfWatch
+	if none.replaced() {
+		t.Fatal("no watch, yet replaced")
+	}
+}

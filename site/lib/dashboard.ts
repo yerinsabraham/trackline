@@ -10,7 +10,27 @@ export type Who = { agentName?: string; agentTitle?: string | null; agentId?: st
 export type Position = { title: string; description: string | null };
 export type SessionSummary = Status & Who & { waiting?: boolean; id: string; host: string; startedAt: string; lastAt: string; reply: Reply | null; title?: string | null; pinnedAt?: string | null; archivedAt?: string | null };
 export type Agent = { host: string; wired: boolean; reported: boolean; lastAt: string | null };
-export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[] };
+/** cli is the trackline release on its computer; behind, the agents an upgrade left on older hooks. */
+export type Project = { id: string; name: string; lastSeenAt: string; agents: Agent[]; sessions: SessionSummary[]; cli?: string | null; behind?: string[] };
+
+/** Whether release a is older than b. Anything not a plain release, such as a development build, is never older. */
+export function older(a: string | null | undefined, b: string | null | undefined): boolean {
+  const parse = (v: string | null | undefined) => (v && /^\d+\.\d+\.\d+$/.test(v) ? v.split(".").map(Number) : null);
+  const x = parse(a), y = parse(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return false;
+}
+
+/** What needs updating: the oldest release in use when a newer one is out, and each project an upgrade left behind. */
+export function updates(projects: Project[] | null, latest: string | null) {
+  const list = projects ?? [];
+  const old = list.map((p) => p.cli).filter((v): v is string => older(v, latest)).sort((a, b) => (older(a, b) ? -1 : 1))[0] ?? null;
+  return {
+    release: old && latest ? { have: old, latest } : null,
+    projects: list.filter((p) => (p.behind ?? []).length > 0).map((p) => ({ id: p.id, name: p.name, behind: p.behind ?? [] })),
+  };
+}
 
 export type Finding = { check: string; severity: string; summary: string; target?: string; suggestion?: string };
 export type FeedEvent = {

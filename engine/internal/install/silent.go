@@ -60,6 +60,34 @@ func Wired(root string) []string {
 	return out
 }
 
+// Behind lists the wired agents whose configuration in root is older than what
+// init would write with binary: a hook event a later release added, or a hook
+// that points at a trackline that is no longer the installed one. An upgrade
+// replaces the binary but not the project's settings, so a project set up on
+// an older release keeps working while quietly missing what is new, and
+// nothing said so (0.14.0 added four hooks; found 2026-11-02).
+func Behind(root, binary string) []string {
+	if binary == "" {
+		return nil
+	}
+	var out []string
+	for _, h := range []Host{Claude, Codex, Cursor} {
+		path, _ := Plan(h, root)
+		b, err := os.ReadFile(path)
+		if err != nil || !strings.Contains(string(b), "trackline-hook") {
+			continue
+		}
+		doc := map[string]any{}
+		if json.Unmarshal(b, &doc) != nil {
+			continue
+		}
+		if changed, err := addHook(h, doc, binary); err == nil && changed {
+			out = append(out, eventHost[h])
+		}
+	}
+	return out
+}
+
 // Unsilence says, in one line, what makes a silent agent start reporting.
 func Unsilence(h Host) string {
 	switch h {

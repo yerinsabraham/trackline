@@ -21,12 +21,14 @@ export type Section = "home" | "chats" | "team" | "ontrack" | "production" | "se
 type AppData = {
   user: User | null;
   projects: Project[] | null;
+  /** The newest trackline release, or null while unknown. */
+  latest: string | null;
   remote: Remote | null;
   error: string;
   refresh: () => void;
 };
 
-const Ctx = createContext<AppData>({ user: null, projects: null, remote: null, error: "", refresh: () => {} });
+const Ctx = createContext<AppData>({ user: null, projects: null, latest: null, remote: null, error: "", refresh: () => {} });
 export const useApp = () => useContext(Ctx);
 
 export function initials(u: User | null): string {
@@ -58,6 +60,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [latest, setLatest] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [remote, setRemote] = useState<Remote | null>(null);
   const [error, setError] = useState("");
@@ -82,8 +85,8 @@ export default function AppShell({ section, agent, flush, chat, children }: {
   }, []);
 
   const load = useCallback(() => {
-    api<{ projects: Project[] }>("/app/overview")
-      .then((r) => { setProjects(r.projects); setError(""); setOffline(false); keepCached("overview", r.projects); })
+    api<{ projects: Project[]; latest?: string | null }>("/app/overview")
+      .then((r) => { setProjects(r.projects); setLatest(r.latest ?? null); setError(""); setOffline(false); keepCached("overview", r.projects); })
       .catch((e) => {
         if (gone(e)) return;
         // No answer at all is no signal, which is worth saying differently, and
@@ -137,7 +140,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
   const here = (s: Section) => (section === s ? "page" : undefined);
 
   return (
-    <Ctx.Provider value={{ user, projects, remote, error, refresh: load }}>
+    <Ctx.Provider value={{ user, projects, latest, remote, error, refresh: load }}>
       <div className={`app-shell ${chat ? "chat-mode" : ""}`}>
         <nav className="app-side" aria-label="Main">
           <Link href="/app" className="app-brand"><Mark />trackline</Link>

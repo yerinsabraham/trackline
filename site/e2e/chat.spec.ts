@@ -547,6 +547,26 @@ test("an agent that is set up but silent is said out loud", async ({ page, conte
   await expect(page.getByText("Codex in trackline")).toBeVisible();
 });
 
+test("an old install is told what to run, and an up-to-date one is told nothing", async ({ page, context }) => {
+  await fakeAccount(context, { cli: "0.14.0", latest: "0.15.0", behind: ["claude-code"] });
+  await page.goto("/app");
+  const card = page.locator(".update-card");
+  await expect(card.getByText("Trackline 0.15.0 is out. Your computer has 0.14.0.")).toBeVisible();
+  await expect(card.locator("code").first()).toHaveText("npm install -g trackline@latest");
+  await expect(card.getByText("In trackline, Claude Code is missing new hooks.")).toBeVisible();
+  // The phone reaches this project, so init alone would leave its messages refused.
+  await expect(card.locator("code").nth(1)).toHaveText("trackline init && trackline remote enable");
+  const box = await card.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test("nothing to update says nothing, and a development build is never called old", async ({ page, context }) => {
+  await fakeAccount(context, { cli: "dev", latest: "0.15.0" });
+  await page.goto("/app");
+  await expect(page.locator(".agent-row").first()).toBeVisible();
+  await expect(page.locator(".update-card")).toHaveCount(0);
+});
+
 test("a computer that has gone quiet is said plainly on the chats page", async ({ page, context }) => {
   await fakeAccount(context, { offline: true });
   await page.goto("/app/sessions");

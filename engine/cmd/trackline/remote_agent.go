@@ -111,6 +111,13 @@ func (r *runs) busy(project string) bool {
 	return ok
 }
 
+// idle is whether no agent is running for any project.
+func (r *runs) idle() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.cancel) == 0
+}
+
 func (r *runs) finish(project string) {
 	r.mu.Lock()
 	delete(r.cancel, project)

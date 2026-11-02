@@ -5,6 +5,7 @@ import { useApp } from "@/components/app/AppShell";
 import { IconBell, IconLaptop, IconServer, IconTarget, IconUser } from "@/components/app/icons";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { WAKE } from "@/lib/dashboard";
+import UpdateCard from "@/components/app/UpdateCard";
 
 // Everything that is not a chat or a teammate.
 
@@ -27,6 +28,7 @@ export default function Settings() {
       <nav className="card rise" aria-label="Settings">
         {PLACES.map((p) => <Link key={p.href} href={p.href} className="row-link settings-row">{p.icon}<strong>{p.label}</strong></Link>)}
       </nav>
+      <UpdateCard />
       {silent.length > 0 && (
         <section className="card rise" aria-labelledby="silent">
           <div className="card-head"><h2 id="silent">Not watched yet</h2></div>

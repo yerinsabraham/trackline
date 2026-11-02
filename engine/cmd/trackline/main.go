@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yerinsabraham/trackline/engine/internal/cloud/account"
@@ -26,6 +27,7 @@ import (
 	"github.com/yerinsabraham/trackline/engine/internal/install"
 	"github.com/yerinsabraham/trackline/engine/internal/mcp"
 	"github.com/yerinsabraham/trackline/engine/internal/override"
+	"github.com/yerinsabraham/trackline/engine/internal/relay"
 )
 
 // version is stamped at release by scripts/build-binaries.sh.
@@ -480,6 +482,7 @@ func cmdStatus(args []string) error {
 
 	fmt.Printf("The hook is running. Last seen %s.\n", humanAge(time.Since(at)))
 	printSilent(silent)
+	printBehind(f.root)
 	fmt.Println()
 	return summarise(filepath.Join(f.root, ".trackline", "findings.jsonl"))
 }
@@ -490,6 +493,45 @@ func printSilent(silent []install.Host) {
 	for _, h := range silent {
 		fmt.Printf("\n%s is set up here but has never reported. %s\n", hostName(h), install.Unsilence(h))
 	}
+}
+
+// printBehind names agents whose hooks an upgrade left behind. They keep
+// working, so nothing else would show that what the release added is missing.
+func printBehind(root string) {
+	hook, _ := hookPath()
+	behind := install.Behind(root, hook)
+	if len(behind) == 0 {
+		return
+	}
+	var names []string
+	for _, h := range behind {
+		names = append(names, hostName(install.Host(strings.TrimSuffix(h, "-code"))))
+	}
+	fix := "trackline init"
+	if remoteOn(root) {
+		// init changes files remote jobs check, so jobs are refused until a
+		// person here agrees to them again.
+		fix += " && trackline remote enable"
+	}
+	verb := " is"
+	if len(names) > 1 {
+		verb = " are"
+	}
+	fmt.Printf("\n%s set up by an older trackline here. Update it: %s\n", strings.Join(names, " and ")+verb, fix)
+}
+
+// remoteOn is whether phone messages may run in root.
+func remoteOn(root string) bool {
+	s, err := relay.Load()
+	if err != nil {
+		return false
+	}
+	for _, p := range s.Projects {
+		if p.Root == root {
+			return true
+		}
+	}
+	return false
 }
 
 func rel(root, path string) string {

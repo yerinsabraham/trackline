@@ -94,6 +94,11 @@ type Setup struct {
 	ID     string   `json:"id"`
 	Name   string   `json:"name"`
 	Agents []string `json:"agents"`
+	// CLI is the trackline release on the machine, so the account can say when
+	// a newer one is out. Behind is the agents whose hooks are older than that
+	// release writes, which only trackline init in the project fixes.
+	CLI    string   `json:"cli,omitempty"`
+	Behind []string `json:"behind,omitempty"`
 }
 
 // Event is one action as it is allowed to leave the machine.

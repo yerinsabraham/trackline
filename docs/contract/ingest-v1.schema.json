@@ -74,7 +74,9 @@
       "properties": {
         "id": { "type": "string", "maxLength": 64 },
         "name": { "type": "string", "maxLength": 100 },
-        "agents": { "type": "array", "maxItems": 10, "items": { "enum": ["claude-code", "codex", "cursor"] } }
+        "agents": { "type": "array", "maxItems": 10, "items": { "enum": ["claude-code", "codex", "cursor"] } },
+        "cli": { "type": "string", "maxLength": 32, "description": "The trackline release on the machine." },
+        "behind": { "type": "array", "maxItems": 10, "items": { "enum": ["claude-code", "codex", "cursor"] }, "description": "Agents whose hooks are older than that release writes. trackline init in the project brings them up to date." }
       }
     },
     "project": {

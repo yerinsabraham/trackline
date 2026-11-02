@@ -59,6 +59,9 @@ type Project struct {
 	// Agents is the setup last sent to the account, so it is sent again only
 	// when it changes.
 	Agents []string `json:"agents,omitempty"`
+	// CLI and Behind are what was last sent with Agents, for the same reason.
+	CLI    string   `json:"cli,omitempty"`
+	Behind []string `json:"behind,omitempty"`
 }
 
 func write(path string, v any) error {

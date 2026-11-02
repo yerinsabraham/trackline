@@ -524,7 +524,9 @@ func openBrowser(url string) {
 
 // sendSetup tells the account which agents are wired into each connected
 // project, so the dashboard can show an agent that is set up but has never
-// reported, such as Codex before its hook is trusted. It sends only what
+// reported, such as Codex before its hook is trusted, and the release here and
+// any agent whose hooks are older than it, so an update that needs a step in
+// the project can say so on the phone. It sends only what
 // changed since last time unless forced, and a failure waits for the next
 // sync: setup is a courtesy, never a reason to hold back events.
 func sendSetup(c remote.Client, force bool) {
@@ -532,6 +534,7 @@ func sendSetup(c remote.Client, force bool) {
 	if err != nil {
 		return
 	}
+	hook, _ := hookPath()
 	var batch []payload.Setup
 	var roots []string
 	for root, p := range ps {
@@ -539,10 +542,12 @@ func sendSetup(c remote.Client, force bool) {
 		if agents == nil {
 			agents = []string{}
 		}
-		if !force && strings.Join(agents, ",") == strings.Join(p.Agents, ",") {
+		behind := install.Behind(root, hook)
+		if !force && strings.Join(agents, ",") == strings.Join(p.Agents, ",") &&
+			strings.Join(behind, ",") == strings.Join(p.Behind, ",") && p.CLI == version {
 			continue
 		}
-		batch = append(batch, payload.Setup{ID: p.ID, Name: filepath.Base(root), Agents: agents})
+		batch = append(batch, payload.Setup{ID: p.ID, Name: filepath.Base(root), Agents: agents, CLI: version, Behind: behind})
 		roots = append(roots, root)
 	}
 	if len(batch) == 0 {
@@ -553,7 +558,7 @@ func sendSetup(c remote.Client, force bool) {
 	}
 	for i, root := range roots {
 		p := ps[root]
-		p.Agents = batch[i].Agents
+		p.Agents, p.CLI, p.Behind = batch[i].Agents, batch[i].CLI, batch[i].Behind
 		account.SaveProject(root, p)
 	}
 }

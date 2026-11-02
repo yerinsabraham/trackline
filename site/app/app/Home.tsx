@@ -7,6 +7,7 @@ import { LIGHT_LABEL, modelLabel, sessionName, titled, whileVisible } from "@/li
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
 import FirstRun from "@/components/app/FirstRun";
+import UpdateCard from "@/components/app/UpdateCard";
 import { useHandoffs, WaitingCards } from "@/components/app/HandoffCards";
 
 // Where the app opens: one sentence on how things stand, whatever needs you,
@@ -60,6 +61,7 @@ export default function Home() {
       {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
 
       <WaitingCards list={waiting} />
+      <UpdateCard />
       {needsYou.slice(0, 3).map((s) => (
         <Link key={s.id} href={`/app/session?id=${encodeURIComponent(s.id)}`} className="ok-card">
           <span><strong>{s.agentName ? titled(s.agentName, s.agentTitle) : agentName(s.host)}</strong><small>{LIGHT_LABEL[s.light]} · {s.projectName}</small></span>

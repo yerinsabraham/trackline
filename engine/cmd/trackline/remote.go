@@ -543,6 +543,7 @@ func remoteRun() error {
 		os.Exit(0)
 	}()
 
+	self := watchSelf()
 	r2 := time.Time{}
 	backoff := time.Second
 	for {
@@ -586,7 +587,77 @@ func remoteRun() error {
 			r.stopUnless(func(project string) bool { _, ok := s.Projects[project]; return ok },
 				errors.New("remote was turned off for this project"))
 		}
+		// Never mid-job: the agent it started would lose the one process
+		// that reports on it and enforces its time limit.
+		if self.replaced() && r.idle() {
+			// Only launchd starts it again. Run by hand, it says so once and
+			// carries on with the old release rather than stop.
+			if os.Getenv("XPC_SERVICE_NAME") != launchLabel() {
+				if !self.told {
+					self.told = true
+					logf("trackline was updated on this laptop; start trackline remote run again to use it")
+				}
+			} else {
+				logf("trackline was updated on this laptop; restarting to use the new one")
+				os.Exit(updatedExit)
+			}
+		}
 	}
+}
+
+// updatedExit is not a clean exit, so launchd starts the runner again, now from
+// the updated binary.
+const updatedExit = 75
+
+// selfWatch notices the trackline binary being replaced under a running
+// runner. npm install swaps the file but not a process already running it, so
+// a runner started at login kept answering the phone with the old release
+// until the next login, after the update had been reported as done.
+type selfWatch struct {
+	path         string
+	was, pending os.FileInfo
+	told         bool
+}
+
+func watchSelf() *selfWatch {
+	self, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+	if p, err := filepath.EvalSymlinks(self); err == nil {
+		self = p
+	}
+	fi, err := os.Stat(self)
+	if err != nil {
+		return nil
+	}
+	return &selfWatch{path: self, was: fi}
+}
+
+// replaced is true once a different file has sat at the path for two checks
+// in a row, so a half-written install is never what gets started.
+func (w *selfWatch) replaced() bool {
+	if w == nil {
+		return false
+	}
+	now, err := os.Stat(w.path)
+	if err != nil {
+		w.pending = nil
+		return false
+	}
+	if sameFile(w.was, now) {
+		w.pending = nil
+		return false
+	}
+	if w.pending != nil && sameFile(w.pending, now) {
+		return true
+	}
+	w.pending = now
+	return false
+}
+
+func sameFile(a, b os.FileInfo) bool {
+	return os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
 }
 
 // refusalNotices allows one refusal notification a minute.

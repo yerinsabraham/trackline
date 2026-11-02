@@ -880,3 +880,10 @@ a.metric:active { transform: scale(0.98); }
   .sheet { max-width: 420px; }
   .approve { min-height: calc(100dvh - 40px); }
 }
+
+/* Update needed: what to run on the computer, one command per step. */
+.update-card { display: grid; gap: 14px; padding-bottom: 16px; }
+.update-card .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.update-where { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.update-step { display: grid; gap: 8px; min-width: 0; padding: 0 18px; }
+.update-step p { margin: 0; font-size: 15px; line-height: 1.4; }

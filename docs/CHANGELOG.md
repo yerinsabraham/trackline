@@ -3,6 +3,17 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
+## 0.15.0 · 2026-11-02
+
+- **An update says so.** The app tells you when a newer trackline is out, and
+  when a project is missing hooks a release added, with the one command that
+  fixes it. Nothing is changed on your computer without you.
+- **The phone runner picks up an update by itself.** After
+  `npm install -g trackline@latest`, the runner started at login restarts on
+  the new release once no agent it started is still working. Before, it kept
+  the old one until you next logged in.
+- `trackline status` names any agent in the project set up by an older release.
+
 ## 0.14.0 · 2026-11-01
 
 Run `trackline init` in each project to pick up the new hooks, then
