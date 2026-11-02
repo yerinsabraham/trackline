@@ -1,7 +1,7 @@
 {
   "name": "trackline",
   "version": "0.15.0",
-  "description": "Watches whether an AI coding agent is still doing what you asked. Runs beside Claude Code or Codex and says when the work stops matching the request.",
+  "description": "Your AI agents, on track. Run Claude Code, Codex and Cursor from one place: see who is doing what, approve what matters, and know the moment one drifts.",
   "author": "Yerins Abraham <https://yerinsabraham.com>",
   "homepage": "https://trackline.dev",
   "repository": {

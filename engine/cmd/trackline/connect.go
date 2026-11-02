@@ -172,7 +172,7 @@ func connectRemote(root, name string, o connectOptions, ask func(string, bool) b
 			return
 		}
 	}
-	fmt.Printf("You can reply to %s from your phone. Every message needs your passkey.\n", name)
+	fmt.Printf("You can reply to %s from your phone. Every message needs your passkey or send password.\n", name)
 }
 
 // shareChoice settles whether a project's messages go with its findings.

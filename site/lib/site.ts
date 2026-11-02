@@ -6,6 +6,13 @@ export const EXPERIMENTS = `${GITHUB}/blob/main/docs/experiments`;
 // resolving for prompts already pasted.
 export const SITE = "https://trackline.dev";
 
+// The one description of trackline. The page head, share cards, the home
+// screen app and the agent guide all read it; npm, the README and the GitHub
+// repo carry the same words by hand.
+export const TAGLINE = "Your AI agents. On track.";
+export const DESCRIPTION =
+  "Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.";
+
 // What "Copy prompt for your agent" puts on the clipboard. It carries the
 // essential steps itself, because not every agent can fetch a URL (Codex runs
 // without network by default), and points at /install.md for the rest.

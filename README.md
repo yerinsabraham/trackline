@@ -1,6 +1,7 @@
 # trackline
 
-**Watches whether an AI coding agent is still doing what you asked.**
+**Your AI agents, on track.** Run Claude Code, Codex and Cursor from one place:
+see who is doing what, approve what matters, and know the moment one drifts.
 
 An agent that goes off task does not crash. It edits files you never mentioned,
 installs a package nobody asked for, ignores the rules file it read an hour ago

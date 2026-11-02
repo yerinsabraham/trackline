@@ -305,7 +305,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
             chat={job?.session ?? id}
             placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}
             blocked={!job ? "Loading…" : live ? `${agentName(job.agent)} is still working. Reply when it has finished.` : !canContinue ? "This task has no session to continue." : undefined}
-            note={`Signed with your passkey · continues this session on ${machineName}`}
+            note={`Checked by your computer · continues this session on ${machineName}`}
             onSend={send}
           />
         </div>

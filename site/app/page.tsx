@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Doto } from "next/font/google";
 import Link from "next/link";
 import InstallPrompt from "@/components/landing/InstallPrompt";
-import { SITE } from "@/lib/site";
+import { DESCRIPTION, SITE } from "@/lib/site";
 import "./landing.css";
 
 // One idea a section, and the product itself in place of a list of features.
@@ -44,8 +44,7 @@ export default function Home() {
             name: "trackline",
             applicationCategory: "DeveloperApplication",
             operatingSystem: "macOS, Linux, Windows",
-            description:
-              "Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.",
+            description: DESCRIPTION,
             url: SITE,
             downloadUrl: "https://www.npmjs.com/package/trackline",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
@@ -54,7 +53,7 @@ export default function Home() {
       />
       <section className="land-hero land-wrap">
         <h1>Your AI agents.<br /><span className="land-dot">On track.</span></h1>
-        <p className="land-sub">Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.</p>
+        <p className="land-sub">{DESCRIPTION}</p>
         <InstallPrompt second={{ href: "#product", label: "See how it works" }} />
         <p className="land-small">Free and open source. Your agents keep running on your own computer.</p>
       </section>
@@ -129,7 +128,7 @@ export default function Home() {
       <section className="land-wrap land-section land-phone">
         <div>
           <h2 className="land-h2">Leave your desk. Not your work.</h2>
-          <p className="land-sub">Send a message from your phone and it continues on your computer, with the same history. Every message is signed with your passkey.</p>
+          <p className="land-sub">Send a message from your phone and it continues on your computer, with the same history. Your computer checks every message before it runs.</p>
         </div>
         <div className="land-device" aria-hidden="true">
           <div>

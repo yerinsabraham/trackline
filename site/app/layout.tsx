@@ -4,14 +4,11 @@ import Link from "next/link";
 import AccountButton from "@/components/AccountButton";
 import Mark from "@/components/Mark";
 import Search from "@/components/Search";
-import { GITHUB, SITE } from "@/lib/site";
+import { DESCRIPTION, GITHUB, SITE } from "@/lib/site";
 import "./globals.css";
 
 const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
-
-const DESCRIPTION =
-  "Run Claude Code, Codex and Cursor from one place. See who is doing what, approve what matters, and know the moment one drifts.";
 
 // metadataBase makes every relative URL below absolute on trackline.dev,
 // including the canonical, so the old vercel.app address never competes with
@@ -27,11 +24,11 @@ export const metadata: Metadata = {
     siteName: "trackline",
     title: "trackline: your AI agents, on track",
     description: DESCRIPTION,
-    // A real .png file: the static build wrote the generated card with no
-    // extension, and some link previews reject an image served without one.
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "trackline: your AI agents, on track" }],
+    // The home share card, drawn by app/og with the rest. A new address on
+    // purpose: WhatsApp and X keep an image they have seen under its URL.
+    images: [{ url: "/og/home.png", width: 1200, height: 630, alt: "trackline: your AI agents, on track" }],
   },
-  twitter: { card: "summary_large_image", images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: "trackline: your AI agents, on track", description: DESCRIPTION, images: ["/og/home.png"] },
   robots: { index: true, follow: true },
   // Added to a phone's home screen, the dashboard opens as an app, which is
   // what lets an iPhone receive its alerts.
