@@ -10,7 +10,10 @@ import { modelLabel } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "./AgentLogo";
 import { Cmd } from "./FirstRun";
 import { IconAlert, IconClip, IconClose, IconDown, IconShield, IconUp } from "./icons";
-import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage, proof } from "@/lib/remote";
+import { type Attachment, MAX_ATTACHMENTS, type Passkey, prepareImage, proof, SignError, type Signer } from "@/lib/remote";
+import { keptPassword } from "@/lib/sendpassword";
+import { useApp } from "./AppShell";
+import { chooseSigner } from "./ConfirmSheet";
 
 // The pieces a conversation with an agent is drawn from, whichever way it
 // arrived: from trackline's hook in the terminal, or from a task sent here.
@@ -73,7 +76,48 @@ export function usePasskeys() {
     if (!k.length) throw new Error("Add a passkey to send from here.");
     return k;
   };
-  return { get, missing, reload: load };
+  const { remote } = useApp();
+  /**
+   * Signs with whatever works here: the send password if it was typed this
+   * visit, else a passkey, else the sheet that offers every way. A passkey
+   * that was not used opens the sheet too, and this device then asks first.
+   */
+  const sign = async <T,>(machineId: string | undefined, run: (by: Signer) => Promise<T>): Promise<T> => {
+    const machine = remote?.machines.find((m) => m.id === machineId);
+    const pw = machine?.password;
+    const kept = machine && pw ? keptPassword(machine.id, pw.id) : null;
+    if (pw && kept) return run({ password: pw.id, key: kept });
+    const k = keys.current ?? await load().catch(() => [] as Passkey[]);
+    let missed = false;
+    if (k.length && confirmWith() !== "choose") {
+      try {
+        const r = await run(k);
+        confirmWith("passkey");
+        return r;
+      } catch (e) {
+        if (!(e instanceof SignError) || !e.miss) throw e;
+        missed = true;
+        confirmWith("choose");
+      }
+    }
+    const by = await chooseSigner(machine, k, missed);
+    const r = await run(by);
+    if (Array.isArray(by)) confirmWith("passkey");
+    return r;
+  };
+  return { get, sign, missing, reload: load };
+}
+
+const CONFIRM = "trackline.confirm";
+
+/** How this device last confirmed a message, so a passkey it lacks is not asked for every time. */
+function confirmWith(set?: "passkey" | "choose"): string | null {
+  try {
+    if (set) localStorage.setItem(CONFIRM, set);
+    return localStorage.getItem(CONFIRM);
+  } catch {
+    return null;
+  }
 }
 
 /** The first passkey, added where it is needed rather than on another page. */
@@ -96,10 +140,6 @@ export function AddPasskey({ onAdded }: { onAdded: () => void }) {
       {error && <span className="composer-note error">{error}</span>}
     </>
   );
-}
-
-export function PasskeyNeeded({ onAdded }: { onAdded: () => void }) {
-  return <div className="passkey-needed"><span>Add a passkey to send from this device.</span><AddPasskey onAdded={onAdded} /></div>;
 }
 
 const RESUME: Record<string, string> = { claude: "claude --resume", codex: "codex resume", cursor: "cursor-agent --resume" };

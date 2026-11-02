@@ -887,3 +887,10 @@ a.metric:active { transform: scale(0.98); }
 .update-where { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
 .update-step { display: grid; gap: 8px; min-width: 0; padding: 0 18px; }
 .update-step p { margin: 0; font-size: 15px; line-height: 1.4; }
+
+/* Confirm it's you: every way to sign a message, when a passkey will not do. */
+.confirm-sheet { gap: 6px; }
+.confirm-title { margin: 6px 4px 0; font-size: 20px; letter-spacing: -.01em; }
+.confirm-password, .confirm-step { display: grid; gap: 6px; margin-top: 10px; min-width: 0; }
+.confirm-step .fr-cmd { max-width: none; }
+.update-step .fr-cmd code, .confirm-step .fr-cmd code { white-space: normal; overflow-wrap: anywhere; }

@@ -7,7 +7,7 @@ import { LIGHT_LABEL, modelLabel, positionText, titled, type FeedEvent, type Rep
 import { active, type Attachment, proof, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
 import { IconBack, IconForward, IconMore, IconStop } from "@/components/app/icons";
 import AgentSheet from "@/components/app/AgentSheet";
@@ -269,17 +269,17 @@ export default function Session() {
   const blocked = !s ? "Loading…"
     : !cont ? "One step left. On your laptop, run: trackline remote enable"
     : cont.machine.stopped ? `Stopped on ${cont.machine.name}. To start again, run there: trackline remote enable`
-    : passkeys.missing ? "Add a passkey to send."
     : undefined;
 
   // Allow once, or keep blocked: signed here, decided on the laptop, and the
   // agent is told in this same session.
   const decide = async (e: FeedEvent, kind: "allow" | "deny") => {
     const f = e.findings[0];
-    if (!cont || !f?.target) return;
+    const target = f?.target;
+    if (!cont || !target) return;
     setDeciding(e.id); setDecideError("");
     try {
-      const body = await signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, f.target, await passkeys.get());
+      const body = await passkeys.sign(cont.machine.id, (by) => signDecision(cont.machine.id, cont.project, cont.agent, cont.session, kind, f.check, target, by));
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
       setDecided((d) => ({ ...d, [e.id]: kind }));
       setSent((x) => [...x, { job: r.id, text: kind === "allow" ? `Allow once: ${f.target}` : `Keep blocked: ${f.target}`, createdAt: new Date().toISOString() }]);
@@ -292,7 +292,7 @@ export default function Session() {
 
   const deliver = async (text: string, images: Attachment[] = []) => {
     if (!cont) return;
-    const body = await signPrompt(cont.machine.id, cont.project, cont.agent, text, await passkeys.get(), cont.session, images, !cont.machine.online, positionText(view?.session.position));
+    const body = await passkeys.sign(cont.machine.id, (by) => signPrompt(cont.machine.id, cont.project, cont.agent, text, by, cont.session, images, !cont.machine.online, positionText(view?.session.position)));
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -464,7 +464,6 @@ export default function Session() {
 
         <div className="chat-compose">
           <LaptopNotice machine={cont?.machine} />
-          {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
           {s?.position && <p className="sends-position">Sent with your position for {name_}: {positionText(s.position)}</p>}
           <Composer
             chat={id || undefined}

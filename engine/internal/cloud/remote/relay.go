@@ -71,6 +71,14 @@ func (c Client) UnsetRemoteProject(id string) error {
 	return c.do("DELETE", "/remote/projects/"+url.PathEscape(id), nil, nil)
 }
 
+// SetPassword tells the account a send password is set here: its id and salt
+// only, which a device needs to make the key. The key itself never leaves.
+func (c Client) SetPassword(id, salt string, rounds int) error {
+	return c.do("PUT", "/remote/password", map[string]any{"id": id, "salt": salt, "rounds": rounds}, nil)
+}
+
+func (c Client) UnsetPassword() error { return c.do("DELETE", "/remote/password", nil, nil) }
+
 // UnsetAllRemote is the laptop's kill switch, told to the account.
 func (c Client) UnsetAllRemote() error { return c.do("DELETE", "/remote/projects", nil, nil) }
 

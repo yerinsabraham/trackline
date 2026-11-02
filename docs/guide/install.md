@@ -48,6 +48,27 @@ trackline finds, then, the first time on a computer, opens the site to approve
 it. Once a computer is linked, `trackline init` offers this for each new
 project.
 
+Sending from a device that has no passkey paired with your computer, such as a
+borrowed laptop or a browser without passkeys, needs a send password. Set it on
+the computer, once:
+
+```bash
+trackline remote password
+```
+
+Your computer checks it, as it checks a passkey. It needs 12 or more characters
+and turns off after 5 wrong tries. Unlike a passkey, someone who stole the
+server's data could try guessing it offline, so it is off until you set it.
+
+## Updating
+
+```bash
+npm install -g trackline@latest
+```
+
+The app says when a newer release is out, and when a project needs
+`trackline init` for hooks a release added.
+
 ## Per agent
 
 **Claude Code.** Hooks load mid-session, so there is nothing to restart.

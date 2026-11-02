@@ -23,8 +23,10 @@ import (
 type State struct {
 	// RP is fixed when the first passkey is paired, so the runner started at
 	// login checks against the same site as the person who paired it.
-	RP       *RP                `json:"rp,omitempty"`
-	Keys     []Key              `json:"keys"`
+	RP   *RP   `json:"rp,omitempty"`
+	Keys []Key `json:"keys"`
+	// Password is the send password, when one is set here. See password.go.
+	Password *Password          `json:"password,omitempty"`
 	Projects map[string]Enabled `json:"projects"`
 	// OpenChats lets a phone message join a Codex chat open on this laptop. That
 	// chat keeps its own permissions, not the narrow ones a phone run gets, so
@@ -376,7 +378,7 @@ func save(p string, s *State) error {
 // no job passes until a passkey is paired again, on the laptop.
 func Forget() error {
 	return Update(func(s *State) error {
-		s.Keys, s.RP = nil, nil
+		s.Keys, s.RP, s.Password = nil, nil, nil
 		s.Projects = map[string]Enabled{}
 		s.All, s.Off, s.OffRoots = false, nil, nil
 		return nil

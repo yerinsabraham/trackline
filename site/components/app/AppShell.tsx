@@ -9,6 +9,7 @@ import { forgetThisDevice } from "@/lib/alerts";
 import Mark from "@/components/Mark";
 import InstallHint from "./InstallHint";
 import PairingPrompt from "./PairingPrompt";
+import ConfirmSheet from "./ConfirmSheet";
 import { IconChat, IconGear, IconHome, IconPlus, IconTarget, IconTeam } from "./icons";
 import "./app.css";
 
@@ -168,6 +169,7 @@ export default function AppShell({ section, agent, flush, chat, children }: {
         </nav>
 
         <PairingPrompt />
+        <ConfirmSheet />
       </div>
     </Ctx.Provider>
   );

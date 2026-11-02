@@ -24,7 +24,7 @@ const listRow = (id: string, title: string, light = "done") => ({ ...summary(id,
 
 const member = { id: "a1", name: "reviewer-3b", title: "Reviewer", description: "Checks every change.", host: "claude-code", createdAt: iso(900), project: { id: "p1", name: "trackline", clientId: "cp" }, model: "claude-opus-5-5", lastAt: iso(2), chat: listRow("s1", "Fix the login page") };
 
-export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; position?: { title: string; description: string | null }; handoffs?: unknown[]; silent?: boolean; offline?: boolean; cli?: string; behind?: string[]; latest?: string | null; job: unknown; calls: { method: string; path: string; body: string | null }[]; list: Record<string, unknown>[]; live?: unknown; viewing: unknown[] };
+export type Fake = { continueWith: typeof REMOTE_ON | null; turns: number; passkeyCalls: number; passkeys: { id: string; publicKey: string; name: string; transports: string[] }[]; extra: { id: string; at: string; turn: string; text: string }[]; light: string; jobs: unknown[]; replies: unknown[] | null; events: unknown[] | null; more: boolean; older: unknown[]; stops: string[]; position?: { title: string; description: string | null }; handoffs?: unknown[]; silent?: boolean; offline?: boolean; cli?: string; behind?: string[]; latest?: string | null; password?: { id: string; salt: string; rounds: number } | null; job: unknown; calls: { method: string; path: string; body: string | null }[]; list: Record<string, unknown>[]; live?: unknown; viewing: unknown[] };
 
 export async function fakeAccount(context: BrowserContext, over: Partial<Fake> = {}): Promise<Fake> {
   const fake: Fake = { continueWith: REMOTE_ON, turns: 40, passkeyCalls: 0, passkeys: [{ id: "k", publicKey: "x", name: "Phone", transports: [] }], extra: [], light: "done", jobs: [], replies: null, events: null, more: false, older: [], stops: [], job: null, calls: [], viewing: [], list: [listRow("s1", "Fix the login page"), listRow("s2", "Add dark mode", "needs-you"), listRow("s3", "Write the docs")], ...over };
@@ -41,7 +41,7 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
     if (path.endsWith("/viewing")) { fake.viewing.push(JSON.parse(route.request().postData() ?? "{}").on); return json({}); }
     if (path === "/auth/me") return json({ user: { id: "u", name: "Test Person", email: "t@example.com", avatarUrl: null, signInMethods: ["github"] } });
     if (path === "/app/overview") return json({ historyDays: 30, latest: fake.latest ?? null, projects: [{ id: "p1", name: "trackline", lastSeenAt: iso(1), cli: fake.cli ?? null, behind: fake.behind ?? [], agents: [{ host: "claude-code", wired: true, reported: true, lastAt: iso(1) }, ...(fake.silent ? [{ host: "codex", wired: true, reported: false, lastAt: null }] : [])], sessions: [{ ...summary("s1", "Fix the login page", "done"), title: "Fix the login page" }, { ...summary("s2", "yes", "needs-you"), title: "Add dark mode" }] }] });
-    if (path === "/app/remote") return json({ machines: [{ id: "m1", name: "MacBook", online: !fake.offline, lastSeenAt: iso(0), stopped: false, projects: [{ id: "cp", name: "trackline", agents: ["claude"] }], passkeys: [{ id: "k", name: "Phone" }] }], pairings: [], jobs: [] });
+    if (path === "/app/remote") return json({ machines: [{ id: "m1", name: "MacBook", online: !fake.offline, lastSeenAt: iso(0), stopped: false, projects: [{ id: "cp", name: "trackline", agents: ["claude"] }], passkeys: [{ id: "k", name: "Phone" }], password: fake.password ?? null }], pairings: [], jobs: [] });
     if (path === "/app/ontrack") return json({ score: { percent: 90 } });
     if (path === "/app/remote/passkeys") { fake.passkeyCalls++; return json({ passkeys: fake.passkeys }); }
     if (path === "/app/alerts") return json({ prefs: { red: true, finished: true, drifting: false }, devices: [], slack: false, vapidPublicKey: null });
@@ -66,6 +66,7 @@ export async function fakeAccount(context: BrowserContext, over: Partial<Fake> =
       const sessions = fake.list.filter((x) => !q || String(x.title).toLowerCase().includes(q));
       return json({ sessions, total: sessions.length, more: false });
     }
+    if (path === "/app/remote/jobs" && method === "POST") { fake.calls.push({ method, path, body: route.request().postData() }); return json({ id: `job_sent${fake.calls.length}`, online: true }); }
     if (path.startsWith("/app/remote/jobs/") && path.endsWith("/stop")) { fake.stops.push(path); return json({ status: "delivered" }); }
     if (path.endsWith("/events") && path.startsWith("/app/remote/jobs/")) return json({ status: "done", events: [] });
     if (path.startsWith("/app/remote/jobs/")) return json(fake.job ?? {});

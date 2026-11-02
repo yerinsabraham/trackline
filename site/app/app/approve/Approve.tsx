@@ -53,8 +53,8 @@ export default function Approve() {
       </main>
       {h && h.status === "asked" && (
         <footer>
-          {!h.from.working && <button type="button" className="approve-yes" disabled={busy || !!keys.missing} onClick={() => act(async () => {
-            const body = await signHandoff(h, await keys.get(), back);
+          {!h.from.working && <button type="button" className="approve-yes" disabled={busy} onClick={() => act(async () => {
+            const body = await keys.sign(h.sign.machine, (by) => signHandoff(h, by, back));
             await api(`${path}/approve`, { method: "POST", body: JSON.stringify(body) });
           })}>{busy ? `Waiting for ${proof()}…` : "Approve"}</button>}
           <button type="button" className="approve-no" disabled={busy} onClick={() => act(() => api(`${path}/decline`, { method: "POST", body: "{}" }))}>Decline</button>

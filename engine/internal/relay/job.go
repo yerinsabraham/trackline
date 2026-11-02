@@ -185,16 +185,22 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	if err != nil || len(raw) == 0 || len(raw) > MaxText+4096 {
 		return Accepted{}, refuse("bad-envelope", "the job could not be read")
 	}
-	key, ok := s.key(env.Key)
-	if !ok {
-		return Accepted{}, refuse("unknown-key", "signed by a passkey this laptop has not paired with")
-	}
-	pub, err := ParseKey(key.PublicKey)
-	if err != nil {
-		return Accepted{}, refuse("unknown-key", "the paired passkey could not be read: %v", err)
-	}
-	if err := verifyAssertion(pub, s.rp(), env.Assertion, JobChallenge(raw)); err != nil {
-		return Accepted{}, refuse("bad-signature", "forged or altered: %v", err)
+	if strings.HasPrefix(env.Key, PasswordPrefix) {
+		if r := s.checkPassword(env, raw, now); r != nil {
+			return Accepted{}, r
+		}
+	} else {
+		key, ok := s.key(env.Key)
+		if !ok {
+			return Accepted{}, refuse("unknown-key", "signed by a passkey this laptop has not paired with")
+		}
+		pub, err := ParseKey(key.PublicKey)
+		if err != nil {
+			return Accepted{}, refuse("unknown-key", "the paired passkey could not be read: %v", err)
+		}
+		if err := verifyAssertion(pub, s.rp(), env.Assertion, JobChallenge(raw)); err != nil {
+			return Accepted{}, refuse("bad-signature", "forged or altered: %v", err)
+		}
 	}
 
 	// Only now is the content trusted enough to read.

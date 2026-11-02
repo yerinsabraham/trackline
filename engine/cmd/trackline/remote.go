@@ -43,12 +43,66 @@ func cmdRemote(args []string) error {
 		return remoteDisable(args[1:])
 	case "status":
 		return remoteStatus()
+	case "password":
+		return remotePassword(args[1:])
 	case "run":
 		return remoteRun()
 	case "ask-tool":
 		return remoteAskTool(args[1:])
 	}
-	return fmt.Errorf("unknown: trackline remote %s. Try: enable, disable, status", args[0])
+	return fmt.Errorf("unknown: trackline remote %s. Try: enable, disable, status, password", args[0])
+}
+
+// remotePassword sets or removes the send password. Only a person at this
+// laptop does either: it is a way in, like pairing a passkey.
+func remotePassword(args []string) error {
+	if remoteJob() || !interactive() {
+		return errors.New("run this yourself, in a terminal on this laptop")
+	}
+	client, creds, err := remoteClient()
+	if err != nil {
+		return err
+	}
+	if len(args) > 0 && args[0] == "off" {
+		if err := client.UnsetPassword(); err != nil {
+			return fmt.Errorf("the account could not be told, so nothing was changed: %w", err)
+		}
+		if err := relay.Update(func(s *relay.State) error { s.Password = nil; return nil }); err != nil {
+			return err
+		}
+		fmt.Println("Send password removed. Only paired passkeys can send to this laptop.")
+		return nil
+	}
+	fmt.Printf("A send password lets any device send to this laptop without a passkey.\nUse %d or more characters you use nowhere else.\n\nSend password: ", relay.MinPassword)
+	pw, err := readSecret()
+	if err != nil {
+		return err
+	}
+	if _, err := relay.NewPassword(creds.DeviceID, pw, time.Now()); err != nil {
+		return err
+	}
+	fmt.Print("Again: ")
+	again, err := readSecret()
+	if err != nil {
+		return err
+	}
+	if again != pw {
+		return errors.New("the two did not match; nothing was changed")
+	}
+	p, err := relay.NewPassword(creds.DeviceID, pw, time.Now())
+	if err != nil {
+		return err
+	}
+	// The account first: a password only this laptop knows of is one no
+	// device can use, and would look set when it is not.
+	if err := client.SetPassword(p.ID, p.Salt, relay.PasswordRounds); err != nil {
+		return fmt.Errorf("the account could not be told, so nothing was changed: %w", err)
+	}
+	if err := relay.Update(func(s *relay.State) error { s.Password = &p; return nil }); err != nil {
+		return err
+	}
+	fmt.Printf("Send password set. After %d wrong tries it turns off until you set it again here.\nRemove it: trackline remote password off\n", relay.MaxPasswordFails)
+	return nil
 }
 
 func remoteClient() (remote.Client, account.Credentials, error) {
@@ -130,7 +184,9 @@ func remoteEnable(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(s.Keys) == 0 || pair {
+	// A send password set here is a way in of its own, so a person with no
+	// passkey anywhere can still turn remote on.
+	if len(s.Keys) == 0 && s.Password == nil || pair {
 		if err := pairPasskey(client, creds, s); err != nil {
 			return err
 		}
@@ -183,7 +239,7 @@ func remoteEnable(args []string) error {
 	if len(added) > 0 {
 		fmt.Printf(", newly: %s", strings.Join(added, ", "))
 	}
-	fmt.Printf(".\nAgents it can start: %s.\nEvery message still needs your passkey. Turn one project off, inside it: trackline remote disable\n", agentList(found))
+	fmt.Printf(".\nAgents it can start: %s.\nEvery message still needs your passkey or send password. Turn one project off, inside it: trackline remote disable\n", agentList(found))
 	return nil
 }
 
@@ -353,7 +409,7 @@ func remoteDisable(args []string) error {
 		if clientErr == nil {
 			client.UnsetAllRemote()
 		}
-		fmt.Println("Remote is off on this laptop, and its paired passkeys are forgotten.")
+		fmt.Println("Remote is off on this laptop, and its paired passkeys and send password are forgotten.")
 		return nil
 	}
 
@@ -399,7 +455,7 @@ func remoteStatus() error {
 	if err != nil {
 		return err
 	}
-	if len(s.Projects) == 0 && len(s.Keys) == 0 {
+	if len(s.Projects) == 0 && len(s.Keys) == 0 && s.Password == nil {
 		fmt.Println("Remote is off. Pair your phone: trackline remote enable")
 		return nil
 	}
@@ -409,6 +465,14 @@ func remoteStatus() error {
 	fmt.Println("Passkeys that can send jobs here:")
 	for _, k := range s.Keys {
 		fmt.Printf("  %s, paired %s\n", k.Name, k.PairedAt.Local().Format("2 Jan 2006"))
+	}
+	switch p := s.Password; {
+	case p == nil:
+		fmt.Println("Send password: not set")
+	case !p.LockedAt.IsZero():
+		fmt.Printf("Send password: off after %d wrong tries. Set it again: trackline remote password\n", relay.MaxPasswordFails)
+	default:
+		fmt.Printf("Send password: set %s\n", p.SetAt.Local().Format("2 Jan 2006"))
 	}
 	fmt.Println("\nProjects:")
 	if len(s.Projects) == 0 {

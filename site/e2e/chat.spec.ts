@@ -115,7 +115,13 @@ test("links in a reply and in your own message open in a new tab", async ({ page
 test("a passkey can be added from the chat, without leaving it", async ({ page, context }) => {
   await fakeAccount(context, { passkeys: [] });
   await openChat(page);
-  await expect(page.getByRole("button", { name: "Add a passkey" })).toBeVisible();
+  await page.locator("textarea").fill("hello");
+  await page.locator(".composer-send").click();
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
+  // No passkey to offer, so it is not offered.
+  await expect(sheet.getByRole("button", { name: "Use a passkey" })).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Set up this device instead" }).click();
+  await expect(sheet.getByRole("button", { name: "Add a passkey" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/app/session");
 });
 
@@ -698,4 +704,73 @@ test("an open chat tells the server it is in front of you", async ({ page, conte
   const fake = await fakeAccount(context);
   await openChat(page);
   await expect.poll(() => fake.viewing.includes(true)).toBe(true);
+});
+
+const PHONE_KEY = [{ id: "cGhvbmUta2V5", publicKey: "x", name: "Phone", transports: ["internal"] }];
+
+// A browser asked for a passkey it does not hold says only "not allowed".
+async function noPasskeyHere(context: import("@playwright/test").BrowserContext) {
+  await context.addInitScript(() => {
+    (window as unknown as { asked: number }).asked = 0;
+    Object.defineProperty(navigator.credentials, "get", {
+      value: () => { (window as unknown as { asked: number }).asked++; return Promise.reject(new DOMException("no passkey", "NotAllowedError")); },
+    });
+  });
+}
+
+test("a passkey this device lacks opens every other way, and the send password sends", async ({ page, context }) => {
+  await noPasskeyHere(context);
+  const fake = await fakeAccount(context, { passkeys: PHONE_KEY, password: { id: "pw_abcdefghijklmnop", salt: "c2FsdHNhbHRzYWx0c2FsdA", rounds: 1000 } });
+  await openChat(page);
+  await page.locator("textarea").fill("fix the footer");
+  await page.locator(".composer-send").click();
+
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
+  await expect(sheet.getByText("Your passkey wasn't used on this device.")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Use a passkey" })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Set up this device instead" })).toBeVisible();
+  const box = await sheet.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+
+  await sheet.getByLabel(/send password for MacBook/).fill("correct horse battery");
+  await sheet.getByRole("button", { name: "Send with password" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/app/remote/jobs").length).toBe(1);
+  const env = JSON.parse(fake.calls.find((c) => c.path === "/app/remote/jobs")!.body!).envelope;
+  expect(env.key).toBe("pw_abcdefghijklmnop");
+  expect(env.authenticatorData).toBe("");
+  expect(env.signature).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  // Nothing typed leaves the page.
+  expect(fake.calls.some((c) => c.body?.includes("correct horse"))).toBe(false);
+
+  // Typed once this visit: the next message goes without asking. The first
+  // has to finish, or the second waits behind it.
+  fake.jobs = [job("job_sent1", "done")];
+  await expect(page.locator(".composer-note").first()).not.toContainText("is working", { timeout: 15_000 });
+  await page.locator("textarea").fill("and the header");
+  await page.locator(".composer-send").click();
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/app/remote/jobs").length).toBe(2);
+  await expect(page.getByRole("dialog", { name: "Confirm it's you" })).toHaveCount(0);
+});
+
+test("with no send password the sheet says how to set one, and a device that lacked a passkey asks first next time", async ({ page, context }) => {
+  await noPasskeyHere(context);
+  const fake = await fakeAccount(context, { passkeys: PHONE_KEY });
+  await openChat(page);
+  await page.locator("textarea").fill("fix the footer");
+  await page.locator(".composer-send").click();
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
+  await expect(sheet.locator("code")).toHaveText("trackline remote password");
+  await sheet.getByRole("button", { name: "Set up this device instead" }).click();
+  await expect(sheet.getByRole("button", { name: "Add a passkey" })).toBeVisible();
+  await expect(sheet.locator("code").last()).toHaveText("trackline remote enable --pair");
+  await sheet.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByText("Nothing was sent.").first()).toBeVisible();
+  expect(fake.calls.filter((c) => c.path === "/app/remote/jobs")).toHaveLength(0);
+
+  await page.reload();
+  await page.locator("textarea").fill("again");
+  await page.locator(".composer-send").click();
+  await expect(page.getByRole("dialog", { name: "Confirm it's you" })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { asked: number }).asked)).toBe(0);
 });

@@ -253,6 +253,7 @@ Revoke this machine's credential on the account and remove it from here.
 	"remote": `trackline remote enable [--root DIR] [--pair] [--no-start]
 trackline remote disable [--root DIR] [--all]
 trackline remote status
+trackline remote password [off]
 
 Let a message sent from your phone run in your projects on this laptop, with
 your own agent. Pair once, here, and every project you connect takes messages;
@@ -265,6 +266,8 @@ enable   pair your phone. The first time, it shows a code to enter there, which
 disable  turn it off for this project, and keep it off, on or not yet on. --all turns it off
          everywhere on this laptop and forgets every paired passkey.
 status   paired passkeys, projects, and whether the runner is running.
+password set a send password, for a device without a passkey paired here.
+         Checked here, like a passkey. Off unless set; off removes it.
 
 A job runs only if a passkey paired here signed it, it is for this laptop and
 a project that is on, it is under five minutes old, and it was never seen before.

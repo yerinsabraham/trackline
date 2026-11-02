@@ -5,14 +5,28 @@
 // server that carries the job cannot write one. Every signature is over a
 // hash with its purpose in front ("trackline job v1", "trackline pair v2"),
 // so a signature made for one purpose can never pass as another; the laptop
-// accepts only its own two.
+// accepts only its own two. A send password, where one is set, keys the same
+// job challenge instead (lib/sendpassword.ts), and only the laptop checks it.
+
+import { passwordMAC } from "./sendpassword";
 
 export type Passkey = { id: string; publicKey: string; name: string; transports: string[] };
 export type RemoteProject = { id: string; name: string; agents: string[] };
 export type Machine = {
   id: string; name: string; online: boolean; lastSeenAt: string | null; stopped: boolean;
   projects: RemoteProject[]; passkeys: { id: string; name: string }[];
+  /** A send password set on the laptop: what this page needs to make its key. */
+  password?: SendPassword | null;
 };
+export type SendPassword = { id: string; salt: string; rounds: number };
+
+/** Who signs a job: a passkey, or the send password's key. */
+export type Signer = Passkey[] | { password: string; key: CryptoKey };
+
+/** A passkey that could not sign here, so another way is worth offering. */
+export class SignError extends Error {
+  constructor(message: string, readonly miss: boolean) { super(message); }
+}
 export type Pairing = { id: string; machineId: string; machine: string; expiresAt: string };
 export type JobSummary = {
   id: string; machine: string | null; clientId: string; kind: string; agent: string | null;
@@ -98,7 +112,7 @@ async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promis
       userVerification: "required",
       timeout: 60_000,
     },
-  }).catch((e: Error) => { throw new Error(signError(e)); })) as PublicKeyCredential | null;
+  }).catch((e: Error) => { throw new SignError(signError(e), e.name !== "AbortError"); })) as PublicKeyCredential | null;
   if (!cred) throw new Error("No passkey signed.");
   const r = cred.response as AuthenticatorAssertionResponse;
   const key = keys.find((k) => k.id === b64u(cred.rawId));
@@ -114,7 +128,9 @@ async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promis
  * as the same error, with a sentence written for developers.
  */
 function signError(e: Error): string {
-  if (e.name === "NotAllowedError" || e.name === "AbortError") return "Face ID was cancelled, so nothing was sent. Try again.";
+  // NotAllowedError is also what a browser says when this device holds none
+  // of the passkeys asked for, so it is not called a cancelled Face ID.
+  if (e.name === "NotAllowedError" || e.name === "AbortError") return "Nothing was sent: the passkey was not used.";
   if (e.name === "InvalidStateError" || e.name === "SecurityError") return "This device could not use your passkey. Check it on your account page.";
   return "Your passkey could not sign this. Try again.";
 }
@@ -143,6 +159,16 @@ export async function signPairing(machineId: string, code: string, keys: Passkey
   return { key: { id: key.id, publicKey: key.publicKey, name: key.name }, ...assertion };
 }
 
+/** Signs a job's bytes: as the laptop checks them, by a passkey or with the send password. */
+async function signJob(bytes: Uint8Array, by: Signer): Promise<{ key: string; assertion: Assertion }> {
+  if (!Array.isArray(by)) {
+    const mac = await passwordMAC(by.key, bytes);
+    return { key: by.password, assertion: { authenticatorData: "", clientDataJSON: "", signature: b64u(mac) } };
+  }
+  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), by);
+  return { key: key.id, assertion };
+}
+
 function jobId(): string {
   return `job_${b64u(crypto.getRandomValues(new Uint8Array(16)))}`;
 }
@@ -151,7 +177,7 @@ function jobId(): string {
  * Builds and signs a prompt for one project on one laptop. With a session,
  * the agent continues that conversation instead of starting one.
  */
-export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Passkey[], session?: string, images: Attachment[] = [], wait = false, position?: string) {
+export async function signPrompt(machine: string, project: string, agent: string, text: string, keys: Signer, session?: string, images: Attachment[] = [], wait = false, position?: string) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
     v: 1, id: jobId(), machine, project, kind: "prompt", agent, text, ...(session ? { session } : {}), ...(position ? { position } : {}),
@@ -160,9 +186,9 @@ export async function signPrompt(machine: string, project: string, agent: string
     ...(images.length ? { images: images.map((i) => ({ type: i.type, size: i.size, sha256: i.sha256 })) } : {}),
     issuedAt: now, expiresAt: now + (wait && !images.length ? JOB_WAIT_MS : JOB_LIFE_MS),
   }));
-  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
+  const { key, assertion } = await signJob(bytes, keys);
   return {
-    machine, envelope: { job: b64u(bytes), key: key.id, ...assertion },
+    machine, envelope: { job: b64u(bytes), key, ...assertion },
     ...(images.length ? { images: images.map((i) => ({ sha256: i.sha256, data: i.data })) } : {}),
   };
 }
@@ -171,7 +197,7 @@ export async function signPrompt(machine: string, project: string, agent: string
  * Signs one handoff: exactly what the record says, and nothing else. What the
  * receiver may do is the laptop's to say, so none of that is in here.
  */
-export async function signHandoff(h: Handoff, keys: Passkey[], allowReturn: boolean) {
+export async function signHandoff(h: Handoff, keys: Signer, allowReturn: boolean) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
     v: 1, id: jobId(), machine: h.sign.machine, project: h.sign.project, kind: "handoff", agent: h.sign.agent, text: h.task,
@@ -179,8 +205,8 @@ export async function signHandoff(h: Handoff, keys: Passkey[], allowReturn: bool
     handoff: h.id, from: h.from.session, fromAgent: h.from.agent, ...(allowReturn ? { return: true } : {}),
     issuedAt: now, expiresAt: now + JOB_LIFE_MS,
   }));
-  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
-  return { machine: h.sign.machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
+  const { key, assertion } = await signJob(bytes, keys);
+  return { machine: h.sign.machine, envelope: { job: b64u(bytes), key, ...assertion } };
 }
 
 export type Handoff = {
@@ -244,15 +270,15 @@ export const previewsFor = (job: string) => imagesFor(job).map((i) => i.preview)
  */
 export async function signDecision(
   machine: string, project: string, agent: string, session: string,
-  kind: "allow" | "deny", check: string, target: string, keys: Passkey[],
+  kind: "allow" | "deny", check: string, target: string, keys: Signer,
 ) {
   const now = Date.now();
   const bytes = utf8(JSON.stringify({
     v: 1, id: jobId(), machine, project, kind, agent, text: "", session, check, target,
     issuedAt: now, expiresAt: now + JOB_LIFE_MS,
   }));
-  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), keys);
-  return { machine, envelope: { job: b64u(bytes), key: key.id, ...assertion } };
+  const { key, assertion } = await signJob(bytes, keys);
+  return { machine, envelope: { job: b64u(bytes), key, ...assertion } };
 }
 
 /** What a job's status means, in words. */

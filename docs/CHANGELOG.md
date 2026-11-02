@@ -13,6 +13,20 @@ changelog page is built from this file.
   the new release once no agent it started is still working. Before, it kept
   the old one until you next logged in.
 - `trackline status` names any agent in the project set up by an older release.
+- **No more dead end when a passkey is not on this device.** Sending used to
+  open the browser's passkey prompt and stop at "no passkey found". Now a
+  "Confirm it's you" sheet offers every way that works: a passkey (Face ID,
+  Touch ID, your device PIN, or your phone by scanning a code), your send
+  password, or setting this device up. A device that lacked a passkey once is
+  asked this way first after that.
+- **A send password, for a device without a passkey.** Run
+  `trackline remote password` on your computer, and any device signed in to
+  your account can send by typing it. Your computer checks it, as it checks a
+  passkey, so our server still cannot write a message. It needs 12 or more
+  characters, turns off after 5 wrong tries, and is off unless you set it. One
+  limit, said plainly: someone who stole our server's data could try guessing
+  it offline, which a passkey does not allow. `trackline remote password off`
+  removes it.
 
 ## 0.14.0 · 2026-11-01
 

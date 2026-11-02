@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/account";
 import { type Member, positionText, titled, whileVisible } from "@/lib/dashboard";
 import {
-  active, type AgentEvent, imagesFor, type Job, jobState, type Machine, type Passkey, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment, proof } from "@/lib/remote";
+  active, type AgentEvent, imagesFor, type Job, jobState, type Machine, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment, proof } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AddPasskey, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, PasskeyNeeded, Question, ResumeHere, SendAgain, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, ResumeHere, SendAgain, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 
@@ -36,7 +36,7 @@ const JOB_AGENT: Record<string, string> = { "claude-code": "claude", codex: "cod
 
 function NewTask({ open }: { open: (id: string) => void }) {
   const { remote } = useApp();
-  const [keys, setKeys] = useState<Passkey[] | null>(null);
+  const passkeys = usePasskeys();
   const [machineId, setMachineId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [agent, setAgent] = useState("");
@@ -53,8 +53,6 @@ function NewTask({ open }: { open: (id: string) => void }) {
     if (id) api<{ agent: Member }>(`/app/team/${encodeURIComponent(id)}`).then((r) => { setMember(r.agent); setProjectId(r.agent.project.clientId); setAgent(JOB_AGENT[r.agent.host] ?? ""); }).catch((e) => setError((e as Error).message));
   }, []);
 
-  useEffect(() => { api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys)).catch(() => setKeys([])); }, []);
-
   const machines = remote?.machines ?? [];
   const holds = (m: Machine) => !member || m.projects.some((p) => p.id === member.project.clientId);
   const machine: Machine | undefined = machines.find((m) => m.id === machineId) ?? machines.find((m) => m.online && holds(m)) ?? machines.find(holds) ?? machines[0];
@@ -65,10 +63,10 @@ function NewTask({ open }: { open: (id: string) => void }) {
 
   const send = async () => {
     const said = text.trim() || (attach.items.length ? "See the attached image." : "");
-    if (!machine || !project || !chosen || !keys?.length || !said) return;
+    if (!machine || !project || !chosen || !said) return;
     setBusy(true); setError("");
     try {
-      const body = await signPrompt(machine.id, project.id, chosen, said, keys, undefined, attach.items, !machine.online, positionText(member));
+      const body = await passkeys.sign(machine.id, (by) => signPrompt(machine.id, project.id, chosen, said, by, undefined, attach.items, !machine.online, positionText(member)));
       const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(member ? { ...body, teamAgent: member.id } : body) });
       remember(r.id, said);
       rememberImages(r.id, attach.items);
@@ -92,14 +90,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
       </div>
       <h1 className="app-h1">{member ? `New chat with ${titled(member.name, member.title)}` : "New chat"}</h1>
 
-      {!passkeysSupported() && <p className="composer-note error" style={{ textAlign: "left" }}>This browser cannot use passkeys, which sending needs.</p>}
-      {keys?.length === 0 && (
-        <div className="card empty">
-          <strong>Add a passkey first.</strong>
-          <span>Every message is signed with it, so only you can send one.</span>
-          <AddPasskey onAdded={() => api<{ passkeys: Passkey[] }>("/app/remote/passkeys").then((r) => setKeys(r.passkeys))} />
-        </div>
-      )}
+      {!passkeysSupported() && !machine?.password && <p className="composer-note error" style={{ textAlign: "left" }}>This browser cannot use passkeys. Set a send password on your computer to send from here: trackline remote password</p>}
       {machines.length === 0 && (
         <div className="card empty">
           <span className="agent-logo" style={{ width: 44, height: 44 }}><IconLaptop size={22} /></span>
@@ -155,7 +146,7 @@ function NewTask({ open }: { open: (id: string) => void }) {
               )}
               {error && <p className="composer-note error" style={{ textAlign: "left" }}>{error}</p>}
               <LaptopNotice machine={machine} />
-              <button type="submit" className="approve-yes" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || !keys?.length || machine.stopped}>
+              <button type="submit" className="approve-yes" disabled={busy || (!text.trim() && !attach.items.length) || !chosen || machine.stopped}>
                 {busy ? `Waiting for ${proof()}…` : "Start chat"}
               </button>
               <p className="quiet-note center">Secrets and new dependencies stay blocked in chats started from here.</p>
@@ -249,7 +240,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
     if (!job || !(canContinue || again)) return;
     // Sending again goes where the first one was meant to: the same
     // conversation if it had one, a new one if not.
-    const body = await signPrompt(job.machine!, job.project!, job.agent!, text, await passkeys.get(), job.session ?? undefined, images, machine ? !machine.online : false);
+    const body = await passkeys.sign(job.machine!, (by) => signPrompt(job.machine!, job.project!, job.agent!, text, by, job.session ?? undefined, images, machine ? !machine.online : false));
     const r = await api<{ id: string }>("/app/remote/jobs", { method: "POST", body: JSON.stringify(body) });
     remember(r.id, text);
     rememberImages(r.id, images);
@@ -310,7 +301,6 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
 
         <div className="chat-compose">
           <LaptopNotice machine={machine} />
-          {passkeys.missing && <PasskeyNeeded onAdded={passkeys.reload} />}
           <Composer
             chat={job?.session ?? id}
             placeholder={job?.asked ? `Answer ${agentName(job.agent)}…` : `Reply to ${agentName(job?.agent)}…`}

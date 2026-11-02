@@ -474,3 +474,69 @@ func TestAHandoffRunsOnce(t *testing.T) {
 		t.Fatalf("old ones are not dropped: %v", s.Handoffs)
 	}
 }
+
+// passwordEnvelope signs j as a device does with the send password, or with
+// the wrong key when wrong is set.
+func passwordEnvelope(t *testing.T, p relay.Password, j relay.Job, wrong string) relay.Envelope {
+	t.Helper()
+	raw, _ := json.Marshal(j)
+	key, _ := base64.RawURLEncoding.DecodeString(p.Key)
+	if wrong != "" {
+		key = []byte(wrong)
+	}
+	return relay.Envelope{
+		Job: base64.RawURLEncoding.EncodeToString(raw), Key: p.ID,
+		Assertion: relay.Assertion{Signature: base64.RawURLEncoding.EncodeToString(relay.PasswordMAC(key, raw))},
+	}
+}
+
+// A send password passes like a passkey, a wrong one is refused as such, and
+// five wrong ones in a row turn it off until it is set again here.
+func TestSendPassword(t *testing.T) {
+	f := setup(t)
+	p, err := relay.NewPassword(machine, "correct horse battery", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.state.Password = &p
+
+	if _, err := relay.Check(f.state, passwordEnvelope(t, p, job(), ""), machine, now); err != nil {
+		t.Fatalf("right password refused: %v", err)
+	}
+	for i := 0; i < relay.MaxPasswordFails-1; i++ {
+		if c := code(relaySend(f, passwordEnvelope(t, p, job(func(j *relay.Job) { j.ID = "job_w" + string(rune('a'+i)) }), "wrong"))); c != "bad-password" {
+			t.Fatalf("wrong password %d: %s", i, c)
+		}
+	}
+	// A right one in between starts the count again.
+	if c := code(relaySend(f, passwordEnvelope(t, *f.state.Password, job(func(j *relay.Job) { j.ID = "job_r" }), ""))); c != "accepted" {
+		t.Fatalf("right password after wrong ones: %s", c)
+	}
+	for i := 0; i < relay.MaxPasswordFails; i++ {
+		relaySend(f, passwordEnvelope(t, p, job(func(j *relay.Job) { j.ID = "job_x" + string(rune('a'+i)) }), "wrong"))
+	}
+	if c := code(relaySend(f, passwordEnvelope(t, *f.state.Password, job(func(j *relay.Job) { j.ID = "job_after" }), ""))); c != "password-locked" {
+		t.Fatalf("after %d wrong tries the right one: %s", relay.MaxPasswordFails, c)
+	}
+
+	// A password job for a laptop with none set, or another's id.
+	f2 := setup(t)
+	if c := code(relaySend(f2, passwordEnvelope(t, p, job(), ""))); c != "unknown-key" {
+		t.Fatalf("no password set: %s", c)
+	}
+	// A password-signed job altered on the way.
+	f3 := setup(t)
+	q, _ := relay.NewPassword(machine, "correct horse battery", now)
+	f3.state.Password = &q
+	env := passwordEnvelope(t, q, job(), "")
+	altered, _ := json.Marshal(job(func(j *relay.Job) { j.Text = "rm -rf ~" }))
+	env.Job = base64.RawURLEncoding.EncodeToString(altered)
+	if c := code(relaySend(f3, env)); c != "bad-password" {
+		t.Fatalf("altered job: %s", c)
+	}
+}
+
+func relaySend(f fixture, env relay.Envelope) error {
+	_, err := relay.Check(f.state, env, machine, now)
+	return err
+}

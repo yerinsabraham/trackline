@@ -25,7 +25,7 @@ export default function Machines() {
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 860 }}>
       <header className="rise">
         <h1 className="app-h1">Computers</h1>
-        <p className="app-sub">Computers your agents run on. Every message needs your passkey.</p>
+        <p className="app-sub">Computers your agents run on. Every message needs your passkey, or a send password set on that computer.</p>
       </header>
       {!remote && <div className="skel" style={{ height: 160 }} />}
       {remote?.machines.length === 0 && (
