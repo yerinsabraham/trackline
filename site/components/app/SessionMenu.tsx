@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/account";
 import { modelLabel } from "@/lib/dashboard";
 import AgentLogo, { agentName } from "./AgentLogo";
+import { Cmd } from "./FirstRun";
 
 // What can be done to a session, as a sheet: three dots are always there, since
 // a phone has no hover. Deleting takes no confirmation here, because it comes
@@ -11,7 +12,7 @@ import AgentLogo, { agentName } from "./AgentLogo";
 
 export type MenuSession = { id: string; name: string; pinned: boolean; archived: boolean; onTeam?: boolean; host?: string; agent?: string; model?: string | null };
 
-export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect, onAgent }: {
+export default function SessionMenu({ session, onClose, onChanged, onDelete, onCleared, onSelect, onAgent, resume }: {
   session: MenuSession;
   onClose: () => void;
   /** After a rename, pin or archive: read it again. */
@@ -21,10 +22,13 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
   onSelect?: () => void;
   /** Open who this chat is with: add to team, rename, move. */
   onAgent?: () => void;
+  /** The command that picks this chat up in a terminal on the computer. */
+  resume?: string | null;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState(session.name);
   const [clearing, setClearing] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [error, setError] = useState("");
   const path = `/app/sessions/${encodeURIComponent(session.id)}`;
   const change = async (body: object) => {
@@ -43,6 +47,12 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
             <input id="session-name" className="sheet-input" autoFocus value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
             <button type="submit" className="btn-act sheet-wide">Save</button>
           </form>
+        ) : resuming && resume ? (
+          <>
+            <p className="sheet-note">To pick this chat up on your computer, run this in a terminal in the project. You don&apos;t need it to keep chatting here.</p>
+            <Cmd text={resume} />
+            <button type="button" className="sheet-cancel" onClick={() => setResuming(false)}>Back</button>
+          </>
         ) : clearing ? (
           <>
             <p className="sheet-note">Clear every message from this chat? This can&apos;t be undone. The agent&apos;s own history on your computer stays.</p>
@@ -73,6 +83,7 @@ export default function SessionMenu({ session, onClose, onChanged, onDelete, onC
                 }}>Add to team</button>)}
               {onAgent && !session.onTeam && <button type="button" className="sheet-item" onClick={() => { onAgent(); onClose(); }}>Rename or move agent</button>}
               <button type="button" className="sheet-item" onClick={() => setNaming(true)}>Rename chat</button>
+              {resume && <button type="button" className="sheet-item" onClick={() => setResuming(true)}>Continue on your computer</button>}
             </div>
             <div className="sheet-group">
               <button type="button" className="sheet-item" onClick={() => change({ pinned: !session.pinned })}>{session.pinned ? "Unpin" : "Pin"}</button>

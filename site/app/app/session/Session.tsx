@@ -7,7 +7,7 @@ import { LIGHT_LABEL, modelLabel, positionText, titled, type FeedEvent, type Rep
 import { active, type Attachment, proof, imagesFor, jobState, previewsFor, recall, remember, rememberImages, signDecision, signPrompt } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, Question, ResumeHere, SendAgain, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, JumpToNewest, LaptopNotice, type Line, MyMessage, Question, resumeCommand, SendAgain, Typing, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { plain } from "@/components/ReplyText";
 import { IconBack, IconForward, IconMore, IconStop } from "@/components/app/icons";
 import AgentSheet from "@/components/app/AgentSheet";
@@ -134,6 +134,9 @@ export default function Session() {
   const [view, setView] = useState<SessionView | null>(null);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
+  // Replies there when the chat opened are shown at once; any that arrive while
+  // it is open are written out, so a reply is seen arriving.
+  const opened = useRef<Set<string> | null>(null);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Sent[]>([]);
   const [held, setHeld] = useState<{ text: string; images: Attachment[] } | null>(null);
@@ -185,6 +188,7 @@ export default function Session() {
         cursor.current = r.cursor;
         if (r.events.length) setEvents((old) => [...new Map([...old, ...r.events].map((e) => [e.id, e])).values()]);
         if (r.replies.length) setReplies((old) => [...new Map([...old, ...r.replies].map((x) => [x.id ?? x.at, x])).values()]);
+        opened.current ??= new Set(r.replies.map((x) => x.id ?? x.at));
         setError("");
       } catch (e) {
         if ((e as { status?: number }).status === 404) setError("This session does not exist, or is not yours.");
@@ -297,6 +301,9 @@ export default function Session() {
     remember(r.id, text);
     rememberImages(r.id, images);
     setSent((x) => [...x, { job: r.id, text, createdAt: new Date().toISOString() }]);
+    // Down to what was just sent, wherever the person had scrolled to, so the
+    // reply is seen coming in under it.
+    scrollToBottom("smooth");
   };
 
   // The laptop runs one prompt per project and refuses a second, and a signed
@@ -373,7 +380,7 @@ export default function Session() {
         {who && s && <AgentSheet chat={s.id} host={s.host} name={name_} model={s.model} agentId={s.agentId} project={s.project.id} onClose={() => setWho(false)} onChanged={refresh} />}
         {menu && s && (
           <SessionMenu session={{ id: s.id, name: sessionName(s, agentName(s.host), s.project.name), pinned: !!s.pinnedAt, archived: !!s.archivedAt, onTeam: !!s.agentId, host: s.host, agent: name_, model: s.model }}
-            onClose={() => setMenu(false)} onChanged={refresh} onAgent={() => setWho(true)}
+            onClose={() => setMenu(false)} onChanged={refresh} onAgent={() => setWho(true)} resume={cont ? resumeCommand(cont.agent, cont.session) : null}
             onDelete={() => window.location.assign(`/app/sessions?deleted=${encodeURIComponent(s.id)}`)}
             onCleared={() => { setEvents([]); setReplies([]); setMore(false); refresh(); }} />
         )}
@@ -438,13 +445,14 @@ export default function Session() {
                     );
                   })}
                   {/* A reply that is only the question is shown once, in the card below. */}
-                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} name={s?.agentTitle ?? name_} model={r.model ?? s?.model} onName={() => setWho(true)} />)}
+                  {t.replies.filter((r) => !(asked && last && plain(r.text) === asked.question)).map((r) => <AgentReply key={r.id ?? r.at} host={s?.host ?? null} text={r.text} cut={r.cut} name={s?.agentTitle ?? name_} model={r.model ?? s?.model} onName={() => setWho(true)} reveal={!!opened.current && !opened.current.has(r.id ?? r.at)} />)}
                 </div>
               );
             })}
             {view?.live?.saying && !running && <AgentReply host={s?.host ?? null} text={view.live.saying} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
             {view?.live?.waiting && <Finding tone="warn" title="Waiting for you at your computer">{view.live.waiting.what ?? `${who_} needs your permission to go on.`}</Finding>}
             {running?.saying && !replies.some((r) => r.text === running.saying) && <AgentReply host={s?.host ?? null} text={running.saying} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
+            {working && !view?.live?.saying && !running?.saying && <Typing host={s?.host ?? null} name={s?.agentTitle ?? name_} model={s?.model} onName={() => setWho(true)} />}
             {asked && <Question host={s?.host ?? null} question={asked.question} options={asked.options} onAnswer={send} />}
             {held && (
               <>
@@ -456,7 +464,6 @@ export default function Session() {
               </>
             )}
             <WaitingCards list={handoffs.list.filter((h) => h.status === "asked" && !!cont && h.from.session === cont.session)} />
-            {cont && !working && known.length > 0 && <ResumeHere agent={cont.agent} session={cont.session} />}
           </div>
         </div>
         {!isAtBottom && <JumpToNewest onClick={() => scrollToBottom("instant")} />}
@@ -469,7 +476,7 @@ export default function Session() {
             chat={id || undefined}
             placeholder={`Message ${s?.agentTitle ?? name_}`}
             blocked={blocked}
-            note={working ? `${who_} is working. A message waits here until it finishes.` : atDesk ? "Open on your computer? Close it there first, or this won't be sent." : cont ? `${proof() === "Face ID" ? "Face ID" : "Your passkey"} · continues this chat on ${cont.machine.name}` : undefined}
+            note={working ? `${who_} is working. A message waits here until it finishes.` : atDesk ? "Open on your computer? Close it there first, or this won't be sent." : cont ? `Continues this chat on ${cont.machine.name}` : undefined}
             onSend={send}
           />
         </div>

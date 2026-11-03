@@ -141,13 +141,22 @@ const RESUME: Record<string, string> = { claude: "claude --resume", codex: "code
  * there, by design, so a conversation started here is picked up on the laptop
  * from a terminal.
  */
+export const resumeCommand = (agent: string | null, session: string) => (agent && RESUME[agent] ? `${RESUME[agent]} ${session}` : null);
+
+/**
+ * Picking the conversation up on the computer, closed until asked for. Open at
+ * the foot of every chat, it read as a step the phone needed, and sat between
+ * the person and the reply they were waiting for (2026-11-03).
+ */
 export function ResumeHere({ agent, session }: { agent: string | null; session: string }) {
-  if (!agent || !RESUME[agent]) return null;
+  const cmd = resumeCommand(agent, session);
+  if (!cmd) return null;
   return (
-    <div className="resume-here">
-      <span>Carry on at your computer, in a terminal in this project:</span>
-      <Cmd text={`${RESUME[agent]} ${session}`} />
-    </div>
+    <details className="resume-here">
+      <summary>Continue on your computer</summary>
+      <span>Only to pick this up there. Your phone needs none of this. In a terminal in this project:</span>
+      <Cmd text={cmd} />
+    </details>
   );
 }
 
@@ -303,15 +312,46 @@ function Sender({ host, name, model, onName }: { host: string | null; name: stri
 }
 
 /** The agent's words, rendered as the Markdown it wrote, never as raw marks. */
-export function AgentReply({ host, text, cut, name, model, onName }: { host: string | null; text: string; cut?: boolean; name?: string; model?: string | null; onName?: () => void }) {
+export function AgentReply({ host, text, cut, name, model, onName, reveal }: { host: string | null; text: string; cut?: boolean; name?: string; model?: string | null; onName?: () => void; reveal?: boolean }) {
+  const shown = useReveal(text, !!reveal);
   return (
     <div className="bubble-agent">
       {name && <Sender host={host} name={name} model={model} onName={onName} />}
       <div className="body">
-        <ReplyText text={text} />
-        {cut && <p className="reply-cut">Cut short. The rest is on your computer.</p>}
-        <div className="reply-tools"><CopyButton text={text} /></div>
+        <ReplyText text={shown} />
+        {shown === text && cut && <p className="reply-cut">Cut short. The rest is on your computer.</p>}
+        {shown === text && <div className="reply-tools"><CopyButton text={text} /></div>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A reply that arrives while the chat is open is written out, a few words at a
+ * time, rather than appearing at once: arriving whole, it read as nothing
+ * happening and then everything, and was missed (2026-11-03). The laptop sends
+ * the reply whole, so this is pace, not streaming. It takes at most about two
+ * seconds, and none for anyone who asked for less motion.
+ */
+function useReveal(text: string, on: boolean): string {
+  const [n, setN] = useState(() => (on ? 0 : Infinity));
+  const words = text.split(/(\s+)/);
+  useEffect(() => {
+    if (!on || n >= words.length) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setN(Infinity); return; }
+    const step = Math.max(2, Math.ceil(words.length / 70));
+    const t = setTimeout(() => setN((x) => x + step), 30);
+    return () => clearTimeout(t);
+  }, [on, n, words.length]);
+  return n >= words.length ? text : words.slice(0, n).join("");
+}
+
+/** The agent at work, before it has said anything: the dots a person typing shows. */
+export function Typing({ host, name, model, onName }: { host: string | null; name: string; model?: string | null; onName?: () => void }) {
+  return (
+    <div className="bubble-agent" aria-live="polite">
+      <Sender host={host} name={name} model={model} onName={onName} />
+      <div className="body typing" role="status" aria-label={`${name} is working`}><i /><i /><i /></div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import {
   active, type AgentEvent, imagesFor, type Job, jobState, type Machine, passkeysSupported, protectedMacArea, previewsFor, recall, remember, rememberImages, signPrompt, type Attachment, proof } from "@/lib/remote";
 import AgentLogo, { agentName } from "@/components/app/AgentLogo";
 import { useApp } from "@/components/app/AppShell";
-import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, ResumeHere, SendAgain, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
+import { Activity, AgentReply, Composer, Finding, LaptopNotice, type Line, MyMessage, Question, ResumeHere, SendAgain, Typing, useAttachments, useChatScroll, usePasskeys } from "@/components/app/Chat";
 import { IconBack, IconFace, IconLaptop, IconStop } from "@/components/app/icons";
 import { plain } from "@/components/ReplyText";
 
@@ -281,7 +281,7 @@ function JobChat({ id, onNew, open }: { id: string; onNew: () => void; open: (id
               // A reply that is only the question is shown once, in the card below.
               : it.kind === "say" ? (job?.asked && !live && i === list.length - 1 && plain(it.text) === job.asked.question ? null : <AgentReply key={it.key} host={job?.agent ?? null} text={it.text} />)
               : <Finding key={it.key} tone="block" title="The agent stopped with an error">{it.text}</Finding>)}
-            {live && list[list.length - 1]?.kind !== "activity" && job?.status === "delivered" && <Activity lines={[]} live />}
+            {live && list[list.length - 1]?.kind !== "say" && <Typing host={job?.agent ?? null} name={agentName(job?.agent)} />}
             {job?.status === "expired" && (
               <Finding tone="warn" title="Not delivered" actions={asked ? <SendAgain onSend={() => send(asked, imagesFor(id), true)} /> : undefined}>
                 {machineName} stayed offline, so this never reached it and nothing ran. Wake it{asked ? ", then send it again" : " and send it again"}.

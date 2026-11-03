@@ -540,10 +540,12 @@ test("the team lists members, and a profile is their record", async ({ page, con
   await expect.poll(() => fake.calls.find((c) => c.method === "PATCH")?.body).toContain("CTO");
 });
 
-test("signing is called Face ID only on an iPhone", async ({ page, context, browserName }) => {
+// How a message is confirmed depends on the device and is asked at send, so
+// the note under the box names only where it goes.
+test("the note under the message box says where a message goes, not how it is confirmed", async ({ page, context }) => {
   await fakeAccount(context, { jobs: [job("j1", "done")] });
   await page.goto("/app/session?id=s1");
-  await expect(page.locator(".composer-note").first()).toContainText(browserName === "webkit" ? "Face ID" : "Your passkey");
+  await expect(page.locator(".composer-note").first()).toHaveText("Continues this chat on MacBook");
 });
 
 test("an agent that is set up but silent is said out loud", async ({ page, context }) => {
@@ -850,4 +852,44 @@ test("adding a passkey on a new phone can be confirmed with an email code", asyn
   await confirm.getByLabel(/Code sent to/).fill("654321");
   await confirm.getByRole("button", { name: "Confirm" }).click();
   await expect.poll(() => fake.calls.filter((c) => c.path === "/auth/passkeys/options").length).toBe(2);
+});
+
+// A reply seen arriving: dots while the agent works, then the reply written
+// out, and the chat following it, never a finished block appearing at once.
+test("the agent is seen working, and a new reply is written out where you can see it", async ({ page, context }) => {
+  const fake = await fakeAccount(context, { light: "working", jobs: [job("j1", "running")] });
+  await openChat(page);
+  await expect(page.getByRole("status", { name: /is working/ })).toBeVisible();
+
+  const long = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+  fake.light = "done";
+  fake.jobs = [job("j1", "done")];
+  fake.extra = [{ id: "arrived", at: new Date().toISOString(), turn: "arrived", text: long }];
+  const reply = page.locator(".bubble-agent").filter({ hasText: "word0" }).last();
+  await expect(reply).toBeVisible({ timeout: 8000 });
+  // Written out, not there all at once.
+  expect(await reply.innerText()).not.toContain("word119");
+  await expect(reply).toContainText("word119", { timeout: 5000 });
+  await expect(page.getByText("word119")).toBeInViewport();
+  await expect(page.getByRole("status", { name: /is working/ })).toHaveCount(0);
+});
+
+test("replies there when the chat opens are shown whole", async ({ page, context }) => {
+  await fakeAccount(context);
+  await openChat(page);
+  const reply = page.locator(".bubble-agent").filter({ hasText: "Bundle" }).last();
+  await expect(reply).toBeVisible();
+  // The whole of it straight away, end included: nothing to wait for.
+  expect(await reply.innerText()).toContain("the docs");
+});
+
+// Picking a chat up on the computer is for the computer, so it lives in the
+// menu, not at the foot of every chat between you and the reply.
+test("the command to continue on the computer is in the menu, not the chat", async ({ page, context }) => {
+  await fakeAccount(context);
+  await openChat(page);
+  await expect(page.locator(".chat-scroll .resume-here")).toHaveCount(0);
+  await page.getByRole("button", { name: "Chat options" }).click();
+  await page.getByRole("button", { name: "Continue on your computer" }).click();
+  await expect(page.getByRole("dialog").locator("code")).toHaveText("claude --resume abc");
 });
