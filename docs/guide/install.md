@@ -48,17 +48,23 @@ trackline finds, then, the first time on a computer, opens the site to approve
 it. Once a computer is linked, `trackline init` offers this for each new
 project.
 
-Sending from a device that has no passkey paired with your computer, such as a
-borrowed laptop or a browser without passkeys, needs a send password. Set it on
-the computer, once:
+To send from your phone, run this once on the computer:
 
 ```bash
-trackline remote password
+trackline remote enable
 ```
 
-Your computer checks it, as it checks a passkey. It needs 12 or more characters
-and turns off after 5 wrong tries. Unlike a passkey, someone who stole the
-server's data could try guessing it offline, so it is off until you set it.
+Each message is confirmed on the phone first, in whichever way works there:
+
+- **Continue with Google**, if you sign in with Google. Your computer checks
+  Google's signature itself.
+- **A code to your email**, if you allowed it when asked. Only the server can
+  check the code, so allow it only if you are content to trust that.
+- **A passkey** paired with the computer.
+- **A send password**, set on the computer with `trackline remote password`.
+  Your computer checks it. It needs 12 or more characters and turns off after
+  5 wrong tries; unlike a passkey, someone who stole the server's data could
+  try guessing it offline.
 
 ## Updating
 

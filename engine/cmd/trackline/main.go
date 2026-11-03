@@ -250,7 +250,7 @@ by hand. Offline, events wait on this machine and go in order later.
 
 Revoke this machine's credential on the account and remove it from here.
 `,
-	"remote": `trackline remote enable [--root DIR] [--pair] [--no-start]
+	"remote": `trackline remote enable [--root DIR] [--pair] [--no-start] [--email-codes|--no-email-codes]
 trackline remote disable [--root DIR] [--all]
 trackline remote status
 trackline remote password [off]
@@ -259,8 +259,10 @@ Let a message sent from your phone run in your projects on this laptop, with
 your own agent. Pair once, here, and every project you connect takes messages;
 the website cannot turn it on.
 
-enable   pair your phone. The first time, it shows a code to enter there, which
-         pairs your passkey with this laptop. Inside a project, also turns that
+enable   let your phone send here. Signed in with Google, a message can be
+         confirmed with Google, checked here. Otherwise the first time shows a
+         code to enter there, which pairs your passkey with this laptop. Asks
+         once whether a code to your email may confirm a message too. Inside a project, also turns that
          project back on, and lifts a stop made from the site.
          --pair pairs another passkey. Starts the runner at login (macOS).
 disable  turn it off for this project, and keep it off, on or not yet on. --all turns it off

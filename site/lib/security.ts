@@ -20,12 +20,24 @@ async function purposeChallenge(purpose: string, serverChallenge: string): Promi
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** Confirms with a passkey on this device. */
+export async function passkeyStepUp(): Promise<void> {
+  const options = await api<{ challenge: string }>("/auth/step-up/passkey/options", { method: "POST", body: "{}" });
+  const challenge = await purposeChallenge("step-up", options.challenge);
+  const response = await startAuthentication({ optionsJSON: { ...options, challenge } as never });
+  await api("/auth/step-up", { method: "POST", body: JSON.stringify({ method: "passkey", response }) });
+}
+
+// The sheet that offers every way to confirm, where one is on the page. Without
+// it, the only ways were a passkey and a typed authenticator code, and a phone
+// with neither went round in a loop.
+let sheet: (() => Promise<void>) | null = null;
+export const setIdentitySheet = (ask: (() => Promise<void>) | null) => { sheet = ask; };
+
 export async function stepUp(): Promise<void> {
+  if (sheet) return sheet();
   try {
-    const options = await api<{ challenge: string }>("/auth/step-up/passkey/options", { method: "POST", body: "{}" });
-    const challenge = await purposeChallenge("step-up", options.challenge);
-    const response = await startAuthentication({ optionsJSON: { ...options, challenge } as never });
-    await api("/auth/step-up", { method: "POST", body: JSON.stringify({ method: "passkey", response }) });
+    await passkeyStepUp();
     return;
   } catch {
     // Fall back to a code below. Browsers can refuse passkeys for many normal

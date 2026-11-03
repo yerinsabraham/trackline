@@ -894,3 +894,5 @@ a.metric:active { transform: scale(0.98); }
 .confirm-password, .confirm-step { display: grid; gap: 6px; margin-top: 10px; min-width: 0; }
 .confirm-step .fr-cmd { max-width: none; }
 .update-step .fr-cmd code, .confirm-step .fr-cmd code { white-space: normal; overflow-wrap: anywhere; }
+.sheet-back.sheet-top { z-index: 60; }
+.confirm-google { min-height: 44px; display: flex; justify-content: center; margin-top: 8px; }

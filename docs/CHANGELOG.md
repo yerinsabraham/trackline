@@ -3,7 +3,24 @@
 What changed in each release of `trackline`, newest first. The website's
 changelog page is built from this file.
 
-## 0.15.0 · 2026-11-02
+## 0.16.0 · 2026-11-03
+
+Run `trackline remote enable` once on your computer to turn these on.
+
+- **Confirm with Google.** Signed in with Google, you confirm a message from
+  your phone by tapping Continue with Google. No passkey, nothing to scan.
+  Google signs a token that names that one message, and your computer checks
+  Google's signature itself, so our server still cannot write a message.
+- **Or a code to your email.** For any account. `trackline remote enable`
+  asks once whether to allow it. Only our server can check the code, so your
+  computer takes its word for it: allowing email codes means someone in your
+  inbox, or someone who took over our server, could send tasks there. One code
+  covers your messages for the next 14 minutes.
+- **Adding a passkey on a new phone no longer goes round in a loop.** It asked
+  you to confirm it was you, with a passkey the phone did not have. It now
+  offers Google, an email code, a passkey or an authenticator code.
+
+
 
 - **An update says so.** The app tells you when a newer trackline is out, and
   when a project is missing hooks a release added, with the one command that

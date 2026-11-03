@@ -185,11 +185,23 @@ func Check(s *State, env Envelope, self string, now time.Time) (Accepted, error)
 	if err != nil || len(raw) == 0 || len(raw) > MaxText+4096 {
 		return Accepted{}, refuse("bad-envelope", "the job could not be read")
 	}
-	if strings.HasPrefix(env.Key, PasswordPrefix) {
+	switch {
+	case env.Key == GoogleKey:
+		if s.Google == nil {
+			return Accepted{}, refuse("unknown-key", "confirmed with Google, which is not allowed on this laptop; allow it here: trackline remote enable")
+		}
+		if err := VerifyGoogle(env.Signature, s.Google.Sub, JobChallenge(raw), now); err != nil {
+			return Accepted{}, refuse("bad-signature", "the Google confirmation did not check out: %v", err)
+		}
+	case env.Key == AccountKey:
+		if !s.AccountCodes {
+			return Accepted{}, refuse("unknown-key", "confirmed with an email code, which is not allowed on this laptop; allow it here: trackline remote enable")
+		}
+	case strings.HasPrefix(env.Key, PasswordPrefix):
 		if r := s.checkPassword(env, raw, now); r != nil {
 			return Accepted{}, r
 		}
-	} else {
+	default:
 		key, ok := s.key(env.Key)
 		if !ok {
 			return Accepted{}, refuse("unknown-key", "signed by a passkey this laptop has not paired with")

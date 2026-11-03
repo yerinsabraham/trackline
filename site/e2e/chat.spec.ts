@@ -753,14 +753,14 @@ test("a passkey this device lacks opens every other way, and the send password s
   await expect(page.getByRole("dialog", { name: "Confirm it's you" })).toHaveCount(0);
 });
 
-test("with no send password the sheet says how to set one, and a device that lacked a passkey asks first next time", async ({ page, context }) => {
+test("with no other way allowed the sheet says how to allow one, and a device that lacked a passkey asks first next time", async ({ page, context }) => {
   await noPasskeyHere(context);
   const fake = await fakeAccount(context, { passkeys: PHONE_KEY });
   await openChat(page);
   await page.locator("textarea").fill("fix the footer");
   await page.locator(".composer-send").click();
   const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
-  await expect(sheet.locator("code")).toHaveText("trackline remote password");
+  await expect(sheet.locator("code")).toHaveText("trackline remote enable");
   await sheet.getByRole("button", { name: "Set up this device instead" }).click();
   await expect(sheet.getByRole("button", { name: "Add a passkey" })).toBeVisible();
   await expect(sheet.locator("code").last()).toHaveText("trackline remote enable --pair");
@@ -773,4 +773,81 @@ test("with no send password the sheet says how to set one, and a device that lac
   await page.locator(".composer-send").click();
   await expect(page.getByRole("dialog", { name: "Confirm it's you" })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { asked: number }).asked)).toBe(0);
+});
+
+// Google's script, stood in for: its button hands back a token whose nonce is
+// whatever it was given, so a test can see which message the token named.
+async function fakeGoogle(context: import("@playwright/test").BrowserContext) {
+  await context.route("https://accounts.google.com/gsi/client", (route) => route.fulfill({
+    contentType: "text/javascript",
+    body: `window.google = { accounts: { id: {
+      initialize(o) { window.__gis = o; },
+      renderButton(el) { const b = document.createElement("button"); b.textContent = "Continue with Google"; b.onclick = () => window.__gis.callback({ credential: "h." + btoa(JSON.stringify({ nonce: window.__gis.nonce })).replace(/=+$/, "") + ".s" }); el.appendChild(b); },
+    } } };`,
+  }));
+}
+
+test("a phone signed in with Google confirms a message with Google, and the token names that message", async ({ page, context }) => {
+  await noPasskeyHere(context);
+  await fakeGoogle(context);
+  const fake = await fakeAccount(context, { passkeys: PHONE_KEY, google: true });
+  await openChat(page);
+  await page.locator("textarea").fill("fix the footer");
+  await page.locator(".composer-send").click();
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
+  // Straight to the sheet: no passkey prompt first on a Google phone.
+  await sheet.getByRole("button", { name: "Continue with Google" }).click();
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/app/remote/jobs").length).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as { asked: number }).asked)).toBe(0);
+  const env = JSON.parse(fake.calls.find((c) => c.path === "/app/remote/jobs")!.body!).envelope;
+  expect(env.key).toBe("google");
+  const nonce = JSON.parse(Buffer.from(env.signature.split(".")[1], "base64").toString()).nonce;
+  const challenge = await page.evaluate(async (job) => {
+    const bytes = Uint8Array.from(atob(job.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const all = new Uint8Array([...new TextEncoder().encode("trackline job v1\n"), ...bytes]);
+    return btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", all)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }, env.job);
+  expect(nonce).toBe(challenge);
+});
+
+test("an email code confirms a message, and covers the next one too", async ({ page, context }) => {
+  await noPasskeyHere(context);
+  const fake = await fakeAccount(context, { passkeys: [], emailCodes: true });
+  await openChat(page);
+  await page.locator("textarea").fill("fix the footer");
+  await page.locator(".composer-send").click();
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" });
+  await sheet.getByRole("button", { name: "Email me a code" }).click();
+  await expect(sheet.getByText("Code sent to te••@example.com")).toBeVisible();
+  await sheet.getByLabel(/Code sent to/).fill("123456");
+  await sheet.getByRole("button", { name: "Confirm" }).click();
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/app/remote/jobs").length).toBe(1);
+  expect(JSON.parse(fake.calls.find((c) => c.path === "/auth/step-up")!.body!)).toEqual({ method: "email", code: "123456" });
+  expect(JSON.parse(fake.calls.find((c) => c.path === "/app/remote/jobs")!.body!).envelope.key).toBe("account");
+
+  fake.jobs = [job("job_sent1", "done")];
+  await expect(page.locator(".composer-note").first()).not.toContainText("is working", { timeout: 15_000 });
+  await page.locator("textarea").fill("and the header");
+  await page.locator(".composer-send").click();
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/app/remote/jobs").length).toBe(2);
+  expect(fake.calls.filter((c) => c.path === "/auth/step-up/email/send")).toHaveLength(1);
+});
+
+// The loop, fixed: adding a passkey asks to confirm it is you, and offers
+// Google and an email code, not only a passkey the phone does not have.
+test("adding a passkey on a new phone can be confirmed with an email code", async ({ page, context }) => {
+  await noPasskeyHere(context);
+  const fake = await fakeAccount(context, { passkeys: PHONE_KEY, stepUpFirst: true });
+  await openChat(page);
+  await page.locator("textarea").fill("hello");
+  await page.locator(".composer-send").click();
+  const sheet = page.getByRole("dialog", { name: "Confirm it's you" }).first();
+  await sheet.getByRole("button", { name: "Set up this device instead" }).click();
+  await sheet.getByRole("button", { name: "Add a passkey" }).click();
+  const confirm = page.getByRole("dialog", { name: "Confirm it's you" }).last();
+  await expect(confirm.getByText("This change needs you to confirm it's you.")).toBeVisible();
+  await confirm.getByRole("button", { name: "Email me a code" }).click();
+  await confirm.getByLabel(/Code sent to/).fill("654321");
+  await confirm.getByRole("button", { name: "Confirm" }).click();
+  await expect.poll(() => fake.calls.filter((c) => c.path === "/auth/passkeys/options").length).toBe(2);
 });

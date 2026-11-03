@@ -17,11 +17,18 @@ export type Machine = {
   projects: RemoteProject[]; passkeys: { id: string; name: string }[];
   /** A send password set on the laptop: what this page needs to make its key. */
   password?: SendPassword | null;
+  /** Ways besides a passkey this laptop takes a message confirmed. */
+  google?: boolean; emailCodes?: boolean;
 };
 export type SendPassword = { id: string; salt: string; rounds: number };
 
-/** Who signs a job: a passkey, or the send password's key. */
-export type Signer = Passkey[] | { password: string; key: CryptoKey };
+export type Signed = { key: string; assertion: Assertion };
+
+/**
+ * Who signs a job: a passkey, the send password's key, or a person asked once
+ * the job exists, since Google's token has to name the job it confirms.
+ */
+export type Signer = Passkey[] | { password: string; key: CryptoKey } | { ask: (challenge: Uint8Array<ArrayBuffer>) => Promise<Signed> };
 
 /** A passkey that could not sign here, so another way is worth offering. */
 export class SignError extends Error {
@@ -51,7 +58,7 @@ export type Continuation = {
   project: string; agent: string; session: string;
 };
 export type AgentEvent = { seq: number; kind: string; tool: string | null; text: string | null; createdAt: string };
-type Assertion = { authenticatorData: string; clientDataJSON: string; signature: string };
+export type Assertion = { authenticatorData: string; clientDataJSON: string; signature: string };
 
 export const AGENT_LABEL: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
 
@@ -102,6 +109,15 @@ export function normalizeCode(s: string): string {
 export function passkeysSupported(): boolean {
   return typeof window !== "undefined" && "PublicKeyCredential" in window && !!navigator.credentials;
 }
+
+/** Signs a job's challenge with a passkey, from the sheet that asked. */
+export async function passkeySigned(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promise<Signed> {
+  const { key, assertion } = await sign(challenge, keys);
+  return { key: key.id, assertion };
+}
+
+/** No signature: the account confirmed it, with an email code just now. */
+export const ACCOUNT_SIGNED: Signed = { key: "account", assertion: { authenticatorData: "", clientDataJSON: "", signature: "" } };
 
 /** Asks one of the person's passkeys to sign, with Face ID, a fingerprint or a PIN. */
 async function sign(challenge: Uint8Array<ArrayBuffer>, keys: Passkey[]): Promise<{ key: Passkey; assertion: Assertion }> {
@@ -160,13 +176,13 @@ export async function signPairing(machineId: string, code: string, keys: Passkey
 }
 
 /** Signs a job's bytes: as the laptop checks them, by a passkey or with the send password. */
-async function signJob(bytes: Uint8Array, by: Signer): Promise<{ key: string; assertion: Assertion }> {
+async function signJob(bytes: Uint8Array, by: Signer): Promise<Signed> {
+  if ("ask" in by) return by.ask(await sha256(utf8("trackline job v1\n"), bytes));
   if (!Array.isArray(by)) {
     const mac = await passwordMAC(by.key, bytes);
     return { key: by.password, assertion: { authenticatorData: "", clientDataJSON: "", signature: b64u(mac) } };
   }
-  const { key, assertion } = await sign(await sha256(utf8("trackline job v1\n"), bytes), by);
-  return { key: key.id, assertion };
+  return passkeySigned(await sha256(utf8("trackline job v1\n"), bytes), by);
 }
 
 function jobId(): string {

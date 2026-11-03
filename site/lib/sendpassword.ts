@@ -20,7 +20,11 @@ export async function passwordMAC(key: CryptoKey, job: Uint8Array): Promise<Uint
   const purpose = utf8("trackline job v1\n");
   const all = new Uint8Array(purpose.length + job.length);
   all.set(purpose); all.set(job, purpose.length);
-  const challenge = await crypto.subtle.digest("SHA-256", all);
+  return challengeMAC(key, new Uint8Array(await crypto.subtle.digest("SHA-256", all)));
+}
+
+/** The same, from the job's challenge where only that is at hand. */
+export async function challengeMAC(key: CryptoKey, challenge: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, challenge));
 }
 

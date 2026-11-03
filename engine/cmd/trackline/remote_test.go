@@ -45,6 +45,10 @@ type fakeAccount struct {
 	cancel    map[string]bool
 	// images the server hands out, by hash: honest or not.
 	images map[string][]byte
+	// googleSub is the account's Google sign-in, if any, and confirm what the
+	// laptop said about Google and email codes.
+	googleSub string
+	confirm   map[string]bool
 }
 
 func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +68,14 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Write(b)
+	case r.Method == "GET" && p == "/devices/me":
+		me := map[string]any{"device": map[string]string{"id": "dev_laptop"}, "user": map[string]string{"email": "person@example.com"}}
+		if f.googleSub != "" {
+			me["google"] = map[string]string{"sub": f.googleSub, "email": "person@example.com"}
+		}
+		send(me)
+	case r.Method == "PUT" && p == "/remote/confirm":
+		json.NewDecoder(r.Body).Decode(&f.confirm)
 	case r.Method == "POST" && p == "/remote/pairings":
 		send(remote.Pairing{ID: "pair_1", ExpiresIn: 60})
 	case r.Method == "GET" && p == "/remote/pairings/pair_1":
@@ -254,6 +266,39 @@ func TestPairingRefusesAnAnswerOverAnotherCode(t *testing.T) {
 	s, _ := relay.Load()
 	if len(s.Keys) != 0 || len(s.Projects) != 0 {
 		t.Fatalf("something was trusted anyway: %+v", s)
+	}
+}
+
+// Signed in with Google, a person turns remote on without pairing anything:
+// the laptop records which Google account, said on screen, and tells the
+// account so the phone offers Google.
+func TestEnableWithGoogleNeedsNoPasskey(t *testing.T) {
+	f := &fakeAccount{projects: map[string]string{}, results: map[string]remote.Result{}, googleSub: "g-123"}
+	root := remoteEnv(t, f)
+	stdin := os.Stdin
+	t.Cleanup(func() { os.Stdin = stdin })
+	r, w, _ := os.Pipe()
+	w.WriteString("n\n")
+	w.Close()
+	os.Stdin = r
+	if err := remoteEnable([]string{"--root", root, "--no-start"}); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := relay.Load()
+	if s.Google == nil || s.Google.Sub != "g-123" || len(s.Keys) != 0 {
+		t.Fatalf("Google = %+v, keys = %d", s.Google, len(s.Keys))
+	}
+	if s.AccountCodes || !s.AccountAsked {
+		t.Fatalf("email codes answered no, yet: %v asked %v", s.AccountCodes, s.AccountAsked)
+	}
+	if f.paired != nil {
+		t.Fatal("a pairing was started though Google confirms")
+	}
+	if !f.confirm["google"] || f.confirm["email"] {
+		t.Fatalf("the account was told %v", f.confirm)
+	}
+	if len(s.Projects) == 0 {
+		t.Fatal("no project turned on")
 	}
 }
 

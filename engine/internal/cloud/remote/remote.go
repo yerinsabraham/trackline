@@ -121,6 +121,11 @@ type Me struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
 	} `json:"user"`
+	// Google is the account's Google sign-in, when it has one.
+	Google *struct {
+		Sub   string `json:"sub"`
+		Email string `json:"email"`
+	} `json:"google"`
 }
 
 func (c Client) StartConnect(name string) (Code, error) {

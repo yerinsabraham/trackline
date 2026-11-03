@@ -77,6 +77,12 @@ func (c Client) SetPassword(id, salt string, rounds int) error {
 	return c.do("PUT", "/remote/password", map[string]any{"id": id, "salt": salt, "rounds": rounds}, nil)
 }
 
+// SetConfirmWays tells the account which other ways this laptop takes a
+// message confirmed, so the phone offers only those.
+func (c Client) SetConfirmWays(google, email bool) error {
+	return c.do("PUT", "/remote/confirm", map[string]bool{"google": google, "email": email}, nil)
+}
+
 func (c Client) UnsetPassword() error { return c.do("DELETE", "/remote/password", nil, nil) }
 
 // UnsetAllRemote is the laptop's kill switch, told to the account.

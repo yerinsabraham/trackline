@@ -135,7 +135,7 @@ func rpFor(s *relay.State) (relay.RP, error) {
 
 func remoteEnable(args []string) error {
 	root, pair, start := "", false, true
-	var openChats *bool
+	var openChats, emailCodes *bool
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--root", "-root":
@@ -153,6 +153,12 @@ func remoteEnable(args []string) error {
 		case "--no-open-chats":
 			off := false
 			openChats = &off
+		case "--email-codes":
+			on := true
+			emailCodes = &on
+		case "--no-email-codes":
+			off := false
+			emailCodes = &off
 		}
 	}
 	named := root != ""
@@ -180,13 +186,17 @@ func remoteEnable(args []string) error {
 	if _, _, here := account.ProjectFor(root); len(connected) == 0 || (named && !here) {
 		return fmt.Errorf("%s is not connected. Run trackline connect there first", root)
 	}
+	if err := confirmWays(client, emailCodes); err != nil {
+		return err
+	}
 	s, err := relay.Load()
 	if err != nil {
 		return err
 	}
-	// A send password set here is a way in of its own, so a person with no
-	// passkey anywhere can still turn remote on.
-	if len(s.Keys) == 0 && s.Password == nil || pair {
+	// Google or a send password set here is each a way in the laptop checks
+	// itself, so a person with no passkey anywhere can still turn remote on.
+	// Email codes are not: they are only ever an extra, never the one way in.
+	if len(s.Keys) == 0 && s.Password == nil && s.Google == nil || pair {
 		if err := pairPasskey(client, creds, s); err != nil {
 			return err
 		}
@@ -239,7 +249,7 @@ func remoteEnable(args []string) error {
 	if len(added) > 0 {
 		fmt.Printf(", newly: %s", strings.Join(added, ", "))
 	}
-	fmt.Printf(".\nAgents it can start: %s.\nEvery message still needs your passkey or send password. Turn one project off, inside it: trackline remote disable\n", agentList(found))
+	fmt.Printf(".\nAgents it can start: %s.\nEvery message is confirmed by you on your phone first. Turn one project off, inside it: trackline remote disable\n", agentList(found))
 	return nil
 }
 
@@ -455,7 +465,7 @@ func remoteStatus() error {
 	if err != nil {
 		return err
 	}
-	if len(s.Projects) == 0 && len(s.Keys) == 0 && s.Password == nil {
+	if len(s.Projects) == 0 && len(s.Keys) == 0 && s.Password == nil && s.Google == nil {
 		fmt.Println("Remote is off. Pair your phone: trackline remote enable")
 		return nil
 	}
@@ -466,6 +476,10 @@ func remoteStatus() error {
 	for _, k := range s.Keys {
 		fmt.Printf("  %s, paired %s\n", k.Name, k.PairedAt.Local().Format("2 Jan 2006"))
 	}
+	if s.Google != nil {
+		fmt.Printf("Confirm with Google: %s\n", s.Google.Email)
+	}
+	fmt.Printf("Email codes: %s\n", map[bool]string{true: "allowed", false: "not allowed"}[s.AccountCodes])
 	switch p := s.Password; {
 	case p == nil:
 		fmt.Println("Send password: not set")
@@ -957,4 +971,44 @@ func stopAtLogin() {
 	if p, err := plistPath(); err == nil {
 		os.Remove(p)
 	}
+}
+
+// confirmWays records the ways besides a passkey that this laptop takes a
+// message confirmed. The Google account is the one the person is signed in
+// with, read here, at the laptop, and shown, so it is never one the server
+// swapped in later. Email codes are asked about once: only the server can
+// check one, so allowing them is the person's call.
+func confirmWays(client remote.Client, emailCodes *bool) error {
+	me, meErr := client.Me()
+	if meErr != nil {
+		fmt.Fprintf(os.Stderr, "Could not ask the account how you sign in (%v); confirming with Google is not set up this time.\n", meErr)
+	}
+	var said []string
+	err := relay.Update(func(s *relay.State) error {
+		if me.Google != nil && me.Google.Sub != "" && (s.Google == nil || s.Google.Sub != me.Google.Sub) {
+			s.Google = &relay.GoogleID{Sub: me.Google.Sub, Email: me.Google.Email, SetAt: time.Now()}
+			said = append(said, fmt.Sprintf("Messages from your phone can be confirmed by signing in with Google (%s).", me.Google.Email))
+		}
+		switch {
+		case emailCodes != nil:
+			s.AccountCodes, s.AccountAsked = *emailCodes, true
+		case !s.AccountAsked && meErr == nil && me.User.Email != "":
+			// With Google there is a stronger way already, so the answer that
+			// adds nothing is the default.
+			q := fmt.Sprintf("Also allow a code sent to %s to confirm messages? Anyone with that inbox could then send tasks here.", me.User.Email)
+			s.AccountCodes, s.AccountAsked = prompter(false)(q, s.Google == nil), true
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, line := range said {
+		fmt.Println(line)
+	}
+	s, _ := relay.Load()
+	if err := client.SetConfirmWays(s.Google != nil, s.AccountCodes); err != nil {
+		fmt.Fprintf(os.Stderr, "The account could not be told how messages may be confirmed (%v). Run trackline remote enable again later.\n", err)
+	}
+	return nil
 }

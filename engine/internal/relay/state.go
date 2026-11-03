@@ -26,8 +26,15 @@ type State struct {
 	RP   *RP   `json:"rp,omitempty"`
 	Keys []Key `json:"keys"`
 	// Password is the send password, when one is set here. See password.go.
-	Password *Password          `json:"password,omitempty"`
-	Projects map[string]Enabled `json:"projects"`
+	Password *Password `json:"password,omitempty"`
+	// Google is the Google account that may confirm jobs, and AccountCodes
+	// whether a code sent to the account's email may. See google.go.
+	Google       *GoogleID `json:"google,omitempty"`
+	AccountCodes bool      `json:"accountCodes,omitempty"`
+	// AccountAsked is whether a person here answered the email-code question,
+	// so it is asked once rather than on every enable.
+	AccountAsked bool               `json:"accountAsked,omitempty"`
+	Projects     map[string]Enabled `json:"projects"`
 	// OpenChats lets a phone message join a Codex chat open on this laptop. That
 	// chat keeps its own permissions, not the narrow ones a phone run gets, so
 	// only a person at a terminal here turns it on.
@@ -379,6 +386,7 @@ func save(p string, s *State) error {
 func Forget() error {
 	return Update(func(s *State) error {
 		s.Keys, s.RP, s.Password = nil, nil, nil
+		s.Google, s.AccountCodes = nil, false
 		s.Projects = map[string]Enabled{}
 		s.All, s.Off, s.OffRoots = false, nil, nil
 		return nil
