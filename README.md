@@ -86,7 +86,12 @@ trackline mcp             # let any MCP agent ask before it acts (advisory)
 trackline traces DIR      # check exported production traces (OTLP)
 trackline serve           # receive a deployed agent's traces live
 trackline serve --connect # ...and show it on the dashboard, never what customers said
-trackline connect         # optional: a live dashboard, and tasks from your phone
+trackline connect         # optional: a live dashboard, and your agents in an app
+trackline remote enable   # let your phone send messages to agents on this computer
+trackline remote password # a send password, for a device without a passkey
+trackline share commands on|off  # show each command's full text in the app (off by default)
+trackline account         # who this computer is connected as
+trackline disconnect      # remove this computer from the account
 ```
 
 ### What it can do in each agent
@@ -117,14 +122,40 @@ It also speaks to any OpenAI-compatible endpoint, including a local model. For a
 tool whose subject is what an agent may do, nobody should have to send their
 code to a third party to use it.
 
-### From your phone
+### The app
 
-Optional. `trackline connect` pairs your phone once, with a passkey and a code
-on your laptop's screen, and every project you connect is then ready. From the app you can send a task to Claude Code, Codex or
-Cursor on your own laptop, watch it run, reply to it, and answer **Allow once** or
-**Keep blocked** when trackline stops something. Every message is signed by your
-passkey and checked on the laptop, so the server that carries it cannot write
-one. `trackline remote disable` turns one project off, and `--all` turns it off
+Optional. `trackline connect` links a computer to an account at
+[trackline.dev](https://trackline.dev), which works on a phone as an app.
+
+- **A team you can see.** Each agent gets a name and a job, such as CTO,
+  Reviewer or Designer, with a record of what it has done, whichever of Claude
+  Code, Codex or Cursor it runs on.
+- **Chats, live.** Your message shows the moment you send it at your desk, the
+  agent's words appear while it works, and a reply is written out as it
+  arrives. Message any agent from your phone, photos included, and it carries
+  on in the same conversation on your computer.
+- **Allow once, or keep it blocked.** When trackline stops something, you decide
+  from your phone, for that one thing.
+- **Agents can ask each other.** Claude can hand a task to Codex, and it runs
+  only once you approve exactly what was asked.
+- **On track.** One number: the share of your agents' checked actions that
+  matched what you asked. Counted, never guessed.
+- **Alerts.** Your phone tells you when an agent is waiting for you, is stopped,
+  or has finished, and stays quiet about the chat you have open.
+
+Every message from your phone is confirmed there first and checked on your
+computer before it runs, so the server that carries it cannot write one. You
+confirm with whichever works on that device:
+
+- **Continue with Google**, if you sign in with Google. Your computer checks
+  Google's own signature.
+- **A passkey** paired with your computer.
+- **A send password**, set on your computer with `trackline remote password`.
+  Your computer checks it, and it turns off after five wrong tries.
+- **A code to your email**, if you allowed it at `trackline remote enable`.
+  Only the server can check this one, so it is off unless you say yes.
+
+`trackline remote disable` turns one project off, and `--all` turns it off
 everywhere.
 
 ---
@@ -162,7 +193,7 @@ Named plainly, because a tool that looks complete stops getting better.
 
 ## Why it is built this way
 
-Three claims sat under the design, so each was measured before being relied on.
+The claims under the design were each measured before being relied on.
 The code, the raw data and the numbers are in
 [`docs/experiments/`](docs/experiments/).
 
@@ -173,6 +204,9 @@ The code, the raw data and the numbers are in
 | [3](docs/experiments/03-otel-traces.md) | Can this work from production traces? | only with content capture on, but it survives PII redaction |
 | [4](docs/experiments/04-false-alarms.md) | Does it cry wolf on ordinary work? | **0 false alarms in 23 actions** |
 | [5](docs/experiments/05-the-judge.md) | Can a model tell on-task work from drift? | **8 of 8**, including two correct abstentions |
+| [6](docs/experiments/06-the-judge-measured.md) | Does the judge earn its place, on real agents and held-out drift? | **60 of 60** held-out drifts, against 2 for the rules |
+| [7](docs/experiments/07-production-traces.md) | Does the same engine watch a deployed agent, unchanged? | **yes, zero core lines changed**; every labelled problem caught, none of 29 on-task flagged |
+| [8](docs/experiments/08-uploading-without-slowing-the-hook.md) | Can the hook upload to an account without getting slower? | **about 1ms when connected**; the hook never touches the network |
 
 Every one of those changed a decision. Two overturned an assumption that was
 already written into the plan.
