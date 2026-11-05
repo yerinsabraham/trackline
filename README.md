@@ -158,6 +158,15 @@ confirm with whichever works on that device:
 `trackline remote disable` turns one project off, and `--all` turns it off
 everywhere.
 
+**What is open, and what is hosted.** Everything that runs on your computer
+and in your browser is in this repository: the engine and hooks (`engine/`),
+the CLI, and the website and app (`site/`). The service that holds accounts and
+carries messages between your phone and your computer is hosted and not open
+source. It is built so it never has to be trusted with your work: the checks run
+on your computer, and a message from your phone is confirmed by code you can
+read here, not by the server. Without an account, nothing leaves your computer,
+except what you send to a judge model if you turn one on.
+
 ---
 
 ## What it does not do
