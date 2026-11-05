@@ -22,7 +22,7 @@ type Props = {
 
 type Dot = { x: number; y: number; ox: number; oy: number; tx: number; ty: number; hot: boolean; delay: number };
 
-const SIGNAL = "#ff4a1c";
+const SIGNAL = "#ff5a14";
 
 // The text is rasterised off-screen, sampled on a square grid, and every filled
 // cell becomes a round dot, so each stroke is several rows of dots. No font does

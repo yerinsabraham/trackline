@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { cardFor, cards } from "@/lib/cards";
 import { ogKey } from "@/lib/seo";
+import { LOGO } from "@/lib/logo";
 import { DESCRIPTION, SITE, TAGLINE } from "@/lib/site";
 
 export const dynamic = "force-static";
@@ -37,15 +38,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ card: stri
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#f1f1ef", padding: "72px 80px", fontFamily: "Geist" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ width: 56, height: 56, borderRadius: 14, background: "#111112", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-              <path d="M3 17c4 0 5-10 9-10s5 10 9 10" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" />
-              <circle cx="12" cy="7" r="2.6" fill="#ff4a1c" />
+            <svg width="36" height="36" viewBox={LOGO.bare} fill="none">
+              <path d={LOGO.curve} stroke="#ffffff" strokeWidth={LOGO.stroke} strokeLinecap="round" />
+              <circle cx={LOGO.ball.cx} cy={LOGO.ball.cy} r={LOGO.ball.r} fill={LOGO.orange} />
             </svg>
           </div>
           <div style={{ fontSize: 36, color: "#111112" }}>trackline</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", marginBottom: "auto" }}>
-          <div style={{ fontSize: 26, color: "#ff4a1c", letterSpacing: 2, textTransform: "uppercase" }}>{card.eyebrow}</div>
+          <div style={{ fontSize: 26, color: "#ff5a14", letterSpacing: 2, textTransform: "uppercase" }}>{card.eyebrow}</div>
           <div style={{ fontSize: size, fontWeight: 600, color: "#111112", lineHeight: 1.08, letterSpacing: -2, marginTop: 18, maxWidth: 1000 }}>{card.title}</div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 28, color: "#4e4e53" }}>
@@ -73,9 +74,9 @@ function Home() {
       <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div style={{ width: 52, height: 52, borderRadius: 13, background: "#111112", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-              <path d="M3 17c4 0 5-10 9-10s5 10 9 10" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" />
-              <circle cx="12" cy="7" r="2.6" fill="#ff4a1c" />
+            <svg width="34" height="34" viewBox={LOGO.bare} fill="none">
+              <path d={LOGO.curve} stroke="#ffffff" strokeWidth={LOGO.stroke} strokeLinecap="round" />
+              <circle cx={LOGO.ball.cx} cy={LOGO.ball.cy} r={LOGO.ball.r} fill={LOGO.orange} />
             </svg>
           </div>
           <div style={{ fontSize: 34, color: "#111112" }}>trackline</div>
@@ -83,7 +84,7 @@ function Home() {
         <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", marginBottom: "auto" }}>
           <div style={{ fontSize: 76, fontWeight: 600, color: "#111112", lineHeight: 1.02, letterSpacing: -2.5, display: "flex", flexDirection: "column" }}>
             <span>{TAGLINE.split(". ")[0]}.</span>
-            <span style={{ color: "#ff4a1c" }}>{TAGLINE.split(". ")[1]}</span>
+            <span style={{ color: "#ff5a14" }}>{TAGLINE.split(". ")[1]}</span>
           </div>
           <div style={{ fontSize: 27, color: "#4e4e53", lineHeight: 1.35, marginTop: 26, maxWidth: 560 }}>{DESCRIPTION}</div>
         </div>

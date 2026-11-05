@@ -14,7 +14,7 @@ body:has(.app-shell) > footer.dark { display: none; }
     --ok: #3ec472; --ok-ink: #6fd08c; --ok-tint: #17301f;
     --red: #ff5a3c; --red-ink: #ff8c74; --red-tint: #3a1b14;
     --amber-dot: #f0b43c; --amber-ink: #f0c060; --amber-tint: #33280f;
-    --act: #ff6a42; --act-deep: #ff4a1c; --act-tint: #33190f;
+    --act: #ff7333; --act-deep: #ff5a14; --act-tint: #33190f;
     --muted: #9a9aa0; --side: #141416; --line-2: #26262a; --soft: #222225;
     --solid: #2c2c30; --on-solid: #ededec;
   }
@@ -147,7 +147,7 @@ body:has(.app-shell) > footer.dark { display: none; }
 .dot.needs-you { background: var(--red); }
 .dot.drifting { background: var(--amber-dot); }
 .dot.done { background: var(--solid); }
-.dot.on-track { background: #ff4a1c; }
+.dot.on-track { background: #ff5a14; }
 
 .pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--soft); color: var(--ink-2); }
 .pill.working { background: var(--ok-tint); color: var(--ok-ink); }

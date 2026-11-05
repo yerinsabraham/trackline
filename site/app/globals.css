@@ -13,8 +13,8 @@
   --night-line: #2b2b2f;
   --night-text: #ededec;
   --night-muted: #8a8a90;
-  --signal: #ff4a1c;
-  --signal-deep: #e23a10;
+  --signal: #ff5a14;
+  --signal-deep: #e5470b;
   --ok: #6fd08c;
   --amber: #e8a317;
   --sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -144,7 +144,7 @@ code, pre { font-family: var(--mono); }
 .host:hover .tile { transform: scale(1.06); }
 .tile svg { width: 28px; height: 28px; }
 .center .tile {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 6px rgba(255, 74, 28, 0.08), 0 8px 24px rgba(255, 74, 28, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 6px rgba(255, 90, 20, 0.08), 0 8px 24px rgba(255, 90, 20, 0.18);
 }
 .host h3 { margin: 12px 6px 0; font-size: 19px; line-height: 1.12; font-weight: 600; letter-spacing: -0.02em; min-height: 44px; }
 .host.center h3 { color: #a9a9ae; }
@@ -179,8 +179,8 @@ code, pre { font-family: var(--mono); }
 }
 @keyframes travel { to { left: 100%; } }
 @keyframes ping {
-  0% { border-color: var(--signal); background: var(--signal); box-shadow: 0 0 0 5px rgba(255, 74, 28, 0.15); }
-  16% { border-color: #b9b9b4; background: var(--paper); box-shadow: 0 0 0 0 rgba(255, 74, 28, 0); }
+  0% { border-color: var(--signal); background: var(--signal); box-shadow: 0 0 0 5px rgba(255, 90, 20, 0.15); }
+  16% { border-color: #b9b9b4; background: var(--paper); box-shadow: 0 0 0 0 rgba(255, 90, 20, 0); }
   100% { border-color: #b9b9b4; }
 }
 @media (max-width: 860px) {
@@ -198,7 +198,7 @@ code, pre { font-family: var(--mono); }
 .problem h2 { margin: 14px 0 0; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.08; letter-spacing: -0.035em; font-weight: 650; text-wrap: balance; }
 .problem p { margin: 0; font-size: 20px; line-height: 1.5; color: var(--ink-2); letter-spacing: -0.01em; text-wrap: pretty; }
 .problem p.kicker { margin-top: 18px; color: var(--ink); font-weight: 500; }
-.problem p.kicker span { background: linear-gradient(transparent 62%, rgba(255, 74, 28, 0.22) 62%); }
+.problem p.kicker span { background: linear-gradient(transparent 62%, rgba(255, 90, 20, 0.22) 62%); }
 @media (max-width: 760px) {
   .problem-grid { grid-template-columns: 1fr; gap: 20px; }
   .problem p { font-size: 18px; }
@@ -246,9 +246,9 @@ code, pre { font-family: var(--mono); }
 .act.ok .v { color: var(--ok); opacity: 1; }
 .act.note { color: var(--night-text); border-color: #4a3e1c; }
 .act.note .v { color: var(--amber); opacity: 1; }
-.act.block { color: #fff; background: #2a120b; border-color: var(--signal); box-shadow: 0 0 0 5px rgba(255, 74, 28, 0.12); }
+.act.block { color: #fff; background: #2a120b; border-color: var(--signal); box-shadow: 0 0 0 5px rgba(255, 90, 20, 0.12); }
 .act.block .v { color: var(--signal); opacity: 1; }
-.act.block.done { text-decoration: line-through; text-decoration-color: rgba(255, 74, 28, 0.7); box-shadow: none; }
+.act.block.done { text-decoration: line-through; text-decoration-color: rgba(255, 90, 20, 0.7); box-shadow: none; }
 .gate-cap { position: absolute; bottom: 0; left: 0; right: 0; margin: 0; text-align: center; font: 12px var(--mono); color: var(--night-muted); }
 .gate-cap span { color: var(--signal); }
 
@@ -279,7 +279,7 @@ code, pre { font-family: var(--mono); }
 }
 @keyframes hot {
   0%, 36% { background: #2a120b; box-shadow: none; }
-  42%, 80% { background: var(--signal); box-shadow: -6px 0 30px rgba(255, 74, 28, 0.35); }
+  42%, 80% { background: var(--signal); box-shadow: -6px 0 30px rgba(255, 90, 20, 0.35); }
   95%, 100% { background: #2a120b; box-shadow: none; }
 }
 .s-compare .copy.bottom { padding-top: 28px; }
@@ -420,7 +420,7 @@ footer a:hover { color: var(--night-text); }
 .prose .desc { color: var(--ink-2); margin: 14px 0 36px; font-size: 19px; line-height: 1.5; }
 .prose h2 { font-size: 26px; letter-spacing: -0.03em; line-height: 1.15; font-weight: 650; margin: 48px 0 12px; }
 .prose h3 { font-size: 19px; letter-spacing: -0.02em; font-weight: 600; margin: 32px 0 10px; }
-.prose a { color: var(--ink); border-bottom: 1px solid rgba(255, 74, 28, 0.5); }
+.prose a { color: var(--ink); border-bottom: 1px solid rgba(255, 90, 20, 0.5); }
 .prose a:hover { color: var(--signal); border-color: var(--signal); }
 .prose pre { background: var(--slab); color: var(--night-text); border-radius: 14px; padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.7; }
 .prose pre code { background: none; border: 0; padding: 0; color: inherit; }
